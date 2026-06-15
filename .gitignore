@@ -1,0 +1,29 @@
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+**/build/
+!src/**/build/
+
+# IntelliJ IDEA / Android Studio local files
+.idea/
+*.iml
+local.properties
+
+# Compose Desktop / local runtime artifacts
+out/
+captures/
+*.log
+hs_err_pid*
+replay_pid*
+
+# Native build scratch directories
+.externalNativeBuild/
+.cxx/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node tooling, if temporary frontend tooling is used later
+node_modules/
