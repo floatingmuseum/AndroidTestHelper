@@ -31,6 +31,16 @@ data class FillProgress(
         get() = if (totalBytes <= 0L) 0f else (completedBytes.toDouble() / totalBytes).toFloat()
 }
 
+data class InstalledAppInfo(
+    val packageName: String,
+    val appName: String,
+    val versionName: String,
+    val versionCode: Long?,
+    val isSystem: Boolean,
+    val isEnabled: Boolean,
+    val iconBytes: ByteArray?,
+)
+
 interface DataFillAdb {
     suspend fun listDevices(logCommand: (String) -> Unit): List<AndroidDevice>
 
@@ -53,6 +63,11 @@ interface DataFillAdb {
         onStorageProgress: (StorageInfo) -> Unit,
         onFillProgress: (FillProgress) -> Unit,
     ): StorageInfo
+
+    suspend fun loadInstalledApps(
+        deviceSerial: String,
+        logCommand: (String) -> Unit,
+    ): List<InstalledAppInfo>
 }
 
 expect fun createDataFillAdb(): DataFillAdb

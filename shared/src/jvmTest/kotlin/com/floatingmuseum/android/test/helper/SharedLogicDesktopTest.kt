@@ -38,4 +38,51 @@ class SharedLogicDesktopTest {
         assertEquals(35155936L * 1024L, storageInfo.usedBytes)
         assertEquals(74842480L * 1024L, storageInfo.availableBytes)
     }
+
+    @Test
+    fun parsesPackagePathListOutput() {
+        val packages = parsePackagePathList(
+            """
+            package:/data/app/~~abcd/com.example.app-123/base.apk=com.example.app uid:10234
+            package:/system/priv-app/Settings/Settings.apk=com.android.settings uid:1000
+            """.trimIndent(),
+        )
+
+        assertEquals(2, packages.size)
+        assertEquals("com.example.app", packages[0].packageName)
+        assertEquals("/data/app/~~abcd/com.example.app-123/base.apk", packages[0].path)
+        assertEquals("com.android.settings", packages[1].packageName)
+        assertEquals("/system/priv-app/Settings/Settings.apk", packages[1].path)
+    }
+
+    @Test
+    fun parsesPackageNameListOutput() {
+        val packages = parsePackageNameList(
+            """
+            package:com.example.disabled
+            package:/data/app/com.example.path/base.apk=com.example.path uid:10235
+            """.trimIndent(),
+        )
+
+        assertEquals(setOf("com.example.disabled", "com.example.path"), packages)
+    }
+
+    @Test
+    fun parsesPackageDumpsysVersions() {
+        val packages = parsePackageDumpsys(
+            """
+            Package [com.example.app] (123abc):
+              versionCode=42 minSdk=23 targetSdk=35
+              versionName=1.2.3
+            Package [com.android.settings] (456def):
+              versionCode=350000000 minSdk=35 targetSdk=35
+              versionName=15
+            """.trimIndent(),
+        )
+
+        assertEquals("1.2.3", packages["com.example.app"]?.versionName)
+        assertEquals(42L, packages["com.example.app"]?.versionCode)
+        assertEquals("15", packages["com.android.settings"]?.versionName)
+        assertEquals(350000000L, packages["com.android.settings"]?.versionCode)
+    }
 }

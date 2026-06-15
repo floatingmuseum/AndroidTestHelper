@@ -1,6 +1,7 @@
 package com.floatingmuseum.android.test.helper
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -13,9 +14,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -41,6 +48,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -73,6 +81,9 @@ fun App() {
         var commandLog by remember { mutableStateOf<List<String>>(emptyList()) }
         var bottomPanelHeightPx by remember { mutableStateOf<Float?>(null) }
         var selectedTestModule by remember { mutableStateOf(TestModule.DataFill) }
+        var installedApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
+        var appListDeviceSerial by remember { mutableStateOf<String?>(null) }
+        var isLoadingApplications by remember { mutableStateOf(false) }
         val selectedDevice = devices.firstOrNull { it.serialNumber == selectedDeviceSerial }
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
 
@@ -98,6 +109,8 @@ fun App() {
                     selectedDeviceSerial = nextSelectedDeviceSerial
                     storageInfo = null
                     fillProgress = null
+                    installedApps = emptyList()
+                    appListDeviceSerial = null
 
                     if (nextSelectedDeviceSerial == null) {
                         statusText = if (discoveredDevices.isEmpty()) {
@@ -105,7 +118,7 @@ fun App() {
                         } else {
                             "发现 ${discoveredDevices.size} 台设备，无可用设备"
                         }
-                    } else {
+                    } else if (selectedTestModule == TestModule.DataFill) {
                         statusText = "发现 ${discoveredDevices.size} 台设备，读取存储..."
                         try {
                             storageInfo = adb.loadStorageInfo(nextSelectedDeviceSerial, ::appendCommand)
@@ -113,6 +126,8 @@ fun App() {
                         } catch (error: Throwable) {
                             statusText = error.message ?: "读取存储失败"
                         }
+                    } else {
+                        statusText = "发现 ${discoveredDevices.size} 台设备，准备读取应用"
                     }
                 } catch (error: Throwable) {
                     statusText = error.message ?: "扫描设备失败"
@@ -157,6 +172,28 @@ fun App() {
             runningJob = job
         }
 
+        fun loadApplicationsForDevice(deviceSerial: String) {
+            if (isRunning) return
+            scope.launch {
+                isRunning = true
+                isLoadingApplications = true
+                installedApps = emptyList()
+                appListDeviceSerial = deviceSerial
+                statusText = "读取应用列表..."
+                try {
+                    installedApps = adb.loadInstalledApps(deviceSerial, ::appendCommand)
+                    val disabledCount = installedApps.count { !it.isEnabled }
+                    statusText = "已读取 ${installedApps.size} 个应用，禁用 $disabledCount 个"
+                } catch (error: Throwable) {
+                    appListDeviceSerial = null
+                    statusText = error.message ?: "读取应用列表失败"
+                } finally {
+                    isLoadingApplications = false
+                    isRunning = false
+                }
+            }
+        }
+
         fun refreshStorageForDevice(deviceSerial: String) {
             runAdbTask("读取平板存储") {
                 adb.loadStorageInfo(deviceSerial, ::appendCommand)
@@ -165,6 +202,18 @@ fun App() {
 
         LaunchedEffect(Unit) {
             refreshDevices()
+        }
+
+        LaunchedEffect(selectedTestModule, selectedReadyDevice?.serialNumber, isRunning) {
+            val deviceSerial = selectedReadyDevice?.serialNumber
+            if (
+                selectedTestModule == TestModule.App &&
+                deviceSerial != null &&
+                !isRunning &&
+                appListDeviceSerial != deviceSerial
+            ) {
+                loadApplicationsForDevice(deviceSerial)
+            }
         }
 
         Surface(
@@ -288,6 +337,18 @@ fun App() {
                             }
 
                             TestModule.App -> ApplicationTestPanel(
+                                apps = installedApps,
+                                isLoading = isLoadingApplications,
+                                selectedDevice = selectedReadyDevice,
+                                loadedDeviceSerial = appListDeviceSerial,
+                                onRefresh = {
+                                    val deviceSerial = selectedReadyDevice?.serialNumber
+                                    if (deviceSerial == null) {
+                                        statusText = "先选择状态为 device 的设备"
+                                    } else {
+                                        loadApplicationsForDevice(deviceSerial)
+                                    }
+                                },
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
@@ -305,13 +366,18 @@ fun App() {
                                 onSelect = { device ->
                                     selectedDeviceSerial = device.serialNumber
                                     storageInfo = null
+                                    installedApps = emptyList()
+                                    appListDeviceSerial = null
                                     statusText = if (device.isReady) {
                                         "已选择 ${device.model}"
                                     } else {
                                         "设备 ${device.serialNumber} 当前不可用：${device.state}"
                                     }
                                     if (device.isReady) {
-                                        refreshStorageForDevice(device.serialNumber)
+                                        when (selectedTestModule) {
+                                            TestModule.DataFill -> refreshStorageForDevice(device.serialNumber)
+                                            TestModule.App -> loadApplicationsForDevice(device.serialNumber)
+                                        }
                                     }
                                 },
                                 modifier = Modifier.weight(1f).fillMaxSize(),
@@ -447,24 +513,226 @@ private fun SplitContent(
 }
 
 @Composable
-private fun ApplicationTestPanel(modifier: Modifier = Modifier) {
+private fun ApplicationTestPanel(
+    apps: List<InstalledAppInfo>,
+    isLoading: Boolean,
+    selectedDevice: AndroidDevice?,
+    loadedDeviceSerial: String?,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val thirdPartyApps = apps.filterNot { it.isSystem }
+    val systemApps = apps.filter { it.isSystem }
+    val disabledCount = apps.count { !it.isEnabled }
+    var isThirdPartyExpanded by remember { mutableStateOf(true) }
+    var isSystemExpanded by remember { mutableStateOf(true) }
+
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "应用",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = if (apps.isEmpty()) {
+                            "第三方应用优先，系统应用在后"
+                        } else {
+                            "共 ${apps.size} 个，第三方 ${thirdPartyApps.size} 个，系统 ${systemApps.size} 个，禁用 $disabledCount 个"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Button(
+                    onClick = onRefresh,
+                    enabled = selectedDevice != null && !isLoading,
+                ) {
+                    Text("刷新应用")
+                }
+            }
+
+            when {
+                selectedDevice == null -> {
+                    Text("先选择状态为 device 的设备。")
+                }
+
+                isLoading -> {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Text(
+                        text = "正在读取 ${selectedDevice.model} 的应用列表...",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                loadedDeviceSerial != selectedDevice.serialNumber -> {
+                    Text("进入模块后将自动读取当前设备应用。")
+                }
+
+                apps.isEmpty() -> {
+                    Text("未读取到应用。可刷新设备或应用列表。")
+                }
+
+                else -> {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 260.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (thirdPartyApps.isNotEmpty()) {
+                            item(
+                                key = "third-party-header",
+                                span = { GridItemSpan(maxLineSpan) },
+                            ) {
+                                ApplicationSectionHeader(
+                                    title = "第三方应用",
+                                    count = thirdPartyApps.size,
+                                    isExpanded = isThirdPartyExpanded,
+                                    onToggle = { isThirdPartyExpanded = !isThirdPartyExpanded },
+                                )
+                            }
+                            if (isThirdPartyExpanded) {
+                                items(
+                                    items = thirdPartyApps,
+                                    key = { it.packageName },
+                                ) { app ->
+                                    ApplicationTile(app)
+                                }
+                            }
+                        }
+
+                        if (systemApps.isNotEmpty()) {
+                            item(
+                                key = "system-header",
+                                span = { GridItemSpan(maxLineSpan) },
+                            ) {
+                                ApplicationSectionHeader(
+                                    title = "系统应用",
+                                    count = systemApps.size,
+                                    isExpanded = isSystemExpanded,
+                                    onToggle = { isSystemExpanded = !isSystemExpanded },
+                                )
+                            }
+                            if (isSystemExpanded) {
+                                items(
+                                    items = systemApps,
+                                    key = { it.packageName },
+                                ) { app ->
+                                    ApplicationTile(app)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ApplicationSectionHeader(
+    title: String,
+    count: Int,
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.primary,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "应用",
-                style = MaterialTheme.typography.titleMedium,
+                text = "$title ($count)",
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "应用测试模块待接入",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = if (isExpanded) "收起" else "展开",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
             )
+        }
+    }
+}
+
+@Composable
+private fun ApplicationTile(app: InstalledAppInfo) {
+    val disabled = !app.isEnabled
+    val containerColor = if (disabled) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val contentColor = if (disabled) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Surface(
+        color = containerColor,
+        contentColor = contentColor,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 88.dp)
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ApplicationIcon(
+                iconBytes = app.iconBytes,
+                packageName = app.packageName,
+                modifier = Modifier.size(44.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = app.appName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = app.packageName,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "版本名 ${app.versionName} · 版本号 ${app.versionCode?.toString() ?: "-"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
