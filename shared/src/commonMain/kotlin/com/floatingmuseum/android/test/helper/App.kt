@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -81,9 +82,13 @@ fun App() {
         var commandLog by remember { mutableStateOf<List<String>>(emptyList()) }
         var bottomPanelHeightPx by remember { mutableStateOf<Float?>(null) }
         var selectedTestModule by remember { mutableStateOf(TestModule.DataFill) }
-        var installedApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
-        var appListDeviceSerial by remember { mutableStateOf<String?>(null) }
-        var isLoadingApplications by remember { mutableStateOf(false) }
+        var thirdPartyApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
+        var systemApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
+        var thirdPartyLoadedSerial by remember { mutableStateOf<String?>(null) }
+        var systemLoadedSerial by remember { mutableStateOf<String?>(null) }
+        var isLoadingThirdParty by remember { mutableStateOf(false) }
+        var isLoadingSystem by remember { mutableStateOf(false) }
+        var systemAppsCacheFormattedTime by remember { mutableStateOf<String?>(null) }
         val selectedDevice = devices.firstOrNull { it.serialNumber == selectedDeviceSerial }
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
 
@@ -109,8 +114,11 @@ fun App() {
                     selectedDeviceSerial = nextSelectedDeviceSerial
                     storageInfo = null
                     fillProgress = null
-                    installedApps = emptyList()
-                    appListDeviceSerial = null
+                    thirdPartyApps = emptyList()
+                    systemApps = emptyList()
+                    thirdPartyLoadedSerial = null
+                    systemLoadedSerial = null
+                    systemAppsCacheFormattedTime = null
 
                     if (nextSelectedDeviceSerial == null) {
                         statusText = if (discoveredDevices.isEmpty()) {
@@ -172,23 +180,52 @@ fun App() {
             runningJob = job
         }
 
-        fun loadApplicationsForDevice(deviceSerial: String) {
+        fun loadThirdPartyApps(deviceSerial: String) {
             if (isRunning) return
             scope.launch {
                 isRunning = true
-                isLoadingApplications = true
-                installedApps = emptyList()
-                appListDeviceSerial = deviceSerial
-                statusText = "读取应用列表..."
+                isLoadingThirdParty = true
+                thirdPartyApps = emptyList()
+                thirdPartyLoadedSerial = deviceSerial
+                statusText = "读取第三方应用..."
                 try {
-                    installedApps = adb.loadInstalledApps(deviceSerial, ::appendCommand)
-                    val disabledCount = installedApps.count { !it.isEnabled }
-                    statusText = "已读取 ${installedApps.size} 个应用，禁用 $disabledCount 个"
+                    thirdPartyApps = adb.loadInstalledApps(deviceSerial, false, ::appendCommand)
+                    val disabledCount = thirdPartyApps.count { !it.isEnabled }
+                    statusText = "已读取 ${thirdPartyApps.size} 个第三方应用，禁用 $disabledCount 个"
                 } catch (error: Throwable) {
-                    appListDeviceSerial = null
-                    statusText = error.message ?: "读取应用列表失败"
+                    thirdPartyLoadedSerial = null
+                    statusText = error.message ?: "读取第三方应用失败"
                 } finally {
-                    isLoadingApplications = false
+                    isLoadingThirdParty = false
+                    isRunning = false
+                }
+            }
+        }
+
+        fun loadSystemApps(deviceSerial: String) {
+            if (isRunning) return
+            scope.launch {
+                isRunning = true
+                isLoadingSystem = true
+                systemApps = emptyList()
+                systemLoadedSerial = deviceSerial
+                systemAppsCacheFormattedTime = null
+                statusText = "读取系统应用..."
+                try {
+                    val apps = adb.loadInstalledApps(deviceSerial, true, ::appendCommand)
+                    systemApps = apps
+                    val disabledCount = apps.count { !it.isEnabled }
+                    statusText = "已读取 ${apps.size} 个系统应用，禁用 $disabledCount 个"
+                    adb.saveCachedSystemApps(deviceSerial, apps)
+                    val cached = adb.loadCachedSystemApps(deviceSerial)
+                    if (cached != null) {
+                        systemAppsCacheFormattedTime = cached.cacheTimeFormatted
+                    }
+                } catch (error: Throwable) {
+                    systemLoadedSerial = null
+                    statusText = error.message ?: "读取系统应用失败"
+                } finally {
+                    isLoadingSystem = false
                     isRunning = false
                 }
             }
@@ -204,15 +241,25 @@ fun App() {
             refreshDevices()
         }
 
-        LaunchedEffect(selectedTestModule, selectedReadyDevice?.serialNumber, isRunning) {
+        LaunchedEffect(selectedTestModule, selectedReadyDevice?.serialNumber) {
             val deviceSerial = selectedReadyDevice?.serialNumber
-            if (
-                selectedTestModule == TestModule.App &&
-                deviceSerial != null &&
-                !isRunning &&
-                appListDeviceSerial != deviceSerial
-            ) {
-                loadApplicationsForDevice(deviceSerial)
+            if (selectedTestModule == TestModule.App && deviceSerial != null) {
+                if (systemLoadedSerial != deviceSerial) {
+                    val cached = adb.loadCachedSystemApps(deviceSerial)
+                    if (cached != null) {
+                        systemApps = cached.apps
+                        systemAppsCacheFormattedTime = cached.cacheTimeFormatted
+                        systemLoadedSerial = deviceSerial
+                    } else {
+                        systemApps = emptyList()
+                        systemAppsCacheFormattedTime = null
+                        systemLoadedSerial = null
+                    }
+                }
+                if (thirdPartyLoadedSerial != deviceSerial) {
+                    thirdPartyApps = emptyList()
+                    thirdPartyLoadedSerial = null
+                }
             }
         }
 
@@ -337,16 +384,28 @@ fun App() {
                             }
 
                             TestModule.App -> ApplicationTestPanel(
-                                apps = installedApps,
-                                isLoading = isLoadingApplications,
+                                thirdPartyApps = thirdPartyApps,
+                                systemApps = systemApps,
+                                isLoadingThirdParty = isLoadingThirdParty,
+                                isLoadingSystem = isLoadingSystem,
                                 selectedDevice = selectedReadyDevice,
-                                loadedDeviceSerial = appListDeviceSerial,
-                                onRefresh = {
+                                thirdPartyLoadedSerial = thirdPartyLoadedSerial,
+                                systemLoadedSerial = systemLoadedSerial,
+                                systemAppsCacheFormattedTime = systemAppsCacheFormattedTime,
+                                onRefreshThirdParty = {
                                     val deviceSerial = selectedReadyDevice?.serialNumber
                                     if (deviceSerial == null) {
                                         statusText = "先选择状态为 device 的设备"
                                     } else {
-                                        loadApplicationsForDevice(deviceSerial)
+                                        loadThirdPartyApps(deviceSerial)
+                                    }
+                                },
+                                onRefreshSystem = {
+                                    val deviceSerial = selectedReadyDevice?.serialNumber
+                                    if (deviceSerial == null) {
+                                        statusText = "先选择状态为 device 的设备"
+                                    } else {
+                                        loadSystemApps(deviceSerial)
                                     }
                                 },
                                 modifier = Modifier.fillMaxSize(),
@@ -366,8 +425,11 @@ fun App() {
                                 onSelect = { device ->
                                     selectedDeviceSerial = device.serialNumber
                                     storageInfo = null
-                                    installedApps = emptyList()
-                                    appListDeviceSerial = null
+                                    thirdPartyApps = emptyList()
+                                    systemApps = emptyList()
+                                    thirdPartyLoadedSerial = null
+                                    systemLoadedSerial = null
+                                    systemAppsCacheFormattedTime = null
                                     statusText = if (device.isReady) {
                                         "已选择 ${device.model}"
                                     } else {
@@ -376,7 +438,9 @@ fun App() {
                                     if (device.isReady) {
                                         when (selectedTestModule) {
                                             TestModule.DataFill -> refreshStorageForDevice(device.serialNumber)
-                                            TestModule.App -> loadApplicationsForDevice(device.serialNumber)
+                                            TestModule.App -> {
+                                                // 切换设备后由 LaunchedEffect 自动处理缓存读取
+                                            }
                                         }
                                     }
                                 },
@@ -514,16 +578,18 @@ private fun SplitContent(
 
 @Composable
 private fun ApplicationTestPanel(
-    apps: List<InstalledAppInfo>,
-    isLoading: Boolean,
+    thirdPartyApps: List<InstalledAppInfo>,
+    systemApps: List<InstalledAppInfo>,
+    isLoadingThirdParty: Boolean,
+    isLoadingSystem: Boolean,
     selectedDevice: AndroidDevice?,
-    loadedDeviceSerial: String?,
-    onRefresh: () -> Unit,
+    thirdPartyLoadedSerial: String?,
+    systemLoadedSerial: String?,
+    systemAppsCacheFormattedTime: String?,
+    onRefreshThirdParty: () -> Unit,
+    onRefreshSystem: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val thirdPartyApps = apps.filterNot { it.isSystem }
-    val systemApps = apps.filter { it.isSystem }
-    val disabledCount = apps.count { !it.isEnabled }
     var isThirdPartyExpanded by remember { mutableStateOf(true) }
     var isSystemExpanded by remember { mutableStateOf(true) }
 
@@ -545,43 +611,28 @@ private fun ApplicationTestPanel(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
+                    val hasData = thirdPartyApps.isNotEmpty() || systemApps.isNotEmpty()
+                    val desc = if (hasData) {
+                        val parts = mutableListOf<String>()
+                        if (thirdPartyApps.isNotEmpty()) parts.add("第三方 ${thirdPartyApps.size} 个")
+                        if (systemApps.isNotEmpty()) parts.add("系统 ${systemApps.size} 个")
+                        val totalDisabled = thirdPartyApps.count { !it.isEnabled } + systemApps.count { !it.isEnabled }
+                        parts.add("禁用 $totalDisabled 个")
+                        parts.joinToString(" · ")
+                    } else {
+                        "请手动刷新获取应用列表。系统应用获取后将自动缓存至本地。"
+                    }
                     Text(
-                        text = if (apps.isEmpty()) {
-                            "第三方应用优先，系统应用在后"
-                        } else {
-                            "共 ${apps.size} 个，第三方 ${thirdPartyApps.size} 个，系统 ${systemApps.size} 个，禁用 $disabledCount 个"
-                        },
+                        text = desc,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-                Button(
-                    onClick = onRefresh,
-                    enabled = selectedDevice != null && !isLoading,
-                ) {
-                    Text("刷新应用")
                 }
             }
 
             when {
                 selectedDevice == null -> {
                     Text("先选择状态为 device 的设备。")
-                }
-
-                isLoading -> {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Text(
-                        text = "正在读取 ${selectedDevice.model} 的应用列表...",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                loadedDeviceSerial != selectedDevice.serialNumber -> {
-                    Text("进入模块后将自动读取当前设备应用。")
-                }
-
-                apps.isEmpty() -> {
-                    Text("未读取到应用。可刷新设备或应用列表。")
                 }
 
                 else -> {
@@ -591,19 +642,40 @@ private fun ApplicationTestPanel(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        if (thirdPartyApps.isNotEmpty()) {
-                            item(
-                                key = "third-party-header",
-                                span = { GridItemSpan(maxLineSpan) },
-                            ) {
-                                ApplicationSectionHeader(
-                                    title = "第三方应用",
-                                    count = thirdPartyApps.size,
-                                    isExpanded = isThirdPartyExpanded,
-                                    onToggle = { isThirdPartyExpanded = !isThirdPartyExpanded },
-                                )
-                            }
-                            if (isThirdPartyExpanded) {
+                        item(
+                            key = "third-party-header",
+                            span = { GridItemSpan(maxLineSpan) },
+                        ) {
+                            ApplicationSectionHeader(
+                                title = "第三方应用",
+                                count = if (thirdPartyApps.isNotEmpty()) thirdPartyApps.size else null,
+                                isLoading = isLoadingThirdParty,
+                                isExpanded = isThirdPartyExpanded,
+                                onRefresh = onRefreshThirdParty,
+                                onToggle = { isThirdPartyExpanded = !isThirdPartyExpanded },
+                            )
+                        }
+
+                        if (isThirdPartyExpanded) {
+                            if (isLoadingThirdParty) {
+                                item(
+                                    key = "third-party-loading",
+                                    span = { GridItemSpan(maxLineSpan) }
+                                ) {
+                                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                        LinearProgressIndicator(modifier = Modifier.width(200.dp))
+                                    }
+                                }
+                            } else if (thirdPartyApps.isEmpty()) {
+                                item(
+                                    key = "third-party-empty",
+                                    span = { GridItemSpan(maxLineSpan) }
+                                ) {
+                                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                        Text("无数据。请点击刷新获取第三方应用列表。", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
+                            } else {
                                 items(
                                     items = thirdPartyApps,
                                     key = { it.packageName },
@@ -613,19 +685,41 @@ private fun ApplicationTestPanel(
                             }
                         }
 
-                        if (systemApps.isNotEmpty()) {
-                            item(
-                                key = "system-header",
-                                span = { GridItemSpan(maxLineSpan) },
-                            ) {
-                                ApplicationSectionHeader(
-                                    title = "系统应用",
-                                    count = systemApps.size,
-                                    isExpanded = isSystemExpanded,
-                                    onToggle = { isSystemExpanded = !isSystemExpanded },
-                                )
-                            }
-                            if (isSystemExpanded) {
+                        item(
+                            key = "system-header",
+                            span = { GridItemSpan(maxLineSpan) },
+                        ) {
+                            ApplicationSectionHeader(
+                                title = "系统应用",
+                                count = if (systemApps.isNotEmpty()) systemApps.size else null,
+                                isLoading = isLoadingSystem,
+                                isExpanded = isSystemExpanded,
+                                cacheTime = systemAppsCacheFormattedTime,
+                                onRefresh = onRefreshSystem,
+                                onToggle = { isSystemExpanded = !isSystemExpanded },
+                            )
+                        }
+
+                        if (isSystemExpanded) {
+                            if (isLoadingSystem) {
+                                item(
+                                    key = "system-loading",
+                                    span = { GridItemSpan(maxLineSpan) }
+                                ) {
+                                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                        LinearProgressIndicator(modifier = Modifier.width(200.dp))
+                                    }
+                                }
+                            } else if (systemApps.isEmpty()) {
+                                item(
+                                    key = "system-empty",
+                                    span = { GridItemSpan(maxLineSpan) }
+                                ) {
+                                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                        Text("无数据。请点击刷新获取系统应用并生成本地缓存。", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
+                            } else {
                                 items(
                                     items = systemApps,
                                     key = { it.packageName },
@@ -644,33 +738,62 @@ private fun ApplicationTestPanel(
 @Composable
 private fun ApplicationSectionHeader(
     title: String,
-    count: Int,
+    count: Int?,
+    isLoading: Boolean,
     isExpanded: Boolean,
+    cacheTime: String? = null,
+    onRefresh: () -> Unit,
     onToggle: () -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.primary,
         shape = RoundedCornerShape(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onToggle),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "$title ($count)",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = if (isExpanded) "收起" else "展开",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f).clickable(onClick = onToggle)
+            ) {
+                Text(
+                    text = if (count != null) "$title ($count)" else title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (cacheTime != null) {
+                    Text(
+                        text = "· 缓存时间: $cacheTime",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = if (isExpanded) "收起" else "展开",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            Spacer(modifier = Modifier.size(12.dp))
+
+            Button(
+                onClick = onRefresh,
+                enabled = !isLoading,
+                contentPadding = ButtonDefaults.TextButtonContentPadding,
+                modifier = Modifier.height(32.dp)
+            ) {
+                Text(
+                    text = if (isLoading) "读取中..." else "刷新",
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.floatingmuseum.android.test.helper
 
 import kotlin.math.round
+import kotlinx.serialization.Serializable
 
 const val BytesInGiB: Long = 1024L * 1024L * 1024L
 const val BytesInMiB: Long = 1024L * 1024L
@@ -31,6 +32,7 @@ data class FillProgress(
         get() = if (totalBytes <= 0L) 0f else (completedBytes.toDouble() / totalBytes).toFloat()
 }
 
+@Serializable
 data class InstalledAppInfo(
     val packageName: String,
     val appName: String,
@@ -39,6 +41,13 @@ data class InstalledAppInfo(
     val isSystem: Boolean,
     val isEnabled: Boolean,
     val iconBytes: ByteArray?,
+)
+
+@Serializable
+data class CachedSystemApps(
+    val apps: List<InstalledAppInfo>,
+    val cacheTimeMillis: Long,
+    val cacheTimeFormatted: String,
 )
 
 interface DataFillAdb {
@@ -66,8 +75,13 @@ interface DataFillAdb {
 
     suspend fun loadInstalledApps(
         deviceSerial: String,
+        isSystem: Boolean,
         logCommand: (String) -> Unit,
     ): List<InstalledAppInfo>
+
+    suspend fun loadCachedSystemApps(deviceSerial: String): CachedSystemApps?
+
+    suspend fun saveCachedSystemApps(deviceSerial: String, apps: List<InstalledAppInfo>)
 }
 
 expect fun createDataFillAdb(): DataFillAdb

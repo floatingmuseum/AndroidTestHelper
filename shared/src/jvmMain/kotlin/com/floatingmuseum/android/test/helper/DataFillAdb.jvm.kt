@@ -6,6 +6,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -120,6 +122,7 @@ private class JvmDataFillAdb(
 
     override suspend fun loadInstalledApps(
         deviceSerial: String,
+        isSystem: Boolean,
         logCommand: (String) -> Unit,
     ): List<InstalledAppInfo> {
         val packageListOutput = executeAdb(
@@ -156,7 +159,16 @@ private class JvmDataFillAdb(
         val tempDirectory = createTempDirectory(prefix = "AndroidTestHelperApps").toFile()
 
         return try {
-            packagePaths.map { packagePath ->
+            val filteredPackagePaths = packagePaths.filter { packagePath ->
+                val isSys = when {
+                    packagePath.packageName in thirdPartyPackages -> false
+                    packagePath.packageName in systemPackages -> true
+                    else -> packagePath.path.isSystemApkPath()
+                }
+                isSys == isSystem
+            }
+
+            filteredPackagePaths.map { packagePath ->
                 currentCoroutineContext().ensureActive()
                 val dumpsysInfo = dumpsysPackages[packagePath.packageName]
                 val apkMetadata = loadApkMetadata(
@@ -165,11 +177,6 @@ private class JvmDataFillAdb(
                     tempDirectory = tempDirectory,
                     logCommand = logCommand,
                 )
-                val isSystem = when {
-                    packagePath.packageName in thirdPartyPackages -> false
-                    packagePath.packageName in systemPackages -> true
-                    else -> packagePath.path.isSystemApkPath()
-                }
 
                 InstalledAppInfo(
                     packageName = packagePath.packageName,
@@ -182,13 +189,84 @@ private class JvmDataFillAdb(
                     iconBytes = apkMetadata.iconBytes,
                 )
             }.sortedWith(
-                compareBy<InstalledAppInfo> { it.isSystem }
-                    .thenBy { it.appName.lowercase() }
+                compareBy<InstalledAppInfo> { it.appName.lowercase() }
                     .thenBy { it.packageName },
             )
         } finally {
             tempDirectory.deleteRecursively()
         }
+    }
+
+    override suspend fun loadCachedSystemApps(deviceSerial: String): CachedSystemApps? {
+        val file = getCacheFile(deviceSerial)
+        if (!file.exists()) return null
+        return try {
+            val jsonText = file.readText()
+            val cachedData = Json.decodeFromString<CachedSystemApps>(jsonText)
+            
+            val iconsDir = File(System.getProperty("user.home"), ".android_test_helper_cache/icons")
+            val restoredApps = cachedData.apps.map { app ->
+                val iconFile = File(iconsDir, "${app.packageName}.png")
+                val restoredBytes = if (iconFile.exists()) {
+                    try {
+                        iconFile.readBytes()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        null
+                    }
+                } else {
+                    null
+                }
+                app.copy(iconBytes = restoredBytes)
+            }
+            cachedData.copy(apps = restoredApps)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    override suspend fun saveCachedSystemApps(deviceSerial: String, apps: List<InstalledAppInfo>) {
+        val file = getCacheFile(deviceSerial)
+        try {
+            val now = System.currentTimeMillis()
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+            val formattedTime = sdf.format(java.util.Date(now))
+            
+            val iconsDir = File(System.getProperty("user.home"), ".android_test_helper_cache/icons")
+            if (!iconsDir.exists()) {
+                iconsDir.mkdirs()
+            }
+            
+            val appsWithoutIcons = apps.map { app ->
+                if (app.iconBytes != null) {
+                    val iconFile = File(iconsDir, "${app.packageName}.png")
+                    try {
+                        iconFile.writeBytes(app.iconBytes)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+                app.copy(iconBytes = null)
+            }
+            
+            val cachedData = CachedSystemApps(
+                apps = appsWithoutIcons,
+                cacheTimeMillis = now,
+                cacheTimeFormatted = formattedTime
+            )
+            val jsonText = Json.encodeToString(cachedData)
+            file.parentFile?.mkdirs()
+            file.writeText(jsonText)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun getCacheFile(deviceSerial: String): File {
+        val cacheDir = File(System.getProperty("user.home"), ".android_test_helper_cache")
+        val safeSerial = deviceSerial.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        return File(cacheDir, "system_apps_$safeSerial.cache")
     }
 
     private suspend fun fillBytes(
