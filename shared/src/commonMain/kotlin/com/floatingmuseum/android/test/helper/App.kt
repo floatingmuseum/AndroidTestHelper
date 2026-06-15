@@ -89,6 +89,10 @@ fun App() {
         var isLoadingThirdParty by remember { mutableStateOf(false) }
         var isLoadingSystem by remember { mutableStateOf(false) }
         var systemAppsCacheFormattedTime by remember { mutableStateOf<String?>(null) }
+        var thirdPartyProgressCurrent by remember { mutableStateOf(0) }
+        var thirdPartyProgressTotal by remember { mutableStateOf(0) }
+        var systemProgressCurrent by remember { mutableStateOf(0) }
+        var systemProgressTotal by remember { mutableStateOf(0) }
         val selectedDevice = devices.firstOrNull { it.serialNumber == selectedDeviceSerial }
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
 
@@ -119,6 +123,10 @@ fun App() {
                     thirdPartyLoadedSerial = null
                     systemLoadedSerial = null
                     systemAppsCacheFormattedTime = null
+                    thirdPartyProgressCurrent = 0
+                    thirdPartyProgressTotal = 0
+                    systemProgressCurrent = 0
+                    systemProgressTotal = 0
 
                     if (nextSelectedDeviceSerial == null) {
                         statusText = if (discoveredDevices.isEmpty()) {
@@ -187,9 +195,15 @@ fun App() {
                 isLoadingThirdParty = true
                 thirdPartyApps = emptyList()
                 thirdPartyLoadedSerial = deviceSerial
+                thirdPartyProgressCurrent = 0
+                thirdPartyProgressTotal = 0
                 statusText = "读取第三方应用..."
                 try {
-                    thirdPartyApps = adb.loadInstalledApps(deviceSerial, false, ::appendCommand)
+                    thirdPartyApps = adb.loadInstalledApps(deviceSerial, false, ::appendCommand) { current, total ->
+                        thirdPartyProgressCurrent = current
+                        thirdPartyProgressTotal = total
+                        statusText = "读取第三方应用: $current / $total..."
+                    }
                     val disabledCount = thirdPartyApps.count { !it.isEnabled }
                     statusText = "已读取 ${thirdPartyApps.size} 个第三方应用，禁用 $disabledCount 个"
                 } catch (error: Throwable) {
@@ -210,9 +224,15 @@ fun App() {
                 systemApps = emptyList()
                 systemLoadedSerial = deviceSerial
                 systemAppsCacheFormattedTime = null
+                systemProgressCurrent = 0
+                systemProgressTotal = 0
                 statusText = "读取系统应用..."
                 try {
-                    val apps = adb.loadInstalledApps(deviceSerial, true, ::appendCommand)
+                    val apps = adb.loadInstalledApps(deviceSerial, true, ::appendCommand) { current, total ->
+                        systemProgressCurrent = current
+                        systemProgressTotal = total
+                        statusText = "读取系统应用: $current / $total..."
+                    }
                     systemApps = apps
                     val disabledCount = apps.count { !it.isEnabled }
                     statusText = "已读取 ${apps.size} 个系统应用，禁用 $disabledCount 个"
@@ -392,6 +412,10 @@ fun App() {
                                 thirdPartyLoadedSerial = thirdPartyLoadedSerial,
                                 systemLoadedSerial = systemLoadedSerial,
                                 systemAppsCacheFormattedTime = systemAppsCacheFormattedTime,
+                                thirdPartyProgressCurrent = thirdPartyProgressCurrent,
+                                thirdPartyProgressTotal = thirdPartyProgressTotal,
+                                systemProgressCurrent = systemProgressCurrent,
+                                systemProgressTotal = systemProgressTotal,
                                 onRefreshThirdParty = {
                                     val deviceSerial = selectedReadyDevice?.serialNumber
                                     if (deviceSerial == null) {
@@ -586,6 +610,10 @@ private fun ApplicationTestPanel(
     thirdPartyLoadedSerial: String?,
     systemLoadedSerial: String?,
     systemAppsCacheFormattedTime: String?,
+    thirdPartyProgressCurrent: Int,
+    thirdPartyProgressTotal: Int,
+    systemProgressCurrent: Int,
+    systemProgressTotal: Int,
     onRefreshThirdParty: () -> Unit,
     onRefreshSystem: () -> Unit,
     modifier: Modifier = Modifier,
@@ -655,15 +683,36 @@ private fun ApplicationTestPanel(
                                 onToggle = { isThirdPartyExpanded = !isThirdPartyExpanded },
                             )
                         }
-
                         if (isThirdPartyExpanded) {
                             if (isLoadingThirdParty) {
                                 item(
                                     key = "third-party-loading",
                                     span = { GridItemSpan(maxLineSpan) }
                                 ) {
-                                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                        LinearProgressIndicator(modifier = Modifier.width(200.dp))
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        if (thirdPartyProgressTotal > 0) {
+                                            val progress = thirdPartyProgressCurrent.toFloat() / thirdPartyProgressTotal
+                                            LinearProgressIndicator(
+                                                progress = { progress },
+                                                modifier = Modifier.width(200.dp)
+                                            )
+                                            Text(
+                                                text = "获取中: $thirdPartyProgressCurrent / $thirdPartyProgressTotal (${(progress * 100).toInt()}%)",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        } else {
+                                            LinearProgressIndicator(modifier = Modifier.width(200.dp))
+                                            Text(
+                                                text = "正在初始化应用列表...",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                             } else if (thirdPartyApps.isEmpty()) {
@@ -699,15 +748,36 @@ private fun ApplicationTestPanel(
                                 onToggle = { isSystemExpanded = !isSystemExpanded },
                             )
                         }
-
                         if (isSystemExpanded) {
                             if (isLoadingSystem) {
                                 item(
                                     key = "system-loading",
                                     span = { GridItemSpan(maxLineSpan) }
                                 ) {
-                                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                        LinearProgressIndicator(modifier = Modifier.width(200.dp))
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        if (systemProgressTotal > 0) {
+                                            val progress = systemProgressCurrent.toFloat() / systemProgressTotal
+                                            LinearProgressIndicator(
+                                                progress = { progress },
+                                                modifier = Modifier.width(200.dp)
+                                            )
+                                            Text(
+                                                text = "获取中: $systemProgressCurrent / $systemProgressTotal (${(progress * 100).toInt()}%)",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        } else {
+                                            LinearProgressIndicator(modifier = Modifier.width(200.dp))
+                                            Text(
+                                                text = "正在初始化应用列表...",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                             } else if (systemApps.isEmpty()) {

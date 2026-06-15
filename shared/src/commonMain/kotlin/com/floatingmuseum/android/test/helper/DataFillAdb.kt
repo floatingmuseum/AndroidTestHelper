@@ -77,6 +77,7 @@ interface DataFillAdb {
         deviceSerial: String,
         isSystem: Boolean,
         logCommand: (String) -> Unit,
+        onProgress: (current: Int, total: Int) -> Unit = { _, _ -> },
     ): List<InstalledAppInfo>
 
     suspend fun loadCachedSystemApps(deviceSerial: String): CachedSystemApps?

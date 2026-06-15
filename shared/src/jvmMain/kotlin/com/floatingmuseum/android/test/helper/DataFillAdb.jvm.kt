@@ -124,6 +124,7 @@ private class JvmDataFillAdb(
         deviceSerial: String,
         isSystem: Boolean,
         logCommand: (String) -> Unit,
+        onProgress: (current: Int, total: Int) -> Unit,
     ): List<InstalledAppInfo> {
         val packageListOutput = executeAdb(
             args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-f", "-U"),
@@ -168,7 +169,10 @@ private class JvmDataFillAdb(
                 isSys == isSystem
             }
 
-            filteredPackagePaths.map { packagePath ->
+            val total = filteredPackagePaths.size
+            onProgress(0, total)
+
+            filteredPackagePaths.mapIndexed { index, packagePath ->
                 currentCoroutineContext().ensureActive()
                 val dumpsysInfo = dumpsysPackages[packagePath.packageName]
                 val apkMetadata = loadApkMetadata(
@@ -178,7 +182,7 @@ private class JvmDataFillAdb(
                     logCommand = logCommand,
                 )
 
-                InstalledAppInfo(
+                val appInfo = InstalledAppInfo(
                     packageName = packagePath.packageName,
                     appName = apkMetadata.label?.takeIf { it.isNotBlank() }
                         ?: packagePath.packageName,
@@ -188,6 +192,8 @@ private class JvmDataFillAdb(
                     isEnabled = packagePath.packageName !in disabledPackages,
                     iconBytes = apkMetadata.iconBytes,
                 )
+                onProgress(index + 1, total)
+                appInfo
             }.sortedWith(
                 compareBy<InstalledAppInfo> { it.appName.lowercase() }
                     .thenBy { it.packageName },
