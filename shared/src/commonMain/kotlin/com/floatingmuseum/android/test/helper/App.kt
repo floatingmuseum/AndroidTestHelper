@@ -55,6 +55,10 @@ import com.floatingmuseum.android.test.helper.datafill.parseGiBInput
 import com.floatingmuseum.android.test.helper.app.InstalledAppInfo
 import com.floatingmuseum.android.test.helper.app.ApplicationTestPanel
 import com.floatingmuseum.android.test.helper.app.createAppAdb
+import com.floatingmuseum.android.test.helper.device.DeviceSystemInfo
+import com.floatingmuseum.android.test.helper.device.SystemProperty
+import com.floatingmuseum.android.test.helper.device.createDeviceAdb
+import com.floatingmuseum.android.test.helper.device.DeviceTestPanel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -62,8 +66,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private enum class TestModule(val title: String) {
-    DataFill("数据填充"),
+    Device("设备"),
     App("应用"),
+    DataFill("数据填充"),
 }
 
 @Composable
@@ -73,6 +78,7 @@ fun App() {
         val adbDeviceManager = remember { createAdbDeviceManager() }
         val dataFillAdb = remember { createDataFillAdb() }
         val appAdb = remember { createAppAdb() }
+        val deviceAdb = remember { createDeviceAdb() }
 
         val scope = rememberCoroutineScope()
         var devices by remember { mutableStateOf<List<AndroidDevice>>(emptyList()) }
@@ -86,7 +92,7 @@ fun App() {
         var fillProgress by remember { mutableStateOf<FillProgress?>(null) }
         var commandLog by remember { mutableStateOf<List<String>>(emptyList()) }
         var bottomPanelHeightPx by remember { mutableStateOf<Float?>(null) }
-        var selectedTestModule by remember { mutableStateOf(TestModule.DataFill) }
+        var selectedTestModule by remember { mutableStateOf(TestModule.Device) }
         var thirdPartyApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
         var systemApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
         var thirdPartyLoadedSerial by remember { mutableStateOf<String?>(null) }
@@ -98,6 +104,12 @@ fun App() {
         var thirdPartyProgressTotal by remember { mutableStateOf(0) }
         var systemProgressCurrent by remember { mutableStateOf(0) }
         var systemProgressTotal by remember { mutableStateOf(0) }
+        var deviceSystemInfo by remember { mutableStateOf<DeviceSystemInfo?>(null) }
+        var systemProperties by remember { mutableStateOf<List<SystemProperty>>(emptyList()) }
+        var isLoadingDeviceSystemInfo by remember { mutableStateOf(false) }
+        var isLoadingDeviceProperties by remember { mutableStateOf(false) }
+        var deviceSystemInfoLoadedSerial by remember { mutableStateOf<String?>(null) }
+        var devicePropertiesLoadedSerial by remember { mutableStateOf<String?>(null) }
         val selectedDevice = devices.firstOrNull { it.serialNumber == selectedDeviceSerial }
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
 
@@ -132,6 +144,12 @@ fun App() {
                     thirdPartyProgressTotal = 0
                     systemProgressCurrent = 0
                     systemProgressTotal = 0
+                    deviceSystemInfo = null
+                    systemProperties = emptyList()
+                    deviceSystemInfoLoadedSerial = null
+                    devicePropertiesLoadedSerial = null
+                    isLoadingDeviceSystemInfo = false
+                    isLoadingDeviceProperties = false
 
                     if (nextSelectedDeviceSerial == null) {
                         statusText = if (discoveredDevices.isEmpty()) {
@@ -149,6 +167,19 @@ fun App() {
                         } catch (error: Throwable) {
                             statusText = error.message ?: "读取存储失败"
                             appendCommand("错误: 读取存储失败 - ${error.message ?: "未知错误"}")
+                        }
+                    } else if (selectedTestModule == TestModule.Device) {
+                        statusText = "发现 ${discoveredDevices.size} 台设备，读取设备系统信息..."
+                        try {
+                            deviceSystemInfo = deviceAdb.loadSystemInfo(nextSelectedDeviceSerial, ::appendCommand)
+                            systemProperties = deviceAdb.loadSystemProperties(nextSelectedDeviceSerial, ::appendCommand)
+                            deviceSystemInfoLoadedSerial = nextSelectedDeviceSerial
+                            devicePropertiesLoadedSerial = nextSelectedDeviceSerial
+                            statusText = "发现 ${discoveredDevices.size} 台设备，已刷新系统信息"
+                            appendCommand("状态: 设备已连接，系统信息与属性已刷新")
+                        } catch (error: Throwable) {
+                            statusText = error.message ?: "读取系统信息失败"
+                            appendCommand("错误: 读取系统信息失败 - ${error.message ?: "未知错误"}")
                         }
                     } else {
                         statusText = "发现 ${discoveredDevices.size} 台设备，准备读取应用"
@@ -203,6 +234,95 @@ fun App() {
                 }
             }
             runningJob = job
+        }
+
+        fun loadDeviceSystemInfo(deviceSerial: String) {
+            if (isRunning) return
+            scope.launch {
+                isRunning = true
+                isLoadingDeviceSystemInfo = true
+                deviceSystemInfo = null
+                deviceSystemInfoLoadedSerial = deviceSerial
+                statusText = "读取设备系统信息..."
+                appendCommand("状态: 读取设备系统信息...")
+                try {
+                    deviceSystemInfo = deviceAdb.loadSystemInfo(deviceSerial, ::appendCommand)
+                    statusText = "读取设备系统信息完成"
+                    appendCommand("状态: 读取设备系统信息完成")
+                } catch (error: Throwable) {
+                    deviceSystemInfoLoadedSerial = null
+                    statusText = error.message ?: "读取设备系统信息失败"
+                    appendCommand("错误: 读取设备系统信息失败 - ${error.message ?: "未知错误"}")
+                } finally {
+                    isLoadingDeviceSystemInfo = false
+                    isRunning = false
+                }
+            }
+        }
+
+        fun loadDeviceSystemProperties(deviceSerial: String) {
+            if (isRunning) return
+            scope.launch {
+                isRunning = true
+                isLoadingDeviceProperties = true
+                systemProperties = emptyList()
+                devicePropertiesLoadedSerial = deviceSerial
+                statusText = "读取系统属性..."
+                appendCommand("状态: 读取系统属性...")
+                try {
+                    systemProperties = deviceAdb.loadSystemProperties(deviceSerial, ::appendCommand)
+                    statusText = "读取系统属性完成，共 ${systemProperties.size} 个属性"
+                    appendCommand("状态: 读取系统属性完成，共 ${systemProperties.size} 个属性")
+                } catch (error: Throwable) {
+                    devicePropertiesLoadedSerial = null
+                    statusText = error.message ?: "读取系统属性失败"
+                    appendCommand("错误: 读取系统属性失败 - ${error.message ?: "未知错误"}")
+                } finally {
+                    isLoadingDeviceProperties = false
+                    isRunning = false
+                }
+            }
+        }
+
+        fun rebootSelectedDevice(deviceSerial: String) {
+            if (isRunning) return
+            scope.launch {
+                isRunning = true
+                statusText = "正在重启设备..."
+                appendCommand("状态: 开始重启设备 $deviceSerial")
+                try {
+                    deviceAdb.rebootDevice(deviceSerial, ::appendCommand)
+                    statusText = "重启命令已发送"
+                    appendCommand("状态: 重启命令已发送完成，设备即将重启")
+                    selectedDeviceSerial = null
+                    deviceSystemInfo = null
+                    systemProperties = emptyList()
+                } catch (error: Throwable) {
+                    statusText = error.message ?: "重启设备失败"
+                    appendCommand("错误: 重启设备失败 - ${error.message ?: "未知错误"}")
+                } finally {
+                    isRunning = false
+                }
+            }
+        }
+
+        fun takeSelectedDeviceScreenshot(deviceSerial: String) {
+            if (isRunning) return
+            scope.launch {
+                isRunning = true
+                statusText = "正在截取设备屏幕..."
+                appendCommand("状态: 开始截取设备 $deviceSerial 屏幕...")
+                try {
+                    val remotePath = deviceAdb.takeScreenshot(deviceSerial, ::appendCommand)
+                    statusText = "屏幕截图成功，保存在设备 $remotePath"
+                    appendCommand("状态: 屏幕截图成功，文件保存在设备: $remotePath")
+                } catch (error: Throwable) {
+                    statusText = error.message ?: "屏幕截图失败"
+                    appendCommand("错误: 屏幕截图失败 - ${error.message ?: "未知错误"}")
+                } finally {
+                    isRunning = false
+                }
+            }
         }
 
         fun loadThirdPartyApps(deviceSerial: String) {
@@ -373,22 +493,31 @@ fun App() {
 
         LaunchedEffect(selectedTestModule, selectedReadyDevice?.serialNumber) {
             val deviceSerial = selectedReadyDevice?.serialNumber
-            if (selectedTestModule == TestModule.App && deviceSerial != null) {
-                if (systemLoadedSerial != deviceSerial) {
-                    val cached = appAdb.loadCachedSystemApps(deviceSerial)
-                    if (cached != null) {
-                        systemApps = cached.apps
-                        systemAppsCacheFormattedTime = cached.cacheTimeFormatted
-                        systemLoadedSerial = deviceSerial
-                    } else {
-                        systemApps = emptyList()
-                        systemAppsCacheFormattedTime = null
-                        systemLoadedSerial = null
+            if (deviceSerial != null) {
+                if (selectedTestModule == TestModule.Device) {
+                    if (deviceSystemInfoLoadedSerial != deviceSerial) {
+                        loadDeviceSystemInfo(deviceSerial)
                     }
-                }
-                if (thirdPartyLoadedSerial != deviceSerial) {
-                    thirdPartyApps = emptyList()
-                    thirdPartyLoadedSerial = null
+                    if (devicePropertiesLoadedSerial != deviceSerial) {
+                        loadDeviceSystemProperties(deviceSerial)
+                    }
+                } else if (selectedTestModule == TestModule.App) {
+                    if (systemLoadedSerial != deviceSerial) {
+                        val cached = appAdb.loadCachedSystemApps(deviceSerial)
+                        if (cached != null) {
+                            systemApps = cached.apps
+                            systemAppsCacheFormattedTime = cached.cacheTimeFormatted
+                            systemLoadedSerial = deviceSerial
+                        } else {
+                            systemApps = emptyList()
+                            systemAppsCacheFormattedTime = null
+                            systemLoadedSerial = null
+                        }
+                    }
+                    if (thirdPartyLoadedSerial != deviceSerial) {
+                        thirdPartyApps = emptyList()
+                        thirdPartyLoadedSerial = null
+                    }
                 }
             }
         }
@@ -416,6 +545,30 @@ fun App() {
                     onBottomPanelHeightPxChange = { bottomPanelHeightPx = it },
                     topContent = {
                         when (selectedTestModule) {
+                            TestModule.Device -> {
+                                DeviceTestPanel(
+                                    selectedDevice = selectedDevice,
+                                    systemInfo = deviceSystemInfo,
+                                    systemProperties = systemProperties,
+                                    isLoadingInfo = isLoadingDeviceSystemInfo,
+                                    isLoadingProperties = isLoadingDeviceProperties,
+                                    onRefreshInfo = {
+                                        selectedReadyDevice?.serialNumber?.let { loadDeviceSystemInfo(it) }
+                                    },
+                                    onRefreshProperties = {
+                                        selectedReadyDevice?.serialNumber?.let { loadDeviceSystemProperties(it) }
+                                    },
+                                    onReboot = {
+                                        selectedReadyDevice?.serialNumber?.let { rebootSelectedDevice(it) }
+                                    },
+                                    onTakeScreenshot = {
+                                        selectedReadyDevice?.serialNumber?.let { takeSelectedDeviceScreenshot(it) }
+                                    },
+                                    isRunning = isRunning,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+
                             TestModule.DataFill -> {
                                 Column(
                                     modifier = Modifier.fillMaxSize(),
@@ -551,9 +704,17 @@ fun App() {
                                     systemProgressCurrent = 0
                                     systemProgressTotal = 0
 
+                                    deviceSystemInfo = null
+                                    systemProperties = emptyList()
+                                    deviceSystemInfoLoadedSerial = null
+                                    devicePropertiesLoadedSerial = null
+
                                     if (device.isReady) {
                                         if (selectedTestModule == TestModule.DataFill) {
                                             refreshStorageForDevice(device.serialNumber)
+                                        } else if (selectedTestModule == TestModule.Device) {
+                                            loadDeviceSystemInfo(device.serialNumber)
+                                            loadDeviceSystemProperties(device.serialNumber)
                                         } else {
                                             statusText = "已选择设备 ${device.serialNumber}"
                                         }
