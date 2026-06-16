@@ -139,19 +139,24 @@ fun App() {
                         } else {
                             "发现 ${discoveredDevices.size} 台设备，无可用设备"
                         }
+                        appendCommand("状态: $statusText")
                     } else if (selectedTestModule == TestModule.DataFill) {
                         statusText = "发现 ${discoveredDevices.size} 台设备，读取存储..."
                         try {
                             storageInfo = dataFillAdb.loadStorageInfo(nextSelectedDeviceSerial, ::appendCommand)
                             statusText = "发现 ${discoveredDevices.size} 台设备，已刷新存储"
+                            appendCommand("状态: 设备已连接，存储已刷新")
                         } catch (error: Throwable) {
                             statusText = error.message ?: "读取存储失败"
+                            appendCommand("错误: 读取存储失败 - ${error.message ?: "未知错误"}")
                         }
                     } else {
                         statusText = "发现 ${discoveredDevices.size} 台设备，准备读取应用"
+                        appendCommand("状态: $statusText")
                     }
                 } catch (error: Throwable) {
                     statusText = error.message ?: "扫描设备失败"
+                    appendCommand("错误: 扫描设备失败 - ${error.message ?: "未知错误"}")
                 } finally {
                     isRunning = false
                 }
@@ -164,27 +169,34 @@ fun App() {
                 isRunning = true
                 fillProgress = null
                 statusText = "$name..."
+                appendCommand("状态: 开始$name...")
                 try {
                     storageInfo = block()
                     statusText = "$name 完成"
+                    appendCommand("状态: $name 完成")
                 } catch (error: CancellationException) {
                     fillProgress = null
                     val deviceSerial = selectedReadyDevice?.serialNumber
                     if (deviceSerial == null) {
                         statusText = "任务已停止"
+                        appendCommand("状态: 任务已停止")
                     } else {
                         statusText = "任务已停止，刷新存储..."
+                        appendCommand("状态: 任务已停止，刷新存储...")
                         try {
                             storageInfo = withContext(NonCancellable) {
                                 dataFillAdb.loadStorageInfo(deviceSerial, ::appendCommand)
                             }
                             statusText = "任务已停止，已刷新存储"
+                            appendCommand("状态: 任务已停止，已刷新存储")
                         } catch (refreshError: Throwable) {
                             statusText = "任务已停止，刷新存储失败：${refreshError.message ?: "未知错误"}"
+                            appendCommand("错误: 刷新存储失败 - ${refreshError.message ?: "未知错误"}")
                         }
                     }
                 } catch (error: Throwable) {
                     statusText = error.message ?: "任务失败"
+                    appendCommand("错误: $name 失败 - ${error.message ?: "未知错误"}")
                 } finally {
                     isRunning = false
                     runningJob = null
@@ -203,6 +215,7 @@ fun App() {
                 thirdPartyProgressCurrent = 0
                 thirdPartyProgressTotal = 0
                 statusText = "读取第三方应用..."
+                appendCommand("状态: 读取第三方应用...")
                 try {
                     thirdPartyApps = appAdb.loadInstalledApps(deviceSerial, false, ::appendCommand) { current, total ->
                         thirdPartyProgressCurrent = current
@@ -211,9 +224,11 @@ fun App() {
                     }
                     val disabledCount = thirdPartyApps.count { !it.isEnabled }
                     statusText = "已读取 ${thirdPartyApps.size} 个第三方应用，禁用 $disabledCount 个"
+                    appendCommand("状态: 已读取 ${thirdPartyApps.size} 个第三方应用，禁用 $disabledCount 个")
                 } catch (error: Throwable) {
                     thirdPartyLoadedSerial = null
                     statusText = error.message ?: "读取第三方应用失败"
+                    appendCommand("错误: 读取第三方应用失败 - ${error.message ?: "未知错误"}")
                 } finally {
                     isLoadingThirdParty = false
                     isRunning = false
@@ -232,6 +247,7 @@ fun App() {
                 systemProgressCurrent = 0
                 systemProgressTotal = 0
                 statusText = "读取系统应用..."
+                appendCommand("状态: 读取系统应用...")
                 try {
                     val apps = appAdb.loadInstalledApps(deviceSerial, true, ::appendCommand) { current, total ->
                         systemProgressCurrent = current
@@ -241,6 +257,7 @@ fun App() {
                     systemApps = apps
                     val disabledCount = apps.count { !it.isEnabled }
                     statusText = "已读取 ${apps.size} 个系统应用，禁用 $disabledCount 个"
+                    appendCommand("状态: 已读取 ${apps.size} 个系统应用，禁用 $disabledCount 个")
                     appAdb.saveCachedSystemApps(deviceSerial, apps)
                     val cached = appAdb.loadCachedSystemApps(deviceSerial)
                     if (cached != null) {
@@ -249,6 +266,7 @@ fun App() {
                 } catch (error: Throwable) {
                     systemLoadedSerial = null
                     statusText = error.message ?: "读取系统应用失败"
+                    appendCommand("错误: 读取系统应用失败 - ${error.message ?: "未知错误"}")
                 } finally {
                     isLoadingSystem = false
                     isRunning = false
@@ -278,25 +296,30 @@ fun App() {
             val deviceSerial = selectedReadyDevice?.serialNumber
             if (deviceSerial == null) {
                 statusText = "先选择状态为 device 的设备"
+                appendCommand("错误: 先选择状态为 device 的设备")
                 return
             }
 
             scope.launch {
                 isRunning = true
                 statusText = "$action ${app.packageName}..."
+                appendCommand("状态: 开始$action ${app.packageName}...")
                 try {
                     when (action) {
                         "启动应用" -> {
                             appAdb.launchApplication(deviceSerial, app.packageName, ::appendCommand)
                             statusText = "已启动 ${app.packageName}"
+                            appendCommand("状态: 已启动 ${app.packageName}")
                         }
                         "结束应用" -> {
                             appAdb.stopApplication(deviceSerial, app.packageName, ::appendCommand)
                             statusText = "已结束 ${app.packageName}"
+                            appendCommand("状态: 已结束 ${app.packageName}")
                         }
                         "清除数据" -> {
                             appAdb.clearApplicationData(deviceSerial, app.packageName, ::appendCommand)
                             statusText = "已清除数据 ${app.packageName}"
+                            appendCommand("状态: 已清除数据 ${app.packageName}")
                         }
                         "停用应用" -> {
                             appAdb.disableApplication(deviceSerial, app.packageName, ::appendCommand)
@@ -305,6 +328,7 @@ fun App() {
                                 appAdb.saveCachedSystemApps(deviceSerial, nextSystemApps)
                             }
                             statusText = "已停用 ${app.packageName}"
+                            appendCommand("状态: 已停用 ${app.packageName}")
                         }
                         "启用应用" -> {
                             appAdb.enableApplication(deviceSerial, app.packageName, ::appendCommand)
@@ -313,22 +337,30 @@ fun App() {
                                 appAdb.saveCachedSystemApps(deviceSerial, nextSystemApps)
                             }
                             statusText = "已启用 ${app.packageName}"
+                            appendCommand("状态: 已启用 ${app.packageName}")
                         }
                         "导出APK" -> {
                             val outputPath = selectDirectory()
                             if (outputPath == null) {
                                 statusText = "已取消导出"
+                                appendCommand("状态: 已取消导出")
                             } else {
                                 val result = appAdb.exportApplicationApk(deviceSerial, app.packageName, outputPath, ::appendCommand)
                                 statusText = "已导出 ${result.fileCount} 个 APK 到 ${result.directoryPath}"
+                                appendCommand("状态: 已导出 ${result.fileCount} 个 APK 到 ${result.directoryPath}")
                             }
                         }
-                        else -> statusText = "未知应用操作：$action"
+                        else -> {
+                            statusText = "未知应用操作：$action"
+                            appendCommand("错误: 未知应用操作：$action")
+                        }
                     }
                 } catch (error: CancellationException) {
                     statusText = "应用操作已停止"
+                    appendCommand("状态: 应用操作已停止")
                 } catch (error: Throwable) {
                     statusText = error.message ?: "$action 失败"
+                    appendCommand("错误: $action 失败 - ${error.message ?: "未知错误"}")
                 } finally {
                     isRunning = false
                 }
@@ -396,6 +428,7 @@ fun App() {
                                             val deviceSerial = selectedReadyDevice?.serialNumber
                                             if (deviceSerial == null) {
                                                 statusText = "先选择状态为 device 的设备"
+                                                appendCommand("错误: 先选择状态为 device 的设备")
                                             } else {
                                                 refreshStorageForDevice(deviceSerial)
                                             }
@@ -435,6 +468,7 @@ fun App() {
                                                 }
                                             } else {
                                                 statusText = "请输入有效的填充大小"
+                                                appendCommand("错误: 请输入有效的填充大小")
                                             }
                                         },
                                         onFillUntilRemaining = {
@@ -456,6 +490,7 @@ fun App() {
                                                 }
                                             } else {
                                                 statusText = "请输入有效的剩余空间"
+                                                appendCommand("错误: 请输入有效的剩余空间")
                                             }
                                         },
                                         modifier = Modifier.weight(1f),
@@ -536,13 +571,6 @@ fun App() {
                         }
                     },
                     modifier = Modifier.weight(1f),
-                )
-
-                Text(
-                    text = statusText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary,
                 )
             }
         }
@@ -773,10 +801,22 @@ private fun CommandLogPanel(
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             commandLog.forEach { command ->
+                                val textColor = when {
+                                    command.startsWith("错误:") || command.startsWith("错误 ") || command.contains("失败") -> {
+                                        MaterialTheme.colorScheme.error
+                                    }
+                                    command.startsWith("状态:") || command.startsWith("状态 ") -> {
+                                        MaterialTheme.colorScheme.primary
+                                    }
+                                    else -> {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                }
                                 Text(
                                     text = "> $command",
                                     fontFamily = FontFamily.Monospace,
                                     style = MaterialTheme.typography.bodySmall,
+                                    color = textColor,
                                 )
                             }
                             Spacer(Modifier.height(1.dp))
