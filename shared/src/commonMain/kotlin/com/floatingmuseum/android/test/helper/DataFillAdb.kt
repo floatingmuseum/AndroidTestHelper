@@ -113,3 +113,16 @@ fun parseGiBInput(value: String): Long? {
     if (number <= 0.0) return null
     return (number * BytesInGiB).toLong()
 }
+
+fun filterInstalledApps(
+    apps: List<InstalledAppInfo>,
+    query: String,
+): List<InstalledAppInfo> {
+    val keyword = query.trim().lowercase()
+    if (keyword.isEmpty()) return apps
+
+    return apps.filter { app ->
+        app.appName.lowercase().contains(keyword) ||
+            app.packageName.lowercase().contains(keyword)
+    }
+}

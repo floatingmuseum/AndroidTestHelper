@@ -47,9 +47,13 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -63,6 +67,9 @@ private enum class TestModule(val title: String) {
     DataFill("数据填充"),
     App("应用"),
 }
+
+private val SearchMatchBackground = Color(0xFFFFFF00)
+private val SearchMatchContent = Color(0xFF111111)
 
 @Composable
 @Preview
@@ -620,6 +627,14 @@ private fun ApplicationTestPanel(
 ) {
     var isThirdPartyExpanded by remember { mutableStateOf(true) }
     var isSystemExpanded by remember { mutableStateOf(true) }
+    var appSearchQuery by remember { mutableStateOf("") }
+    val filteredThirdPartyApps = remember(thirdPartyApps, appSearchQuery) {
+        filterInstalledApps(thirdPartyApps, appSearchQuery)
+    }
+    val filteredSystemApps = remember(systemApps, appSearchQuery) {
+        filterInstalledApps(systemApps, appSearchQuery)
+    }
+    val isSearching = appSearchQuery.trim().isNotEmpty()
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
@@ -633,18 +648,55 @@ private fun ApplicationTestPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "应用",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "应用",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        OutlinedTextField(
+                            value = appSearchQuery,
+                            onValueChange = { appSearchQuery = it },
+                            singleLine = true,
+                            label = { Text("搜索应用名或包名") },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                     val hasData = thirdPartyApps.isNotEmpty() || systemApps.isNotEmpty()
                     val desc = if (hasData) {
                         val parts = mutableListOf<String>()
-                        if (thirdPartyApps.isNotEmpty()) parts.add("第三方 ${thirdPartyApps.size} 个")
-                        if (systemApps.isNotEmpty()) parts.add("系统 ${systemApps.size} 个")
-                        val totalDisabled = thirdPartyApps.count { !it.isEnabled } + systemApps.count { !it.isEnabled }
+                        if (thirdPartyApps.isNotEmpty()) {
+                            parts.add(
+                                if (isSearching) {
+                                    "第三方 ${filteredThirdPartyApps.size} / ${thirdPartyApps.size} 个"
+                                } else {
+                                    "第三方 ${thirdPartyApps.size} 个"
+                                }
+                            )
+                        }
+                        if (systemApps.isNotEmpty()) {
+                            parts.add(
+                                if (isSearching) {
+                                    "系统 ${filteredSystemApps.size} / ${systemApps.size} 个"
+                                } else {
+                                    "系统 ${systemApps.size} 个"
+                                }
+                            )
+                        }
+                        val visibleApps = if (isSearching) {
+                            filteredThirdPartyApps + filteredSystemApps
+                        } else {
+                            thirdPartyApps + systemApps
+                        }
+                        val totalDisabled = visibleApps.count { !it.isEnabled }
                         parts.add("禁用 $totalDisabled 个")
                         parts.joinToString(" · ")
                     } else {
@@ -676,7 +728,7 @@ private fun ApplicationTestPanel(
                         ) {
                             ApplicationSectionHeader(
                                 title = "第三方应用",
-                                count = if (thirdPartyApps.isNotEmpty()) thirdPartyApps.size else null,
+                                count = if (thirdPartyApps.isNotEmpty()) filteredThirdPartyApps.size else null,
                                 isLoading = isLoadingThirdParty,
                                 isExpanded = isThirdPartyExpanded,
                                 onRefresh = onRefreshThirdParty,
@@ -724,12 +776,24 @@ private fun ApplicationTestPanel(
                                         Text("无数据。请点击刷新获取第三方应用列表。", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
+                            } else if (filteredThirdPartyApps.isEmpty()) {
+                                item(
+                                    key = "third-party-no-match",
+                                    span = { GridItemSpan(maxLineSpan) }
+                                ) {
+                                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                        Text("没有匹配的第三方应用。", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
                             } else {
                                 items(
-                                    items = thirdPartyApps,
+                                    items = filteredThirdPartyApps,
                                     key = { it.packageName },
                                 ) { app ->
-                                    ApplicationTile(app)
+                                    ApplicationTile(
+                                        app = app,
+                                        searchQuery = appSearchQuery,
+                                    )
                                 }
                             }
                         }
@@ -740,7 +804,7 @@ private fun ApplicationTestPanel(
                         ) {
                             ApplicationSectionHeader(
                                 title = "系统应用",
-                                count = if (systemApps.isNotEmpty()) systemApps.size else null,
+                                count = if (systemApps.isNotEmpty()) filteredSystemApps.size else null,
                                 isLoading = isLoadingSystem,
                                 isExpanded = isSystemExpanded,
                                 cacheTime = systemAppsCacheFormattedTime,
@@ -789,12 +853,24 @@ private fun ApplicationTestPanel(
                                         Text("无数据。请点击刷新获取系统应用并生成本地缓存。", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
+                            } else if (filteredSystemApps.isEmpty()) {
+                                item(
+                                    key = "system-no-match",
+                                    span = { GridItemSpan(maxLineSpan) }
+                                ) {
+                                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                        Text("没有匹配的系统应用。", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
                             } else {
                                 items(
-                                    items = systemApps,
+                                    items = filteredSystemApps,
                                     key = { it.packageName },
                                 ) { app ->
-                                    ApplicationTile(app)
+                                    ApplicationTile(
+                                        app = app,
+                                        searchQuery = appSearchQuery,
+                                    )
                                 }
                             }
                         }
@@ -869,7 +945,10 @@ private fun ApplicationSectionHeader(
 }
 
 @Composable
-private fun ApplicationTile(app: InstalledAppInfo) {
+private fun ApplicationTile(
+    app: InstalledAppInfo,
+    searchQuery: String,
+) {
     val disabled = !app.isEnabled
     val containerColor = if (disabled) {
         MaterialTheme.colorScheme.errorContainer
@@ -906,14 +985,14 @@ private fun ApplicationTile(app: InstalledAppInfo) {
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = app.appName,
+                    text = highlightedSearchText(app.appName, searchQuery),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = app.packageName,
+                    text = highlightedSearchText(app.packageName, searchQuery),
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     maxLines = 1,
@@ -927,6 +1006,42 @@ private fun ApplicationTile(app: InstalledAppInfo) {
                 )
             }
         }
+    }
+}
+
+private fun highlightedSearchText(
+    text: String,
+    query: String,
+) = buildAnnotatedString {
+    val keyword = query.trim()
+    if (keyword.isEmpty()) {
+        append(text)
+        return@buildAnnotatedString
+    }
+
+    var cursor = 0
+
+    while (cursor < text.length) {
+        val matchStart = text.indexOf(keyword, startIndex = cursor, ignoreCase = true)
+        if (matchStart < 0) {
+            append(text.substring(cursor))
+            break
+        }
+
+        if (matchStart > cursor) {
+            append(text.substring(cursor, matchStart))
+        }
+
+        val matchEnd = matchStart + keyword.length
+        withStyle(
+            SpanStyle(
+                background = SearchMatchBackground,
+                color = SearchMatchContent,
+            )
+        ) {
+            append(text.substring(matchStart, matchEnd))
+        }
+        cursor = matchEnd
     }
 }
 

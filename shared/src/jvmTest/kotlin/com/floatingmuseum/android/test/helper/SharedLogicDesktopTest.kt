@@ -85,4 +85,31 @@ class SharedLogicDesktopTest {
         assertEquals("15", packages["com.android.settings"]?.versionName)
         assertEquals(350000000L, packages["com.android.settings"]?.versionCode)
     }
+
+    @Test
+    fun filtersInstalledAppsByNameOrPackage() {
+        val apps = listOf(
+            testInstalledApp("com.su.assistant.pro", "Dev Assistant"),
+            testInstalledApp("com.android.settings", "设置"),
+            testInstalledApp("com.example.camera", "Camera Lab"),
+        )
+
+        assertEquals(apps, filterInstalledApps(apps, " "))
+        assertEquals(listOf(apps[0]), filterInstalledApps(apps, "assistant"))
+        assertEquals(listOf(apps[1]), filterInstalledApps(apps, "ANDROID.SETTINGS"))
+        assertEquals(listOf(apps[2]), filterInstalledApps(apps, "camera"))
+    }
+
+    private fun testInstalledApp(
+        packageName: String,
+        appName: String,
+    ): InstalledAppInfo = InstalledAppInfo(
+        packageName = packageName,
+        appName = appName,
+        versionName = "-",
+        versionCode = null,
+        isSystem = false,
+        isEnabled = true,
+        iconBytes = null,
+    )
 }
