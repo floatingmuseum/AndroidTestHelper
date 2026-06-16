@@ -2,6 +2,7 @@ package com.floatingmuseum.android.test.helper
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -766,18 +767,20 @@ private fun CommandLogPanel(
                     .padding(12.dp)
                     .verticalScroll(scrollState),
             ) {
-                if (commandLog.isEmpty()) {
-                    Text("暂无命令")
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        commandLog.forEach { command ->
-                            Text(
-                                text = "> $command",
-                                fontFamily = FontFamily.Monospace,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+                SelectionContainer {
+                    if (commandLog.isEmpty()) {
+                        Text("暂无命令")
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            commandLog.forEach { command ->
+                                Text(
+                                    text = "> $command",
+                                    fontFamily = FontFamily.Monospace,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            Spacer(Modifier.height(1.dp))
                         }
-                        Spacer(Modifier.height(1.dp))
                     }
                 }
             }

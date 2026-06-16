@@ -1,6 +1,7 @@
 package com.floatingmuseum.android.test.helper.app
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -535,24 +536,26 @@ private fun ApplicationDetailPanel(
                     packageName = app.packageName,
                     modifier = Modifier.size(56.dp),
                 )
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = app.appName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = app.packageName,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                SelectionContainer {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = app.appName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = app.packageName,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 Button(onClick = onBack) {
                     Text("返回")
@@ -562,9 +565,13 @@ private fun ApplicationDetailPanel(
 
         ApplicationInfoBlock(
             lines = listOf(
+                "版本名: ${app.versionName}",
+                "版本号: ${app.versionCode?.toString() ?: "-"}",
                 "compileSdkVersion: ${formatSdkVersion(app.compileSdkVersion)}",
                 "minSdkVersion: ${formatSdkVersion(app.minSdkVersion)}",
                 "targetSdkVersion: ${formatSdkVersion(app.targetSdkVersion)}",
+                "应用类型: ${if (app.isSystem) "系统应用" else "第三方应用"}",
+                "启用状态: ${if (app.isEnabled) "已启用" else "已停用"}",
             ),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -587,16 +594,18 @@ private fun ApplicationInfoBlock(
         shape = RoundedCornerShape(8.dp),
         modifier = modifier,
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            lines.forEach { line ->
-                Text(
-                    text = line,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        SelectionContainer {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                lines.forEach { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
