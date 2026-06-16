@@ -3,9 +3,13 @@ package com.floatingmuseum.android.test.helper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import java.io.File
@@ -13,6 +17,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.ZipFile
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.createTempDirectory
 import kotlin.math.min
 
@@ -127,32 +132,48 @@ private class JvmDataFillAdb(
         isSystem: Boolean,
         logCommand: (String) -> Unit,
         onProgress: (current: Int, total: Int) -> Unit,
-    ): List<InstalledAppInfo> {
-        val packageListOutput = executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-f", "-U"),
-            displayCommand = "adb -s $deviceSerial shell pm list packages -f -U",
-            logCommand = logCommand,
-        )
-        val thirdPartyOutput = executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-3"),
-            displayCommand = "adb -s $deviceSerial shell pm list packages -3",
-            logCommand = logCommand,
-        )
-        val systemOutput = executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-s"),
-            displayCommand = "adb -s $deviceSerial shell pm list packages -s",
-            logCommand = logCommand,
-        )
-        val disabledOutput = executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-d"),
-            displayCommand = "adb -s $deviceSerial shell pm list packages -d",
-            logCommand = logCommand,
-        )
-        val dumpsysOutput = executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "dumpsys", "package"),
-            displayCommand = "adb -s $deviceSerial shell dumpsys package",
-            logCommand = logCommand,
-        )
+    ): List<InstalledAppInfo> = withContext(Dispatchers.IO) {
+        val packageListDeferred = async {
+            executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-f", "-U"),
+                displayCommand = "adb -s $deviceSerial shell pm list packages -f -U",
+                logCommand = logCommand,
+            )
+        }
+        val thirdPartyDeferred = async {
+            executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-3"),
+                displayCommand = "adb -s $deviceSerial shell pm list packages -3",
+                logCommand = logCommand,
+            )
+        }
+        val systemDeferred = async {
+            executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-s"),
+                displayCommand = "adb -s $deviceSerial shell pm list packages -s",
+                logCommand = logCommand,
+            )
+        }
+        val disabledDeferred = async {
+            executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-d"),
+                displayCommand = "adb -s $deviceSerial shell pm list packages -d",
+                logCommand = logCommand,
+            )
+        }
+        val dumpsysDeferred = async {
+            executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "dumpsys", "package"),
+                displayCommand = "adb -s $deviceSerial shell dumpsys package",
+                logCommand = logCommand,
+            )
+        }
+
+        val packageListOutput = packageListDeferred.await()
+        val thirdPartyOutput = thirdPartyDeferred.await()
+        val systemOutput = systemDeferred.await()
+        val disabledOutput = disabledDeferred.await()
+        val dumpsysOutput = dumpsysDeferred.await()
 
         val packagePaths = parsePackagePathList(packageListOutput)
         val thirdPartyPackages = parsePackageNameList(thirdPartyOutput)
@@ -161,7 +182,7 @@ private class JvmDataFillAdb(
         val dumpsysPackages = parsePackageDumpsys(dumpsysOutput)
         val tempDirectory = createTempDirectory(prefix = "AndroidTestHelperApps").toFile()
 
-        return try {
+        try {
             val filteredPackagePaths = packagePaths.filter { packagePath ->
                 val isSys = when {
                     packagePath.packageName in thirdPartyPackages -> false
@@ -174,32 +195,42 @@ private class JvmDataFillAdb(
             val total = filteredPackagePaths.size
             onProgress(0, total)
 
-            filteredPackagePaths.mapIndexed { index, packagePath ->
-                currentCoroutineContext().ensureActive()
-                val dumpsysInfo = dumpsysPackages[packagePath.packageName]
-                val apkMetadata = loadApkMetadata(
-                    deviceSerial = deviceSerial,
-                    packagePath = packagePath,
-                    tempDirectory = tempDirectory,
-                    logCommand = logCommand,
-                )
+            val semaphore = Semaphore(4)
+            val completedCount = AtomicInteger(0)
 
-                val appInfo = InstalledAppInfo(
-                    packageName = packagePath.packageName,
-                    appName = apkMetadata.label?.takeIf { it.isNotBlank() }
-                        ?: packagePath.packageName,
-                    versionName = dumpsysInfo?.versionName?.takeIf { it.isNotBlank() } ?: "-",
-                    versionCode = dumpsysInfo?.versionCode,
-                    compileSdkVersion = apkMetadata.compileSdkVersion ?: dumpsysInfo?.compileSdkVersion,
-                    minSdkVersion = apkMetadata.minSdkVersion ?: dumpsysInfo?.minSdkVersion,
-                    targetSdkVersion = apkMetadata.targetSdkVersion ?: dumpsysInfo?.targetSdkVersion,
-                    isSystem = isSystem,
-                    isEnabled = packagePath.packageName !in disabledPackages,
-                    iconBytes = apkMetadata.iconBytes,
-                )
-                onProgress(index + 1, total)
-                appInfo
-            }.sortedWith(
+            val deferreds = filteredPackagePaths.map { packagePath ->
+                async {
+                    semaphore.withPermit {
+                        currentCoroutineContext().ensureActive()
+                        val dumpsysInfo = dumpsysPackages[packagePath.packageName]
+                        val apkMetadata = loadApkMetadata(
+                            deviceSerial = deviceSerial,
+                            packagePath = packagePath,
+                            tempDirectory = tempDirectory,
+                            logCommand = logCommand,
+                        )
+
+                        val appInfo = InstalledAppInfo(
+                            packageName = packagePath.packageName,
+                            appName = apkMetadata.label?.takeIf { it.isNotBlank() }
+                                ?: packagePath.packageName,
+                            versionName = dumpsysInfo?.versionName?.takeIf { it.isNotBlank() } ?: "-",
+                            versionCode = dumpsysInfo?.versionCode,
+                            compileSdkVersion = apkMetadata.compileSdkVersion ?: dumpsysInfo?.compileSdkVersion,
+                            minSdkVersion = apkMetadata.minSdkVersion ?: dumpsysInfo?.minSdkVersion,
+                            targetSdkVersion = apkMetadata.targetSdkVersion ?: dumpsysInfo?.targetSdkVersion,
+                            isSystem = isSystem,
+                            isEnabled = packagePath.packageName !in disabledPackages,
+                            iconBytes = apkMetadata.iconBytes,
+                        )
+                        val currentCount = completedCount.incrementAndGet()
+                        onProgress(currentCount, total)
+                        appInfo
+                    }
+                }
+            }
+
+            deferreds.awaitAll().sortedWith(
                 compareBy<InstalledAppInfo> { it.appName.lowercase() }
                     .thenBy { it.packageName },
             )
