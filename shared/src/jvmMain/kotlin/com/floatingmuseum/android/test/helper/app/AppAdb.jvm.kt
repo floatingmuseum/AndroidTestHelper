@@ -28,6 +28,114 @@ private class JvmAppAdb : AppAdb {
         logCommand: (String) -> Unit,
         onProgress: (current: Int, total: Int) -> Unit,
     ): List<InstalledAppInfo> = withContext(Dispatchers.IO) {
+        val hasPlugin = isPluginInstalled(deviceSerial, logCommand)
+        if (hasPlugin) {
+            try {
+                return@withContext loadInstalledAppsWithPlugin(deviceSerial, isSystem, logCommand, onProgress)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        return@withContext loadInstalledAppsWithAdb(deviceSerial, isSystem, logCommand, onProgress)
+    }
+
+    private suspend fun isPluginInstalled(deviceSerial: String, logCommand: (String) -> Unit): Boolean {
+        return try {
+            val output = AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "pm", "path", "com.floatingmuseum.android.test.helper.plugin"),
+                displayCommand = "adb -s $deviceSerial shell pm path com.floatingmuseum.android.test.helper.plugin",
+                logCommand = logCommand
+            )
+            output.trim().startsWith("package:")
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class PluginAppMeta(
+        val packageName: String,
+        val appName: String,
+        val versionName: String,
+        val versionCode: Long?,
+        val compileSdkVersion: Int? = null,
+        val minSdkVersion: Int? = null,
+        val targetSdkVersion: Int? = null,
+        val isSystem: Boolean,
+        val isEnabled: Boolean
+    )
+
+    private suspend fun loadInstalledAppsWithPlugin(
+        deviceSerial: String,
+        isSystem: Boolean,
+        logCommand: (String) -> Unit,
+        onProgress: (current: Int, total: Int) -> Unit,
+    ): List<InstalledAppInfo> = withContext(Dispatchers.IO) {
+        val uri = "content://com.floatingmuseum.android.test.helper.plugin.provider/apps?isSystem=$isSystem"
+        val output = AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "content", "query", "--uri", uri),
+            displayCommand = "adb -s $deviceSerial shell content query --uri \"$uri\"",
+            logCommand = logCommand
+        )
+
+        val jsonStr = parseContentQueryJson(output) ?: throw IllegalStateException("未从 ContentProvider 中获取到数据")
+        val metaList = Json.decodeFromString<List<PluginAppMeta>>(jsonStr)
+        val total = metaList.size
+        onProgress(0, total)
+
+        val semaphore = Semaphore(8)
+        val completedCount = AtomicInteger(0)
+
+        val deferreds = metaList.map { meta ->
+            async {
+                semaphore.withPermit {
+                    currentCoroutineContext().ensureActive()
+                    val iconBytes = try {
+                        val iconUri = "content://com.floatingmuseum.android.test.helper.plugin.provider/icon/${meta.packageName}"
+                        AdbShell.executeAdbBinary(
+                            args = listOf("-s", deviceSerial, "exec-out", "content", "read", "--uri", iconUri),
+                            displayCommand = "adb -s $deviceSerial exec-out content read --uri \"$iconUri\"",
+                            logCommand = logCommand
+                        )
+                    } catch (e: Exception) {
+                        null
+                    }
+                    val currentCount = completedCount.incrementAndGet()
+                    onProgress(currentCount, total)
+                    InstalledAppInfo(
+                        packageName = meta.packageName,
+                        appName = meta.appName,
+                        versionName = meta.versionName,
+                        versionCode = meta.versionCode,
+                        compileSdkVersion = meta.compileSdkVersion,
+                        minSdkVersion = meta.minSdkVersion,
+                        targetSdkVersion = meta.targetSdkVersion,
+                        isSystem = meta.isSystem,
+                        isEnabled = meta.isEnabled,
+                        iconBytes = iconBytes
+                    )
+                }
+            }
+        }
+
+        deferreds.awaitAll().sortedWith(
+            compareBy<InstalledAppInfo> { it.appName.lowercase() }
+                .thenBy { it.packageName }
+        )
+    }
+
+    private fun parseContentQueryJson(output: String): String? {
+        val key = "json_data="
+        val line = output.lineSequence().firstOrNull { it.contains(key) } ?: return null
+        return line.substringAfter(key).trim()
+    }
+
+    private suspend fun loadInstalledAppsWithAdb(
+        deviceSerial: String,
+        isSystem: Boolean,
+        logCommand: (String) -> Unit,
+        onProgress: (current: Int, total: Int) -> Unit,
+    ): List<InstalledAppInfo> = withContext(Dispatchers.IO) {
         val packageListDeferred = async {
             AdbShell.executeAdb(
                 args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-f", "-U"),

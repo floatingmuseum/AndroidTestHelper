@@ -50,6 +50,40 @@ object AdbShell {
         }
     }
 
+    suspend fun executeAdbBinary(
+        args: List<String>,
+        displayCommand: String,
+        logCommand: (String) -> Unit,
+    ): ByteArray {
+        logCommand(displayCommand)
+        return withContext(Dispatchers.IO) {
+            val process = ProcessBuilder(listOf(adbPath) + args).start()
+            val outputReader = async(Dispatchers.IO) {
+                process.inputStream.readBytes()
+            }
+            val errorReader = async(Dispatchers.IO) {
+                process.errorStream.bufferedReader().readText()
+            }
+            try {
+                while (!process.waitFor(100L, TimeUnit.MILLISECONDS)) {
+                    currentCoroutineContext().ensureActive()
+                }
+                val output = outputReader.await()
+                val exitCode = process.exitValue()
+                if (exitCode != 0) {
+                    val errorMsg = errorReader.await()
+                    throw AdbCommandException(displayCommand, exitCode, errorMsg)
+                }
+                output
+            } catch (error: CancellationException) {
+                process.destroyForcibly()
+                outputReader.cancel()
+                errorReader.cancel()
+                throw error
+            }
+        }
+    }
+
     private fun resolveAdbPath(): String {
         val osName = System.getProperty("os.name").lowercase()
         val platformFolder = when {

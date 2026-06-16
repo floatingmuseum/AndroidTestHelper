@@ -77,6 +77,29 @@ Fill commands use chunked `dd` writes so progress is visible:
 
 Do not add frontend-only fake storage values. Read actual device state through ADB.
 
+## App List Fetching Behavior
+
+There are two strategies to fetch the installed application list:
+
+1. **ATHPlugin Proxy Mode (Recommended & High Performance)**:
+   - Triggered when the helper application `com.floatingmuseum.android.test.helper.plugin` is installed on the target device.
+   - PC queries all installed applications by running a single command:
+     `adb -s <serial> shell content query --uri content://com.floatingmuseum.android.test.helper.plugin.provider/apps?isSystem=<true|false>`
+   - The plugin returns a JSON array containing metadata (packageName, appName, versionName, versionCode, targetSdkVersion, minSdkVersion, compileSdkVersion, isSystem, isEnabled) in one database cell.
+   - Icons are loaded lazily. When rendering an icon, PC reads the raw binary stream directly:
+     `adb -s <serial> exec-out content read --uri content://com.floatingmuseum.android.test.helper.plugin.provider/icon/<packageName>`
+     
+2. **Standard ADB Fallback Mode (Slow)**:
+   - Used when `ATHPlugin` is not installed or any feature call fails.
+   - Combines output of multiple ADB shell calls:
+     - `pm list packages -f -U`
+     - `pm list packages -3`
+     - `pm list packages -s`
+     - `pm list packages -d`
+     - `dumpsys package`
+   - To retrieve icons and app labels, PC pulls each app's base APK into a temp directory and parses `AndroidManifest.xml` and `resources.arsc` locally.
+   - Relies on file caching to speed up consecutive loads of system apps.
+
 ## UI Guidelines
 
 - Keep controls dense and operational. This is a test tool, not a marketing interface.
