@@ -12,6 +12,11 @@ data class DeviceSystemInfo(
     val batteryLevel: Int?,
     val screenSize: String,
     val ipAddress: String,
+    val screenDensity: String = "未知",
+    val batteryStatus: String = "未知",
+    val batteryHealth: String = "未知",
+    val batteryTemp: String = "未知",
+    val batteryVoltage: String = "未知",
 )
 
 @Serializable

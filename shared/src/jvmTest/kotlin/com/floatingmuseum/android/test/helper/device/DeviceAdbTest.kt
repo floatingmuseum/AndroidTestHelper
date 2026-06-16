@@ -73,4 +73,52 @@ class DeviceAdbTest {
         assertEquals("custom.empty.property", props[2].key)
         assertEquals("", props[2].value)
     }
+
+    @Test
+    fun testParseScreenDensity() {
+        val physicalOnly = """
+            Physical density: 440
+        """.trimIndent()
+        assertEquals("440", parseScreenDensity(physicalOnly))
+
+        val withOverride = """
+            Physical density: 440
+            Override density: 400
+        """.trimIndent()
+        assertEquals("400 (物理: 440)", parseScreenDensity(withOverride))
+
+        val unknown = "something else"
+        assertEquals("未知", parseScreenDensity(unknown))
+    }
+
+    @Test
+    fun testParseBatteryDetails() {
+        val output = """
+            Current Battery Service state:
+              AC powered: false
+              USB powered: true
+              status: 2
+              health: 2
+              present: true
+              level: 95
+              scale: 100
+              temp: 290
+              voltage: 4123
+        """.trimIndent()
+        assertEquals("充电中", parseBatteryStatus(output))
+        assertEquals("良好", parseBatteryHealth(output))
+        assertEquals("29.0 °C", parseBatteryTemp(output))
+        assertEquals("4123 mV", parseBatteryVoltage(output))
+
+        val unknownOutput = """
+              status: 9
+              health: 8
+              temp: unknown
+              voltage: unknown
+        """.trimIndent()
+        assertEquals("未知", parseBatteryStatus(unknownOutput))
+        assertEquals("未知", parseBatteryHealth(unknownOutput))
+        assertEquals("未知", parseBatteryTemp(unknownOutput))
+        assertEquals("未知", parseBatteryVoltage(unknownOutput))
+    }
 }
