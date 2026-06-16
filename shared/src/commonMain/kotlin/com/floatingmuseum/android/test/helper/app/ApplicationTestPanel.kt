@@ -498,7 +498,7 @@ private fun ApplicationTile(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "版本名 ${app.versionName} · 版本号 ${app.versionCode?.toString() ?: "-"}",
+                    text = "${app.versionName}(${app.versionCode?.toString() ?: "-"})",
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -560,6 +560,12 @@ private fun ApplicationDetailPanel(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        Text(
+                            text = "${app.versionName}(${app.versionCode?.toString() ?: "-"})",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
                 Button(onClick = onBack) {
@@ -570,8 +576,6 @@ private fun ApplicationDetailPanel(
 
         ApplicationInfoBlock(
             lines = listOf(
-                "版本名: ${app.versionName}",
-                "版本号: ${app.versionCode?.toString() ?: "-"}",
                 "compileSdkVersion: ${formatSdkVersion(app.compileSdkVersion)}",
                 "minSdkVersion: ${formatSdkVersion(app.minSdkVersion)}",
                 "targetSdkVersion: ${formatSdkVersion(app.targetSdkVersion)}",
