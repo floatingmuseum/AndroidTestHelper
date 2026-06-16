@@ -32,12 +32,20 @@ data class FillProgress(
         get() = if (totalBytes <= 0L) 0f else (completedBytes.toDouble() / totalBytes).toFloat()
 }
 
+data class ApkExportResult(
+    val directoryPath: String,
+    val fileCount: Int,
+)
+
 @Serializable
 data class InstalledAppInfo(
     val packageName: String,
     val appName: String,
     val versionName: String,
     val versionCode: Long?,
+    val compileSdkVersion: Int? = null,
+    val minSdkVersion: Int? = null,
+    val targetSdkVersion: Int? = null,
     val isSystem: Boolean,
     val isEnabled: Boolean,
     val iconBytes: ByteArray?,
@@ -83,6 +91,43 @@ interface DataFillAdb {
     suspend fun loadCachedSystemApps(deviceSerial: String): CachedSystemApps?
 
     suspend fun saveCachedSystemApps(deviceSerial: String, apps: List<InstalledAppInfo>)
+
+    suspend fun launchApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    )
+
+    suspend fun stopApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    )
+
+    suspend fun clearApplicationData(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    )
+
+    suspend fun disableApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    )
+
+    suspend fun enableApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    )
+
+    suspend fun exportApplicationApk(
+        deviceSerial: String,
+        packageName: String,
+        outputPath: String?,
+        logCommand: (String) -> Unit,
+    ): ApkExportResult
 }
 
 expect fun createDataFillAdb(): DataFillAdb

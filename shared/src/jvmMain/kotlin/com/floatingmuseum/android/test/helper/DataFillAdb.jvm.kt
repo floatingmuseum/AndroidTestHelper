@@ -21,6 +21,8 @@ private const val FillChunkBytes = 128L * BytesInMiB
 private const val AndroidAttrLabel = 0x01010001
 private const val AndroidAttrIcon = 0x01010002
 private const val AndroidAttrRoundIcon = 0x0101052C
+private const val AndroidAttrMinSdkVersion = 0x0101020C
+private const val AndroidAttrTargetSdkVersion = 0x01010270
 private const val StringPoolChunk = 0x0001
 private const val TableChunk = 0x0002
 private const val XmlStartElementChunk = 0x0102
@@ -188,6 +190,9 @@ private class JvmDataFillAdb(
                         ?: packagePath.packageName,
                     versionName = dumpsysInfo?.versionName?.takeIf { it.isNotBlank() } ?: "-",
                     versionCode = dumpsysInfo?.versionCode,
+                    compileSdkVersion = apkMetadata.compileSdkVersion ?: dumpsysInfo?.compileSdkVersion,
+                    minSdkVersion = apkMetadata.minSdkVersion ?: dumpsysInfo?.minSdkVersion,
+                    targetSdkVersion = apkMetadata.targetSdkVersion ?: dumpsysInfo?.targetSdkVersion,
                     isSystem = isSystem,
                     isEnabled = packagePath.packageName !in disabledPackages,
                     iconBytes = apkMetadata.iconBytes,
@@ -201,6 +206,112 @@ private class JvmDataFillAdb(
         } finally {
             tempDirectory.deleteRecursively()
         }
+    }
+
+    override suspend fun launchApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ) {
+        executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "monkey", "-p", packageName, "-c", "android.intent.category.LAUNCHER", "1"),
+            displayCommand = "adb -s $deviceSerial shell monkey -p $packageName -c android.intent.category.LAUNCHER 1",
+            logCommand = logCommand,
+        )
+    }
+
+    override suspend fun stopApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ) {
+        executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "am", "force-stop", packageName),
+            displayCommand = "adb -s $deviceSerial shell am force-stop $packageName",
+            logCommand = logCommand,
+        )
+    }
+
+    override suspend fun clearApplicationData(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ) {
+        executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "pm", "clear", packageName),
+            displayCommand = "adb -s $deviceSerial shell pm clear $packageName",
+            logCommand = logCommand,
+        )
+    }
+
+    override suspend fun disableApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ) {
+        executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "pm", "disable-user", "--user", "0", packageName),
+            displayCommand = "adb -s $deviceSerial shell pm disable-user --user 0 $packageName",
+            logCommand = logCommand,
+        )
+    }
+
+    override suspend fun enableApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ) {
+        executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "pm", "enable", packageName),
+            displayCommand = "adb -s $deviceSerial shell pm enable $packageName",
+            logCommand = logCommand,
+        )
+    }
+
+    override suspend fun exportApplicationApk(
+        deviceSerial: String,
+        packageName: String,
+        outputPath: String?,
+        logCommand: (String) -> Unit,
+    ): ApkExportResult {
+        val pathOutput = executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "pm", "path", packageName),
+            displayCommand = "adb -s $deviceSerial shell pm path $packageName",
+            logCommand = logCommand,
+        )
+        val remotePaths = parsePmPathOutput(pathOutput)
+        if (remotePaths.isEmpty()) {
+            throw IllegalArgumentException("未找到 APK 路径：$packageName")
+        }
+
+        val baseDir = if (outputPath.isNullOrBlank()) {
+            File(System.getProperty("user.home"), "AndroidTestHelperApkExports")
+        } else {
+            File(outputPath)
+        }
+        val exportDirectory = baseDir.resolve(packageName.toSafeFileName())
+        exportDirectory.mkdirs()
+
+        remotePaths.forEachIndexed { index, remotePath ->
+            val remoteName = remotePath.substringAfterLast('/').takeIf { it.isNotBlank() }
+                ?: "package_$index.apk"
+            val localName = if (remotePaths.size == 1) {
+                remoteName
+            } else {
+                "${index.toString().padStart(2, '0')}_$remoteName"
+            }
+            val localFile = exportDirectory.resolve(localName)
+            executeAdb(
+                args = listOf("-s", deviceSerial, "pull", remotePath, localFile.absolutePath),
+                displayCommand = "adb -s $deviceSerial pull $remotePath ${localFile.absolutePath}",
+                logCommand = logCommand,
+            )
+        }
+
+        return ApkExportResult(
+            directoryPath = exportDirectory.absolutePath,
+            fileCount = remotePaths.size,
+        )
     }
 
     override suspend fun loadCachedSystemApps(deviceSerial: String): CachedSystemApps? {
@@ -436,17 +547,26 @@ internal data class PackagePath(
 internal data class PackageDumpsysInfo(
     val versionName: String?,
     val versionCode: Long?,
+    val compileSdkVersion: Int?,
+    val minSdkVersion: Int?,
+    val targetSdkVersion: Int?,
 )
 
 private data class ApkMetadata(
     val label: String? = null,
     val iconBytes: ByteArray? = null,
+    val compileSdkVersion: Int? = null,
+    val minSdkVersion: Int? = null,
+    val targetSdkVersion: Int? = null,
 )
 
 private data class ManifestMetadata(
     val label: String? = null,
     val labelResourceId: Int? = null,
     val iconResourceIds: List<Int> = emptyList(),
+    val compileSdkVersion: Int? = null,
+    val minSdkVersion: Int? = null,
+    val targetSdkVersion: Int? = null,
 )
 
 private data class AttributeValue(
@@ -496,17 +616,34 @@ internal fun parsePackageNameList(output: String): Set<String> {
         .toSet()
 }
 
+internal fun parsePmPathOutput(output: String): List<String> {
+    return output
+        .lineSequence()
+        .map { it.trim() }
+        .filter { it.startsWith("package:") }
+        .map { it.removePrefix("package:") }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .toList()
+}
+
 internal fun parsePackageDumpsys(output: String): Map<String, PackageDumpsysInfo> {
     val result = mutableMapOf<String, PackageDumpsysInfo>()
     var currentPackage: String? = null
     var versionName: String? = null
     var versionCode: Long? = null
+    var compileSdkVersion: Int? = null
+    var minSdkVersion: Int? = null
+    var targetSdkVersion: Int? = null
 
     fun flush() {
         val packageName = currentPackage ?: return
         result[packageName] = PackageDumpsysInfo(
             versionName = versionName,
             versionCode = versionCode,
+            compileSdkVersion = compileSdkVersion,
+            minSdkVersion = minSdkVersion,
+            targetSdkVersion = targetSdkVersion,
         )
     }
 
@@ -518,6 +655,9 @@ internal fun parsePackageDumpsys(output: String): Map<String, PackageDumpsysInfo
             currentPackage = packageMatch.groupValues[1]
             versionName = null
             versionCode = null
+            compileSdkVersion = null
+            minSdkVersion = null
+            targetSdkVersion = null
             return@forEach
         }
 
@@ -527,6 +667,15 @@ internal fun parsePackageDumpsys(output: String): Map<String, PackageDumpsysInfo
             }
             Regex("""versionCode=(\d+)""").find(line)?.let { match ->
                 versionCode = match.groupValues[1].toLongOrNull()
+            }
+            Regex("""compileSdkVersion=(\d+)""").find(line)?.let { match ->
+                compileSdkVersion = match.groupValues[1].toIntOrNull()
+            }
+            Regex("""minSdk=(\d+)""").find(line)?.let { match ->
+                minSdkVersion = match.groupValues[1].toIntOrNull()
+            }
+            Regex("""targetSdk=(\d+)""").find(line)?.let { match ->
+                targetSdkVersion = match.groupValues[1].toIntOrNull()
             }
         }
     }
@@ -560,6 +709,9 @@ private fun parseApkMetadata(apkFile: File): ApkMetadata {
         ApkMetadata(
             label = label,
             iconBytes = selectIconBytes(zipFile, iconPaths),
+            compileSdkVersion = manifestMetadata.compileSdkVersion,
+            minSdkVersion = manifestMetadata.minSdkVersion,
+            targetSdkVersion = manifestMetadata.targetSdkVersion,
         )
     }
 }
@@ -569,6 +721,13 @@ private fun parseAndroidManifestMetadata(bytes: ByteArray): ManifestMetadata {
     var offset = 8
     var strings = emptyList<String>()
     var resourceMap = emptyList<Int>()
+    var labelString: String? = null
+    var labelResourceId: Int? = null
+    var iconResourceId: Int? = null
+    var roundIconResourceId: Int? = null
+    var compileSdkVersion: Int? = null
+    var minSdkVersion: Int? = null
+    var targetSdkVersion: Int? = null
 
     while (offset + 8 <= bytes.size) {
         val type = buffer.uShort(offset)
@@ -581,15 +740,11 @@ private fun parseAndroidManifestMetadata(bytes: ByteArray): ManifestMetadata {
             XmlStartElementChunk -> {
                 val tagNameIndex = buffer.getInt(offset + 20)
                 val tagName = strings.getOrNull(tagNameIndex)
-                if (tagName == "application") {
+                if (tagName == "manifest" || tagName == "uses-sdk" || tagName == "application") {
                     val attrStart = buffer.uShort(offset + 24)
                     val attrSize = buffer.uShort(offset + 26)
                     val attrCount = buffer.uShort(offset + 28)
                     val attrsOffset = offset + 16 + attrStart
-                    var labelString: String? = null
-                    var labelResourceId: Int? = null
-                    var iconResourceId: Int? = null
-                    var roundIconResourceId: Int? = null
 
                     repeat(attrCount) { index ->
                         val attrOffset = attrsOffset + index * attrSize
@@ -616,14 +771,17 @@ private fun parseAndroidManifestMetadata(bytes: ByteArray): ManifestMetadata {
                                     roundIconResourceId = value.data
                                 }
                             }
+                            attrName == "compileSdkVersion" -> {
+                                compileSdkVersion = value.asInt(strings)
+                            }
+                            attrName == "minSdkVersion" || attrResourceId == AndroidAttrMinSdkVersion -> {
+                                minSdkVersion = value.asInt(strings)
+                            }
+                            attrName == "targetSdkVersion" || attrResourceId == AndroidAttrTargetSdkVersion -> {
+                                targetSdkVersion = value.asInt(strings)
+                            }
                         }
                     }
-
-                    return ManifestMetadata(
-                        label = labelString,
-                        labelResourceId = labelResourceId,
-                        iconResourceIds = listOfNotNull(iconResourceId, roundIconResourceId).distinct(),
-                    )
                 }
             }
         }
@@ -631,7 +789,14 @@ private fun parseAndroidManifestMetadata(bytes: ByteArray): ManifestMetadata {
         offset += chunkSize
     }
 
-    return ManifestMetadata()
+    return ManifestMetadata(
+        label = labelString,
+        labelResourceId = labelResourceId,
+        iconResourceIds = listOfNotNull(iconResourceId, roundIconResourceId).distinct(),
+        compileSdkVersion = compileSdkVersion,
+        minSdkVersion = minSdkVersion,
+        targetSdkVersion = targetSdkVersion,
+    )
 }
 
 private fun parseXmlAttributeValue(
@@ -647,6 +812,12 @@ private fun parseXmlAttributeValue(
         dataType = dataType,
         data = data,
     )
+}
+
+private fun AttributeValue.asInt(strings: List<String>): Int? {
+    return rawString?.toIntOrNull()
+        ?: strings.getOrNull(data)?.toIntOrNull()
+        ?: data.takeIf { it >= 0 }
 }
 
 private fun parseXmlResourceMap(
@@ -866,6 +1037,10 @@ private fun String.isSystemApkPath(): Boolean {
         startsWith("/odm/") ||
         startsWith("/oem/") ||
         startsWith("/apex/")
+}
+
+private fun String.toSafeFileName(): String {
+    return replace(Regex("[^a-zA-Z0-9._-]"), "_")
 }
 
 private fun resolveAdbPath(): String {

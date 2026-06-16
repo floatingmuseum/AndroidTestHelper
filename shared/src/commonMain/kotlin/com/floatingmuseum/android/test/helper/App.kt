@@ -264,6 +264,79 @@ fun App() {
             }
         }
 
+        fun updateApplicationEnabledState(packageName: String, isEnabled: Boolean): List<InstalledAppInfo> {
+            thirdPartyApps = thirdPartyApps.map { app ->
+                if (app.packageName == packageName) app.copy(isEnabled = isEnabled) else app
+            }
+            val nextSystemApps = systemApps.map { app ->
+                if (app.packageName == packageName) app.copy(isEnabled = isEnabled) else app
+            }
+            systemApps = nextSystemApps
+            return nextSystemApps
+        }
+
+        fun runApplicationAction(app: InstalledAppInfo, action: String) {
+            if (isRunning) return
+            val deviceSerial = selectedReadyDevice?.serialNumber
+            if (deviceSerial == null) {
+                statusText = "先选择状态为 device 的设备"
+                return
+            }
+
+            scope.launch {
+                isRunning = true
+                statusText = "$action ${app.packageName}..."
+                try {
+                    when (action) {
+                        "启动应用" -> {
+                            adb.launchApplication(deviceSerial, app.packageName, ::appendCommand)
+                            statusText = "已启动 ${app.packageName}"
+                        }
+                        "结束应用" -> {
+                            adb.stopApplication(deviceSerial, app.packageName, ::appendCommand)
+                            statusText = "已结束 ${app.packageName}"
+                        }
+                        "清除数据" -> {
+                            adb.clearApplicationData(deviceSerial, app.packageName, ::appendCommand)
+                            statusText = "已清除数据 ${app.packageName}"
+                        }
+                        "停用应用" -> {
+                            adb.disableApplication(deviceSerial, app.packageName, ::appendCommand)
+                            val nextSystemApps = updateApplicationEnabledState(app.packageName, false)
+                            if (app.isSystem) {
+                                adb.saveCachedSystemApps(deviceSerial, nextSystemApps)
+                            }
+                            statusText = "已停用 ${app.packageName}"
+                        }
+                        "启用应用" -> {
+                            adb.enableApplication(deviceSerial, app.packageName, ::appendCommand)
+                            val nextSystemApps = updateApplicationEnabledState(app.packageName, true)
+                            if (app.isSystem) {
+                                adb.saveCachedSystemApps(deviceSerial, nextSystemApps)
+                            }
+                            statusText = "已启用 ${app.packageName}"
+                        }
+                        "导出APK" -> {
+                            val outputPath = selectDirectory()
+                            if (outputPath == null) {
+                                statusText = "已取消导出"
+                            } else {
+                                val result = adb.exportApplicationApk(deviceSerial, app.packageName, outputPath, ::appendCommand)
+                                statusText = "已导出 ${result.fileCount} 个 APK 到 ${result.directoryPath}"
+                            }
+                        }
+                        else -> statusText = "未知应用操作：$action"
+                    }
+                } catch (error: CancellationException) {
+                    statusText = "应用操作已停止"
+                } catch (error: Throwable) {
+                    statusText = error.message ?: "$action 失败"
+                } finally {
+                    isRunning = false
+                }
+            }
+        }
+
         LaunchedEffect(Unit) {
             refreshDevices()
         }
@@ -439,6 +512,8 @@ fun App() {
                                         loadSystemApps(deviceSerial)
                                     }
                                 },
+                                onApplicationAction = ::runApplicationAction,
+                                isRunning = isRunning,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
@@ -623,17 +698,22 @@ private fun ApplicationTestPanel(
     systemProgressTotal: Int,
     onRefreshThirdParty: () -> Unit,
     onRefreshSystem: () -> Unit,
+    onApplicationAction: (InstalledAppInfo, String) -> Unit,
+    isRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
     var isThirdPartyExpanded by remember { mutableStateOf(true) }
     var isSystemExpanded by remember { mutableStateOf(true) }
     var appSearchQuery by remember { mutableStateOf("") }
+    var selectedAppPackageName by remember(selectedDevice?.serialNumber) { mutableStateOf<String?>(null) }
     val filteredThirdPartyApps = remember(thirdPartyApps, appSearchQuery) {
         filterInstalledApps(thirdPartyApps, appSearchQuery)
     }
     val filteredSystemApps = remember(systemApps, appSearchQuery) {
         filterInstalledApps(systemApps, appSearchQuery)
     }
+    val allApps = thirdPartyApps + systemApps
+    val selectedApp = allApps.firstOrNull { it.packageName == selectedAppPackageName }
     val isSearching = appSearchQuery.trim().isNotEmpty()
 
     Card(modifier = modifier.fillMaxWidth()) {
@@ -643,76 +723,31 @@ private fun ApplicationTestPanel(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "应用",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        OutlinedTextField(
-                            value = appSearchQuery,
-                            onValueChange = { appSearchQuery = it },
-                            singleLine = true,
-                            label = { Text("搜索应用名或包名") },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    val hasData = thirdPartyApps.isNotEmpty() || systemApps.isNotEmpty()
-                    val desc = if (hasData) {
-                        val parts = mutableListOf<String>()
-                        if (thirdPartyApps.isNotEmpty()) {
-                            parts.add(
-                                if (isSearching) {
-                                    "第三方 ${filteredThirdPartyApps.size} / ${thirdPartyApps.size} 个"
-                                } else {
-                                    "第三方 ${thirdPartyApps.size} 个"
-                                }
-                            )
-                        }
-                        if (systemApps.isNotEmpty()) {
-                            parts.add(
-                                if (isSearching) {
-                                    "系统 ${filteredSystemApps.size} / ${systemApps.size} 个"
-                                } else {
-                                    "系统 ${systemApps.size} 个"
-                                }
-                            )
-                        }
-                        val visibleApps = if (isSearching) {
-                            filteredThirdPartyApps + filteredSystemApps
-                        } else {
-                            thirdPartyApps + systemApps
-                        }
-                        val totalDisabled = visibleApps.count { !it.isEnabled }
-                        parts.add("禁用 $totalDisabled 个")
-                        parts.joinToString(" · ")
-                    } else {
-                        "请手动刷新获取应用列表。系统应用获取后将自动缓存至本地。"
-                    }
-                    Text(
-                        text = desc,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            if (selectedApp == null) {
+                ApplicationListHeader(
+                    searchQuery = appSearchQuery,
+                    onSearchQueryChange = { appSearchQuery = it },
+                    thirdPartyApps = thirdPartyApps,
+                    systemApps = systemApps,
+                    filteredThirdPartyApps = filteredThirdPartyApps,
+                    filteredSystemApps = filteredSystemApps,
+                    isSearching = isSearching,
+                )
             }
 
             when {
                 selectedDevice == null -> {
                     Text("先选择状态为 device 的设备。")
+                }
+
+                selectedApp != null -> {
+                    ApplicationDetailPanel(
+                        app = selectedApp,
+                        onBack = { selectedAppPackageName = null },
+                        onAction = { action -> onApplicationAction(selectedApp, action) },
+                        isRunning = isRunning,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
 
                 else -> {
@@ -793,6 +828,7 @@ private fun ApplicationTestPanel(
                                     ApplicationTile(
                                         app = app,
                                         searchQuery = appSearchQuery,
+                                        onClick = { selectedAppPackageName = app.packageName },
                                     )
                                 }
                             }
@@ -870,6 +906,7 @@ private fun ApplicationTestPanel(
                                     ApplicationTile(
                                         app = app,
                                         searchQuery = appSearchQuery,
+                                        onClick = { selectedAppPackageName = app.packageName },
                                     )
                                 }
                             }
@@ -879,6 +916,98 @@ private fun ApplicationTestPanel(
             }
         }
     }
+}
+
+@Composable
+private fun ApplicationListHeader(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    thirdPartyApps: List<InstalledAppInfo>,
+    systemApps: List<InstalledAppInfo>,
+    filteredThirdPartyApps: List<InstalledAppInfo>,
+    filteredSystemApps: List<InstalledAppInfo>,
+    isSearching: Boolean,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "应用",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    singleLine = true,
+                    label = { Text("搜索应用名或包名") },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Text(
+                text = applicationListDescription(
+                    thirdPartyApps = thirdPartyApps,
+                    systemApps = systemApps,
+                    filteredThirdPartyApps = filteredThirdPartyApps,
+                    filteredSystemApps = filteredSystemApps,
+                    isSearching = isSearching,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun applicationListDescription(
+    thirdPartyApps: List<InstalledAppInfo>,
+    systemApps: List<InstalledAppInfo>,
+    filteredThirdPartyApps: List<InstalledAppInfo>,
+    filteredSystemApps: List<InstalledAppInfo>,
+    isSearching: Boolean,
+): String {
+    if (thirdPartyApps.isEmpty() && systemApps.isEmpty()) {
+        return "请手动刷新获取应用列表。系统应用获取后将自动缓存至本地。"
+    }
+
+    val parts = mutableListOf<String>()
+    if (thirdPartyApps.isNotEmpty()) {
+        parts.add(
+            if (isSearching) {
+                "第三方 ${filteredThirdPartyApps.size} / ${thirdPartyApps.size} 个"
+            } else {
+                "第三方 ${thirdPartyApps.size} 个"
+            }
+        )
+    }
+    if (systemApps.isNotEmpty()) {
+        parts.add(
+            if (isSearching) {
+                "系统 ${filteredSystemApps.size} / ${systemApps.size} 个"
+            } else {
+                "系统 ${systemApps.size} 个"
+            }
+        )
+    }
+    val visibleApps = if (isSearching) {
+        filteredThirdPartyApps + filteredSystemApps
+    } else {
+        thirdPartyApps + systemApps
+    }
+    val totalDisabled = visibleApps.count { !it.isEnabled }
+    parts.add("禁用 $totalDisabled 个")
+    return parts.joinToString(" · ")
 }
 
 @Composable
@@ -948,6 +1077,7 @@ private fun ApplicationSectionHeader(
 private fun ApplicationTile(
     app: InstalledAppInfo,
     searchQuery: String,
+    onClick: () -> Unit,
 ) {
     val disabled = !app.isEnabled
     val containerColor = if (disabled) {
@@ -965,7 +1095,7 @@ private fun ApplicationTile(
         color = containerColor,
         contentColor = contentColor,
         shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
     ) {
         Row(
             modifier = Modifier
@@ -1006,6 +1136,184 @@ private fun ApplicationTile(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ApplicationDetailPanel(
+    app: InstalledAppInfo,
+    onBack: () -> Unit,
+    onAction: (String) -> Unit,
+    isRunning: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ApplicationIcon(
+                    iconBytes = app.iconBytes,
+                    packageName = app.packageName,
+                    modifier = Modifier.size(56.dp),
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = app.appName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = app.packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Button(onClick = onBack) {
+                    Text("返回")
+                }
+            }
+        }
+
+        ApplicationInfoBlock(
+            lines = listOf(
+                "compileSdkVersion: ${formatSdkVersion(app.compileSdkVersion)}",
+                "minSdkVersion: ${formatSdkVersion(app.minSdkVersion)}",
+                "targetSdkVersion: ${formatSdkVersion(app.targetSdkVersion)}",
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        ApplicationActionGroup(
+            actions = listOf("启动应用", "结束应用", "清除数据", "停用应用", "启用应用", "导出APK"),
+            onAction = onAction,
+            isRunning = isRunning,
+        )
+    }
+}
+
+@Composable
+private fun ApplicationInfoBlock(
+    lines: List<String>,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(8.dp),
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            lines.forEach { line ->
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ApplicationActionGroup(
+    actions: List<String>,
+    onAction: (String) -> Unit,
+    isRunning: Boolean,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            actions.chunked(5).forEach { rowActions ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    rowActions.forEach { action ->
+                        Button(
+                            onClick = { onAction(action) },
+                            enabled = !isRunning,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = ButtonDefaults.TextButtonContentPadding,
+                        ) {
+                            Text(
+                                text = action,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    repeat(5 - rowActions.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatSdkVersion(sdkVersion: Int?): String {
+    if (sdkVersion == null) return "-"
+    val androidVersion = androidVersionName(sdkVersion)
+    return if (androidVersion == null) {
+        sdkVersion.toString()
+    } else {
+        "$sdkVersion(${androidVersion.version},${androidVersion.name})"
+    }
+}
+
+private data class AndroidVersionName(
+    val version: String,
+    val name: String,
+)
+
+private fun androidVersionName(sdkVersion: Int): AndroidVersionName? {
+    return when (sdkVersion) {
+        21 -> AndroidVersionName("Android 5.0", "Lollipop")
+        22 -> AndroidVersionName("Android 5.1", "Lollipop")
+        23 -> AndroidVersionName("Android 6", "Marshmallow")
+        24 -> AndroidVersionName("Android 7.0", "Nougat")
+        25 -> AndroidVersionName("Android 7.1", "Nougat")
+        26 -> AndroidVersionName("Android 8.0", "Oreo")
+        27 -> AndroidVersionName("Android 8.1", "Oreo")
+        28 -> AndroidVersionName("Android 9", "Pie")
+        29 -> AndroidVersionName("Android 10", "Q")
+        30 -> AndroidVersionName("Android 11", "R")
+        31 -> AndroidVersionName("Android 12", "Snow Cone")
+        32 -> AndroidVersionName("Android 12L", "Snow Cone v2")
+        33 -> AndroidVersionName("Android 13", "Tiramisu")
+        34 -> AndroidVersionName("Android 14", "Upside Down Cake")
+        35 -> AndroidVersionName("Android 15", "Vanilla Ice Cream")
+        36 -> AndroidVersionName("Android 16", "Baklava")
+        else -> null
     }
 }
 

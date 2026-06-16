@@ -68,22 +68,48 @@ class SharedLogicDesktopTest {
     }
 
     @Test
+    fun parsesPmPathOutput() {
+        val paths = parsePmPathOutput(
+            """
+            package:/data/app/~~token/com.example.app/base.apk
+            package:/data/app/~~token/com.example.app/split_config.arm64_v8a.apk
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(
+                "/data/app/~~token/com.example.app/base.apk",
+                "/data/app/~~token/com.example.app/split_config.arm64_v8a.apk",
+            ),
+            paths,
+        )
+    }
+
+    @Test
     fun parsesPackageDumpsysVersions() {
         val packages = parsePackageDumpsys(
             """
             Package [com.example.app] (123abc):
               versionCode=42 minSdk=23 targetSdk=35
+              compileSdkVersion=35
               versionName=1.2.3
             Package [com.android.settings] (456def):
               versionCode=350000000 minSdk=35 targetSdk=35
+              compileSdkVersion=36
               versionName=15
             """.trimIndent(),
         )
 
         assertEquals("1.2.3", packages["com.example.app"]?.versionName)
         assertEquals(42L, packages["com.example.app"]?.versionCode)
+        assertEquals(35, packages["com.example.app"]?.compileSdkVersion)
+        assertEquals(23, packages["com.example.app"]?.minSdkVersion)
+        assertEquals(35, packages["com.example.app"]?.targetSdkVersion)
         assertEquals("15", packages["com.android.settings"]?.versionName)
         assertEquals(350000000L, packages["com.android.settings"]?.versionCode)
+        assertEquals(36, packages["com.android.settings"]?.compileSdkVersion)
+        assertEquals(35, packages["com.android.settings"]?.minSdkVersion)
+        assertEquals(35, packages["com.android.settings"]?.targetSdkVersion)
     }
 
     @Test
