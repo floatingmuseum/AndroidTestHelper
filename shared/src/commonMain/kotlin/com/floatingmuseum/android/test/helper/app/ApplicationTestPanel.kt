@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -29,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -514,6 +516,9 @@ private fun ApplicationDetailPanel(
     isRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    var showDangerousActionConfirmDialog by remember { mutableStateOf(false) }
+    var pendingAction by remember { mutableStateOf<String?>(null) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -577,8 +582,61 @@ private fun ApplicationDetailPanel(
         )
         ApplicationActionGroup(
             actions = listOf("启动应用", "结束应用", "清除数据", "停用应用", "启用应用", "导出APK"),
-            onAction = onAction,
+            onAction = { action ->
+                if (app.isSystem && (action == "结束应用" || action == "清除数据" || action == "停用应用")) {
+                    pendingAction = action
+                    showDangerousActionConfirmDialog = true
+                } else {
+                    onAction(action)
+                }
+            },
             isRunning = isRunning,
+        )
+    }
+
+    if (showDangerousActionConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showDangerousActionConfirmDialog = false
+                pendingAction = null
+            },
+            title = {
+                Text(
+                    text = "警告",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                Text(
+                    text = "此操作可能对设备造成严重影响，请在知晓风险的情况下操作。",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val action = pendingAction
+                        if (action != null) {
+                            onAction(action)
+                        }
+                        showDangerousActionConfirmDialog = false
+                        pendingAction = null
+                    }
+                ) {
+                    Text("确认")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDangerousActionConfirmDialog = false
+                        pendingAction = null
+                    }
+                ) {
+                    Text("取消")
+                }
+            }
         )
     }
 }
