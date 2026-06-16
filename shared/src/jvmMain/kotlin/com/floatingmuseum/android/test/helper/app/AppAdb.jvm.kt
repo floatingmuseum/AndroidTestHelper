@@ -13,6 +13,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import java.io.File
+import java.net.JarURLConnection
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.ZipFile
@@ -498,9 +499,20 @@ private class JvmAppAdb : AppAdb {
         val tempApk = File(tempDirectory, "ATHPlugin.apk")
         try {
             tempApk.writeBytes(apkBytes)
+            val metadata = try {
+                parseApkMetadata(tempApk)
+            } catch (e: Exception) {
+                null
+            }
+            val apkName = if (metadata?.versionName != null) {
+                "ATHPlugin_${metadata.versionName}.apk"
+            } else {
+                "ATHPlugin.apk"
+            }
+
             val output = AdbShell.executeAdb(
                 args = listOf("-s", deviceSerial, "install", "-r", tempApk.absolutePath),
-                displayCommand = "adb -s $deviceSerial install -r ATHPlugin.apk",
+                displayCommand = "adb -s $deviceSerial install -r $apkName",
                 logCommand = logCommand
             )
             output.contains("Success")
@@ -532,6 +544,77 @@ private class JvmAppAdb : AppAdb {
             file.writeText(version)
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    override suspend fun getLocalPluginApkBytes(): ByteArray? = withContext(Dispatchers.IO) {
+        // 1. Check development directories relative to working directory
+        val pathsToCheck = listOf(
+            "shared/src/commonMain/composeResources/files",
+            "../shared/src/commonMain/composeResources/files"
+        )
+        for (path in pathsToCheck) {
+            val devDir = File(path)
+            if (devDir.exists() && devDir.isDirectory) {
+                val apkFile = devDir.listFiles()?.firstOrNull { it.name.startsWith("ATHPlugin") && it.name.endsWith(".apk") }
+                if (apkFile != null) {
+                    return@withContext apkFile.readBytes()
+                }
+            }
+        }
+
+        // 2. Scan JVM classpath directories and JAR files (covers Gradle dev runs and packaged runs)
+        val classpathApk = scanClasspathForPluginApk()
+        if (classpathApk != null) {
+            return@withContext classpathApk
+        }
+
+        // 3. Fallback to standard classloader resource streams
+        val classLoader = Thread.currentThread().contextClassLoader ?: JvmAppAdb::class.java.classLoader
+        return@withContext tryFallbackResource(classLoader)
+    }
+
+    private fun scanClasspathForPluginApk(): ByteArray? {
+        val classpath = System.getProperty("java.class.path") ?: return null
+        val paths = classpath.split(File.pathSeparator)
+        for (path in paths) {
+            val file = File(path)
+            if (!file.exists()) continue
+            if (file.isDirectory) {
+                val targetDir = File(file, "composeResources/files")
+                if (targetDir.exists() && targetDir.isDirectory) {
+                    val apkFile = targetDir.listFiles()?.firstOrNull { it.name.startsWith("ATHPlugin") && it.name.endsWith(".apk") }
+                    if (apkFile != null) {
+                        return apkFile.readBytes()
+                    }
+                }
+            } else if (file.isFile && file.name.endsWith(".jar")) {
+                try {
+                    ZipFile(file).use { zip ->
+                        val entries = zip.entries()
+                        while (entries.hasMoreElements()) {
+                            val entry = entries.nextElement()
+                            val name = entry.name
+                            if (name.startsWith("composeResources/files/ATHPlugin") && name.endsWith(".apk")) {
+                                zip.getInputStream(entry).use { input ->
+                                    return input.readBytes()
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignore
+                }
+            }
+        }
+        return null
+    }
+
+    private fun tryFallbackResource(classLoader: ClassLoader): ByteArray? {
+        return try {
+            classLoader.getResourceAsStream("composeResources/files/ATHPlugin.apk")?.use { it.readBytes() }
+        } catch (e: Exception) {
+            null
         }
     }
 }

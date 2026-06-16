@@ -28,7 +28,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidtesthelper.shared.generated.resources.Res
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -510,12 +509,16 @@ fun App() {
 
                 if (localApkBytes == null) {
                     try {
-                        val bytes = Res.readBytes("files/ATHPlugin.apk")
-                        localApkBytes = bytes
-                        localApkVersionCode = appAdb.getApkVersionCode(bytes)
+                        val bytes = appAdb.getLocalPluginApkBytes()
+                        if (bytes != null) {
+                            localApkBytes = bytes
+                            localApkVersionCode = appAdb.getApkVersionCode(bytes)
+                        } else {
+                            appendCommand("错误: 未能在 resources/files 下找到 ATHPlugin apk 文件")
+                        }
                     } catch (e: Exception) {
                         e.printStackTrace()
-                        appendCommand("错误: 未能在 resources/files 下加载到 ATHPlugin.apk: ${e.message}")
+                        appendCommand("错误: 未能在 resources/files 下加载到 ATHPlugin apk 文件: ${e.message}")
                     }
                 }
 

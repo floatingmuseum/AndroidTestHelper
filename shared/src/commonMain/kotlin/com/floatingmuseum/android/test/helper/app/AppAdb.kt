@@ -119,6 +119,8 @@ interface AppAdb {
         apkBytes: ByteArray,
     ): Long?
 
+    suspend fun getLocalPluginApkBytes(): ByteArray?
+
     suspend fun installPluginApk(
         deviceSerial: String,
         apkBytes: ByteArray,
