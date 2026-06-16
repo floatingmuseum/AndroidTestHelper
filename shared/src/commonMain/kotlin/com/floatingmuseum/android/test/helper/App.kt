@@ -28,6 +28,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidtesthelper.shared.generated.resources.Res
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +44,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.TextButton
 import com.floatingmuseum.android.test.helper.adb.createAdbDeviceManager
 import com.floatingmuseum.android.test.helper.datafill.BytesInGiB
 import com.floatingmuseum.android.test.helper.datafill.FillControls
@@ -71,6 +74,8 @@ private enum class TestModule(val title: String) {
     DataFill("数据填充"),
 }
 
+private const val APP_VERSION = "1.0.0"
+
 @Composable
 @Preview
 fun App() {
@@ -83,6 +88,13 @@ fun App() {
         val scope = rememberCoroutineScope()
         var devices by remember { mutableStateOf<List<AndroidDevice>>(emptyList()) }
         var selectedDeviceSerial by remember { mutableStateOf<String?>(null) }
+
+        var showPluginBanner by remember { mutableStateOf(false) }
+        var bannerMessage by remember { mutableStateOf("") }
+        var isInstallingPlugin by remember { mutableStateOf(false) }
+        var isBannerDismissedThisSession by remember { mutableStateOf(false) }
+        var localApkBytes by remember { mutableStateOf<ByteArray?>(null) }
+        var localApkVersionCode by remember { mutableStateOf<Long?>(null) }
         var storageInfo by remember { mutableStateOf<StorageInfo?>(null) }
         var customFillValue by remember { mutableStateOf("") }
         var remainingValue by remember { mutableStateOf("") }
@@ -487,6 +499,48 @@ fun App() {
             }
         }
 
+        LaunchedEffect(selectedReadyDevice?.serialNumber) {
+            val deviceSerial = selectedReadyDevice?.serialNumber
+            if (deviceSerial != null) {
+                val ignoredVersion = appAdb.getIgnoredPluginCheckVersion()
+                if (ignoredVersion == APP_VERSION) {
+                    showPluginBanner = false
+                    return@LaunchedEffect
+                }
+
+                if (localApkBytes == null) {
+                    try {
+                        val bytes = Res.readBytes("files/ATHPlugin.apk")
+                        localApkBytes = bytes
+                        localApkVersionCode = appAdb.getApkVersionCode(bytes)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        appendCommand("错误: 未能在 resources/files 下加载到 ATHPlugin.apk: ${e.message}")
+                    }
+                }
+
+                val targetLocalVersion = localApkVersionCode
+                if (targetLocalVersion != null) {
+                    try {
+                        val installedVersion = appAdb.getInstalledPluginVersionCode(deviceSerial, ::appendCommand)
+                        if (installedVersion == null) {
+                            bannerMessage = "检测到当前设备未安装辅助插件(ATHPlugin)，安装后可极大提升应用数据获取的效率与性能。"
+                            showPluginBanner = true
+                        } else if (installedVersion < targetLocalVersion) {
+                            bannerMessage = "检测到设备上已安装的辅助插件(ATHPlugin)版本过低(设备: v$installedVersion，本地: v$targetLocalVersion)，建议更新。"
+                            showPluginBanner = true
+                        } else {
+                            showPluginBanner = false
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            } else {
+                showPluginBanner = false
+            }
+        }
+
         LaunchedEffect(Unit) {
             refreshDevices()
         }
@@ -534,6 +588,41 @@ fun App() {
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                if (showPluginBanner && !isBannerDismissedThisSession) {
+                    PluginCheckBanner(
+                        message = bannerMessage,
+                        onInstall = {
+                            val serial = selectedReadyDevice?.serialNumber
+                            val bytes = localApkBytes
+                            if (serial != null && bytes != null && !isInstallingPlugin) {
+                                isInstallingPlugin = true
+                                scope.launch {
+                                    statusText = "正在设备 $serial 上安装辅助插件..."
+                                    appendCommand("状态: 开始在设备 $serial 上安装辅助插件...")
+                                    val success = appAdb.installPluginApk(serial, bytes, ::appendCommand)
+                                    if (success) {
+                                        statusText = "辅助插件安装成功"
+                                        appendCommand("状态: 设备 $serial 上的辅助插件安装成功")
+                                        showPluginBanner = false
+                                    } else {
+                                        statusText = "辅助插件安装失败，请检查连接"
+                                        appendCommand("错误: 设备 $serial 上的辅助插件安装失败")
+                                    }
+                                    isInstallingPlugin = false
+                                }
+                            }
+                        },
+                        onIgnore = {
+                            appAdb.saveIgnoredPluginCheckVersion(APP_VERSION)
+                            showPluginBanner = false
+                        },
+                        onDismiss = {
+                            isBannerDismissedThisSession = true
+                        },
+                        isInstalling = isInstallingPlugin
+                    )
+                }
+
                 ModuleSwitcher(
                     selectedModule = selectedTestModule,
                     isRunning = isRunning,
@@ -984,6 +1073,69 @@ private fun CommandLogPanel(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PluginCheckBanner(
+    message: String,
+    onInstall: () -> Unit,
+    onIgnore: () -> Unit,
+    onDismiss: () -> Unit,
+    isInstalling: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(8.dp),
+        tonalElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "💡",
+                style = MaterialTheme.typography.bodyLarge
+            )
+
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.weight(1f)
+            )
+
+            Button(
+                onClick = onInstall,
+                enabled = !isInstalling,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text(if (isInstalling) "安装中..." else "立即安装")
+            }
+
+            TextButton(
+                onClick = onIgnore,
+                enabled = !isInstalling
+            ) {
+                Text("不再提示")
+            }
+
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isInstalling
+            ) {
+                Text(
+                    text = "✕",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
             }
         }
     }

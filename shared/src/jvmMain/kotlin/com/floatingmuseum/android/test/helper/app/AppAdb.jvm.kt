@@ -440,6 +440,100 @@ private class JvmAppAdb : AppAdb {
             ApkMetadata()
         }
     }
+
+    override suspend fun getInstalledPluginVersionCode(
+        deviceSerial: String,
+        logCommand: (String) -> Unit,
+    ): Long? = withContext(Dispatchers.IO) {
+        try {
+            val output = AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "dumpsys", "package", "com.floatingmuseum.android.test.helper.plugin"),
+                displayCommand = "adb -s $deviceSerial shell dumpsys package com.floatingmuseum.android.test.helper.plugin",
+                logCommand = logCommand
+            )
+            if (output.contains("Unable to find package")) {
+                return@withContext null
+            }
+            parseVersionCodeFromDumpsys(output)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun parseVersionCodeFromDumpsys(output: String): Long? {
+        return output.lineSequence().map { it.trim() }.mapNotNull { line ->
+            if (line.startsWith("versionCode=")) {
+                val codeStr = line.substringAfter("versionCode=").substringBefore(" ").trim()
+                codeStr.toLongOrNull()
+            } else {
+                null
+            }
+        }.firstOrNull()
+    }
+
+    override suspend fun getApkVersionCode(
+        apkBytes: ByteArray,
+    ): Long? = withContext(Dispatchers.IO) {
+        val tempDirectory = createTempDirectory(prefix = "ATHPluginVersionCheck").toFile()
+        val tempApk = File(tempDirectory, "temp_plugin.apk")
+        try {
+            tempApk.writeBytes(apkBytes)
+            val metadata = parseApkMetadata(tempApk)
+            metadata.versionCode
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        } finally {
+            tempDirectory.deleteRecursively()
+        }
+    }
+
+    override suspend fun installPluginApk(
+        deviceSerial: String,
+        apkBytes: ByteArray,
+        logCommand: (String) -> Unit,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val tempDirectory = createTempDirectory(prefix = "ATHPluginInstall").toFile()
+        val tempApk = File(tempDirectory, "ATHPlugin.apk")
+        try {
+            tempApk.writeBytes(apkBytes)
+            val output = AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "install", "-r", tempApk.absolutePath),
+                displayCommand = "adb -s $deviceSerial install -r ATHPlugin.apk",
+                logCommand = logCommand
+            )
+            output.contains("Success")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        } finally {
+            tempDirectory.deleteRecursively()
+        }
+    }
+
+    override fun getIgnoredPluginCheckVersion(): String? {
+        val file = File(System.getProperty("user.home"), ".android_test_helper_cache/ignored_plugin_check_version.txt")
+        return if (file.exists()) {
+            try {
+                file.readText().trim()
+            } catch (e: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+    }
+
+    override fun saveIgnoredPluginCheckVersion(version: String) {
+        val file = File(System.getProperty("user.home"), ".android_test_helper_cache/ignored_plugin_check_version.txt")
+        try {
+            file.parentFile?.mkdirs()
+            file.writeText(version)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }
 
 // XML Parsing structures & functions
@@ -448,6 +542,8 @@ private const val AndroidAttrIcon = 0x01010002
 private const val AndroidAttrRoundIcon = 0x0101052C
 private const val AndroidAttrMinSdkVersion = 0x0101020C
 private const val AndroidAttrTargetSdkVersion = 0x01010270
+private const val AndroidAttrVersionCode = 0x0101021B
+private const val AndroidAttrVersionName = 0x0101021C
 private const val StringPoolChunk = 0x0001
 private const val TableChunk = 0x0002
 private const val XmlStartElementChunk = 0x0102
@@ -477,6 +573,8 @@ private data class ApkMetadata(
     val compileSdkVersion: Int? = null,
     val minSdkVersion: Int? = null,
     val targetSdkVersion: Int? = null,
+    val versionCode: Long? = null,
+    val versionName: String? = null,
 )
 
 private data class ManifestMetadata(
@@ -486,6 +584,8 @@ private data class ManifestMetadata(
     val compileSdkVersion: Int? = null,
     val minSdkVersion: Int? = null,
     val targetSdkVersion: Int? = null,
+    val versionCode: Long? = null,
+    val versionName: String? = null,
 )
 
 private data class AttributeValue(
@@ -631,6 +731,8 @@ private fun parseApkMetadata(apkFile: File): ApkMetadata {
             compileSdkVersion = manifestMetadata.compileSdkVersion,
             minSdkVersion = manifestMetadata.minSdkVersion,
             targetSdkVersion = manifestMetadata.targetSdkVersion,
+            versionCode = manifestMetadata.versionCode,
+            versionName = manifestMetadata.versionName,
         )
     }
 }
@@ -647,6 +749,8 @@ private fun parseAndroidManifestMetadata(bytes: ByteArray): ManifestMetadata {
     var compileSdkVersion: Int? = null
     var minSdkVersion: Int? = null
     var targetSdkVersion: Int? = null
+    var versionCode: Long? = null
+    var versionName: String? = null
 
     while (offset + 8 <= bytes.size) {
         val type = buffer.uShort(offset)
@@ -699,6 +803,12 @@ private fun parseAndroidManifestMetadata(bytes: ByteArray): ManifestMetadata {
                             attrName == "targetSdkVersion" || attrResourceId == AndroidAttrTargetSdkVersion -> {
                                 targetSdkVersion = value.asInt(strings)
                             }
+                            attrName == "versionCode" || attrResourceId == AndroidAttrVersionCode -> {
+                                versionCode = value.asInt(strings)?.toLong()
+                            }
+                            attrName == "versionName" || attrResourceId == AndroidAttrVersionName -> {
+                                versionName = value.rawString ?: strings.getOrNull(value.data)
+                            }
                         }
                     }
                 }
@@ -715,6 +825,8 @@ private fun parseAndroidManifestMetadata(bytes: ByteArray): ManifestMetadata {
         compileSdkVersion = compileSdkVersion,
         minSdkVersion = minSdkVersion,
         targetSdkVersion = targetSdkVersion,
+        versionCode = versionCode,
+        versionName = versionName,
     )
 }
 

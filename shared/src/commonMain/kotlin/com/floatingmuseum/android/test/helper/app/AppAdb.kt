@@ -109,6 +109,24 @@ interface AppAdb {
         outputPath: String?,
         logCommand: (String) -> Unit,
     ): ApkExportResult
+
+    suspend fun getInstalledPluginVersionCode(
+        deviceSerial: String,
+        logCommand: (String) -> Unit,
+    ): Long?
+
+    suspend fun getApkVersionCode(
+        apkBytes: ByteArray,
+    ): Long?
+
+    suspend fun installPluginApk(
+        deviceSerial: String,
+        apkBytes: ByteArray,
+        logCommand: (String) -> Unit,
+    ): Boolean
+
+    fun getIgnoredPluginCheckVersion(): String?
+    fun saveIgnoredPluginCheckVersion(version: String)
 }
 
 expect fun createAppAdb(): AppAdb
