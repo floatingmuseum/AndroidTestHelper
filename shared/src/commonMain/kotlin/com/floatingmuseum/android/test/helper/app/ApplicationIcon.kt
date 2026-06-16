@@ -1,4 +1,4 @@
-package com.floatingmuseum.android.test.helper
+package com.floatingmuseum.android.test.helper.app
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier

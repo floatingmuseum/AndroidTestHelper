@@ -1,36 +1,6 @@
-package com.floatingmuseum.android.test.helper
+package com.floatingmuseum.android.test.helper.app
 
-import kotlin.math.round
 import kotlinx.serialization.Serializable
-
-const val BytesInGiB: Long = 1024L * 1024L * 1024L
-const val BytesInMiB: Long = 1024L * 1024L
-
-data class StorageInfo(
-    val totalBytes: Long,
-    val usedBytes: Long,
-    val availableBytes: Long,
-) {
-    val usedRatio: Float
-        get() = if (totalBytes <= 0L) 0f else (usedBytes.toDouble() / totalBytes).toFloat()
-}
-
-data class AndroidDevice(
-    val serialNumber: String,
-    val model: String,
-    val state: String,
-) {
-    val isReady: Boolean
-        get() = state == "device"
-}
-
-data class FillProgress(
-    val completedBytes: Long,
-    val totalBytes: Long,
-) {
-    val ratio: Float
-        get() = if (totalBytes <= 0L) 0f else (completedBytes.toDouble() / totalBytes).toFloat()
-}
 
 data class ApkExportResult(
     val directoryPath: String,
@@ -49,7 +19,40 @@ data class InstalledAppInfo(
     val isSystem: Boolean,
     val isEnabled: Boolean,
     val iconBytes: ByteArray?,
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is InstalledAppInfo) return false
+        if (packageName != other.packageName) return false
+        if (appName != other.appName) return false
+        if (versionName != other.versionName) return false
+        if (versionCode != other.versionCode) return false
+        if (compileSdkVersion != other.compileSdkVersion) return false
+        if (minSdkVersion != other.minSdkVersion) return false
+        if (targetSdkVersion != other.targetSdkVersion) return false
+        if (isSystem != other.isSystem) return false
+        if (isEnabled != other.isEnabled) return false
+        if (iconBytes != null) {
+            if (other.iconBytes == null) return false
+            if (!iconBytes.contentEquals(other.iconBytes)) return false
+        } else if (other.iconBytes != null) return false
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = packageName.hashCode()
+        result = 31 * result + appName.hashCode()
+        result = 31 * result + versionName.hashCode()
+        result = 31 * result + (versionCode?.hashCode() ?: 0)
+        result = 31 * result + (compileSdkVersion ?: 0)
+        result = 31 * result + (minSdkVersion ?: 0)
+        result = 31 * result + (targetSdkVersion ?: 0)
+        result = 31 * result + isSystem.hashCode()
+        result = 31 * result + isEnabled.hashCode()
+        result = 31 * result + (iconBytes?.contentHashCode() ?: 0)
+        return result
+    }
+}
 
 @Serializable
 data class CachedSystemApps(
@@ -58,29 +61,7 @@ data class CachedSystemApps(
     val cacheTimeFormatted: String,
 )
 
-interface DataFillAdb {
-    suspend fun listDevices(logCommand: (String) -> Unit): List<AndroidDevice>
-
-    suspend fun loadStorageInfo(
-        deviceSerial: String,
-        logCommand: (String) -> Unit,
-    ): StorageInfo
-
-    suspend fun fillSize(
-        deviceSerial: String,
-        sizeBytes: Long,
-        logCommand: (String) -> Unit,
-        onProgress: (FillProgress) -> Unit,
-    ): StorageInfo
-
-    suspend fun fillUntilRemaining(
-        deviceSerial: String,
-        targetAvailableBytes: Long,
-        logCommand: (String) -> Unit,
-        onStorageProgress: (StorageInfo) -> Unit,
-        onFillProgress: (FillProgress) -> Unit,
-    ): StorageInfo
-
+interface AppAdb {
     suspend fun loadInstalledApps(
         deviceSerial: String,
         isSystem: Boolean,
@@ -130,34 +111,7 @@ interface DataFillAdb {
     ): ApkExportResult
 }
 
-expect fun createDataFillAdb(): DataFillAdb
-
-fun formatBytes(bytes: Long): String {
-    val absBytes = if (bytes < 0L) -bytes else bytes
-    val unit = when {
-        absBytes >= BytesInGiB -> BytesInGiB
-        absBytes >= BytesInMiB -> BytesInMiB
-        else -> 1024L
-    }
-    val suffix = when (unit) {
-        BytesInGiB -> "GB"
-        BytesInMiB -> "MB"
-        else -> "KB"
-    }
-    val value = bytes.toDouble() / unit.toDouble()
-    val rounded = round(value * 10.0) / 10.0
-    return if (rounded == round(rounded)) {
-        "${rounded.toLong()} $suffix"
-    } else {
-        "$rounded $suffix"
-    }
-}
-
-fun parseGiBInput(value: String): Long? {
-    val number = value.trim().replace(',', '.').toDoubleOrNull() ?: return null
-    if (number <= 0.0) return null
-    return (number * BytesInGiB).toLong()
-}
+expect fun createAppAdb(): AppAdb
 
 fun filterInstalledApps(
     apps: List<InstalledAppInfo>,

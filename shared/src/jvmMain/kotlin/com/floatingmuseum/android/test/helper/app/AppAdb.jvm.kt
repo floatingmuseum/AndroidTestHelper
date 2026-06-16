@@ -1,10 +1,10 @@
-package com.floatingmuseum.android.test.helper
+package com.floatingmuseum.android.test.helper.app
 
+import com.floatingmuseum.android.test.helper.adb.AdbShell
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -16,117 +16,12 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.ZipFile
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.createTempDirectory
-import kotlin.math.min
 
-private const val FillDirectory = "/sdcard/AndroidTestHelperFill"
-private const val FillChunkBytes = 128L * BytesInMiB
-private const val AndroidAttrLabel = 0x01010001
-private const val AndroidAttrIcon = 0x01010002
-private const val AndroidAttrRoundIcon = 0x0101052C
-private const val AndroidAttrMinSdkVersion = 0x0101020C
-private const val AndroidAttrTargetSdkVersion = 0x01010270
-private const val StringPoolChunk = 0x0001
-private const val TableChunk = 0x0002
-private const val XmlStartElementChunk = 0x0102
-private const val TablePackageChunk = 0x0200
-private const val TableTypeChunk = 0x0201
-private const val ValueTypeReference = 0x01
-private const val ValueTypeString = 0x03
-private const val Utf8Flag = 0x00000100
-private const val NoIndex = -1
+actual fun createAppAdb(): AppAdb = JvmAppAdb()
 
-actual fun createDataFillAdb(): DataFillAdb = JvmDataFillAdb()
-
-class AdbCommandException(
-    command: String,
-    exitCode: Int,
-    output: String,
-) : RuntimeException("ADB 命令失败，退出码 $exitCode\n$command\n$output")
-
-private class JvmDataFillAdb(
-    private val adbPath: String = resolveAdbPath(),
-) : DataFillAdb {
-    override suspend fun listDevices(logCommand: (String) -> Unit): List<AndroidDevice> {
-        val output = executeAdb(
-            args = listOf("devices", "-l"),
-            displayCommand = "adb devices -l",
-            logCommand = logCommand,
-        )
-        return parseAdbDevices(output)
-    }
-
-    override suspend fun loadStorageInfo(
-        deviceSerial: String,
-        logCommand: (String) -> Unit,
-    ): StorageInfo {
-        val output = executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "df", "-k", "/data"),
-            displayCommand = "adb -s $deviceSerial shell df -k /data",
-            logCommand = logCommand,
-        )
-        return parseDfStorageInfo(output)
-    }
-
-    override suspend fun fillSize(
-        deviceSerial: String,
-        sizeBytes: Long,
-        logCommand: (String) -> Unit,
-        onProgress: (FillProgress) -> Unit,
-    ): StorageInfo {
-        fillBytes(
-            deviceSerial = deviceSerial,
-            sizeBytes = sizeBytes,
-            completedBeforeBytes = 0L,
-            totalBytes = sizeBytes,
-            logCommand = logCommand,
-            onProgress = onProgress,
-        )
-        return loadStorageInfo(deviceSerial, logCommand)
-    }
-
-    override suspend fun fillUntilRemaining(
-        deviceSerial: String,
-        targetAvailableBytes: Long,
-        logCommand: (String) -> Unit,
-        onStorageProgress: (StorageInfo) -> Unit,
-        onFillProgress: (FillProgress) -> Unit,
-    ): StorageInfo {
-        var storageInfo = loadStorageInfo(deviceSerial, logCommand)
-        onStorageProgress(storageInfo)
-
-        val initialAvailableBytes = storageInfo.availableBytes
-        val totalToFillBytes = (initialAvailableBytes - targetAvailableBytes).coerceAtLeast(0L)
-        var completedBytes = 0L
-        onFillProgress(FillProgress(completedBytes, totalToFillBytes))
-
-        while (storageInfo.availableBytes > targetAvailableBytes) {
-            val remainingGap = storageInfo.availableBytes - targetAvailableBytes
-            if (remainingGap < BytesInMiB) break
-
-            val nextChunkBytes = min(remainingGap, FillChunkBytes)
-            fillBytes(
-                deviceSerial = deviceSerial,
-                sizeBytes = nextChunkBytes,
-                completedBeforeBytes = completedBytes,
-                totalBytes = totalToFillBytes,
-                logCommand = logCommand,
-                onProgress = onFillProgress,
-            )
-            completedBytes = (initialAvailableBytes - storageInfo.availableBytes + nextChunkBytes)
-                .coerceAtMost(totalToFillBytes)
-            storageInfo = loadStorageInfo(deviceSerial, logCommand)
-            completedBytes = (initialAvailableBytes - storageInfo.availableBytes)
-                .coerceIn(0L, totalToFillBytes)
-            onFillProgress(FillProgress(completedBytes, totalToFillBytes))
-            onStorageProgress(storageInfo)
-        }
-
-        return storageInfo
-    }
-
+private class JvmAppAdb : AppAdb {
     override suspend fun loadInstalledApps(
         deviceSerial: String,
         isSystem: Boolean,
@@ -134,35 +29,35 @@ private class JvmDataFillAdb(
         onProgress: (current: Int, total: Int) -> Unit,
     ): List<InstalledAppInfo> = withContext(Dispatchers.IO) {
         val packageListDeferred = async {
-            executeAdb(
+            AdbShell.executeAdb(
                 args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-f", "-U"),
                 displayCommand = "adb -s $deviceSerial shell pm list packages -f -U",
                 logCommand = logCommand,
             )
         }
         val thirdPartyDeferred = async {
-            executeAdb(
+            AdbShell.executeAdb(
                 args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-3"),
                 displayCommand = "adb -s $deviceSerial shell pm list packages -3",
                 logCommand = logCommand,
             )
         }
         val systemDeferred = async {
-            executeAdb(
+            AdbShell.executeAdb(
                 args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-s"),
                 displayCommand = "adb -s $deviceSerial shell pm list packages -s",
                 logCommand = logCommand,
             )
         }
         val disabledDeferred = async {
-            executeAdb(
+            AdbShell.executeAdb(
                 args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-d"),
                 displayCommand = "adb -s $deviceSerial shell pm list packages -d",
                 logCommand = logCommand,
             )
         }
         val dumpsysDeferred = async {
-            executeAdb(
+            AdbShell.executeAdb(
                 args = listOf("-s", deviceSerial, "shell", "dumpsys", "package"),
                 displayCommand = "adb -s $deviceSerial shell dumpsys package",
                 logCommand = logCommand,
@@ -239,112 +134,6 @@ private class JvmDataFillAdb(
         }
     }
 
-    override suspend fun launchApplication(
-        deviceSerial: String,
-        packageName: String,
-        logCommand: (String) -> Unit,
-    ) {
-        executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "monkey", "-p", packageName, "-c", "android.intent.category.LAUNCHER", "1"),
-            displayCommand = "adb -s $deviceSerial shell monkey -p $packageName -c android.intent.category.LAUNCHER 1",
-            logCommand = logCommand,
-        )
-    }
-
-    override suspend fun stopApplication(
-        deviceSerial: String,
-        packageName: String,
-        logCommand: (String) -> Unit,
-    ) {
-        executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "am", "force-stop", packageName),
-            displayCommand = "adb -s $deviceSerial shell am force-stop $packageName",
-            logCommand = logCommand,
-        )
-    }
-
-    override suspend fun clearApplicationData(
-        deviceSerial: String,
-        packageName: String,
-        logCommand: (String) -> Unit,
-    ) {
-        executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "pm", "clear", packageName),
-            displayCommand = "adb -s $deviceSerial shell pm clear $packageName",
-            logCommand = logCommand,
-        )
-    }
-
-    override suspend fun disableApplication(
-        deviceSerial: String,
-        packageName: String,
-        logCommand: (String) -> Unit,
-    ) {
-        executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "pm", "disable-user", "--user", "0", packageName),
-            displayCommand = "adb -s $deviceSerial shell pm disable-user --user 0 $packageName",
-            logCommand = logCommand,
-        )
-    }
-
-    override suspend fun enableApplication(
-        deviceSerial: String,
-        packageName: String,
-        logCommand: (String) -> Unit,
-    ) {
-        executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "pm", "enable", packageName),
-            displayCommand = "adb -s $deviceSerial shell pm enable $packageName",
-            logCommand = logCommand,
-        )
-    }
-
-    override suspend fun exportApplicationApk(
-        deviceSerial: String,
-        packageName: String,
-        outputPath: String?,
-        logCommand: (String) -> Unit,
-    ): ApkExportResult {
-        val pathOutput = executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "pm", "path", packageName),
-            displayCommand = "adb -s $deviceSerial shell pm path $packageName",
-            logCommand = logCommand,
-        )
-        val remotePaths = parsePmPathOutput(pathOutput)
-        if (remotePaths.isEmpty()) {
-            throw IllegalArgumentException("未找到 APK 路径：$packageName")
-        }
-
-        val baseDir = if (outputPath.isNullOrBlank()) {
-            File(System.getProperty("user.home"), "AndroidTestHelperApkExports")
-        } else {
-            File(outputPath)
-        }
-        val exportDirectory = baseDir.resolve(packageName.toSafeFileName())
-        exportDirectory.mkdirs()
-
-        remotePaths.forEachIndexed { index, remotePath ->
-            val remoteName = remotePath.substringAfterLast('/').takeIf { it.isNotBlank() }
-                ?: "package_$index.apk"
-            val localName = if (remotePaths.size == 1) {
-                remoteName
-            } else {
-                "${index.toString().padStart(2, '0')}_$remoteName"
-            }
-            val localFile = exportDirectory.resolve(localName)
-            executeAdb(
-                args = listOf("-s", deviceSerial, "pull", remotePath, localFile.absolutePath),
-                displayCommand = "adb -s $deviceSerial pull $remotePath ${localFile.absolutePath}",
-                logCommand = logCommand,
-            )
-        }
-
-        return ApkExportResult(
-            directoryPath = exportDirectory.absolutePath,
-            fileCount = remotePaths.size,
-        )
-    }
-
     override suspend fun loadCachedSystemApps(deviceSerial: String): CachedSystemApps? {
         val file = getCacheFile(deviceSerial)
         if (!file.exists()) return null
@@ -411,54 +200,116 @@ private class JvmDataFillAdb(
         }
     }
 
+    override suspend fun launchApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ) {
+        AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "monkey", "-p", packageName, "-c", "android.intent.category.LAUNCHER", "1"),
+            displayCommand = "adb -s $deviceSerial shell monkey -p $packageName -c android.intent.category.LAUNCHER 1",
+            logCommand = logCommand,
+        )
+    }
+
+    override suspend fun stopApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ) {
+        AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "am", "force-stop", packageName),
+            displayCommand = "adb -s $deviceSerial shell am force-stop $packageName",
+            logCommand = logCommand,
+        )
+    }
+
+    override suspend fun clearApplicationData(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ) {
+        AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "pm", "clear", packageName),
+            displayCommand = "adb -s $deviceSerial shell pm clear $packageName",
+            logCommand = logCommand,
+        )
+    }
+
+    override suspend fun disableApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ) {
+        AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "pm", "disable-user", "--user", "0", packageName),
+            displayCommand = "adb -s $deviceSerial shell pm disable-user --user 0 $packageName",
+            logCommand = logCommand,
+        )
+    }
+
+    override suspend fun enableApplication(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ) {
+        AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "pm", "enable", packageName),
+            displayCommand = "adb -s $deviceSerial shell pm enable $packageName",
+            logCommand = logCommand,
+        )
+    }
+
+    override suspend fun exportApplicationApk(
+        deviceSerial: String,
+        packageName: String,
+        outputPath: String?,
+        logCommand: (String) -> Unit,
+    ): ApkExportResult {
+        val pathOutput = AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "pm", "path", packageName),
+            displayCommand = "adb -s $deviceSerial shell pm path $packageName",
+            logCommand = logCommand,
+        )
+        val remotePaths = parsePmPathOutput(pathOutput)
+        if (remotePaths.isEmpty()) {
+            throw IllegalArgumentException("未找到 APK 路径：$packageName")
+        }
+
+        val baseDir = if (outputPath.isNullOrBlank()) {
+            File(System.getProperty("user.home"), "AndroidTestHelperApkExports")
+        } else {
+            File(outputPath)
+        }
+        val exportDirectory = baseDir.resolve(packageName.toSafeFileName())
+        exportDirectory.mkdirs()
+
+        remotePaths.forEachIndexed { index, remotePath ->
+            val remoteName = remotePath.substringAfterLast('/').takeIf { it.isNotBlank() }
+                ?: "package_$index.apk"
+            val localName = if (remotePaths.size == 1) {
+                remoteName
+            } else {
+                "${index.toString().padStart(2, '0')}_$remoteName"
+            }
+            val localFile = exportDirectory.resolve(localName)
+            AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "pull", remotePath, localFile.absolutePath),
+                displayCommand = "adb -s $deviceSerial pull $remotePath ${localFile.absolutePath}",
+                logCommand = logCommand,
+            )
+        }
+
+        return ApkExportResult(
+            directoryPath = exportDirectory.absolutePath,
+            fileCount = remotePaths.size,
+        )
+    }
+
     private fun getCacheFile(deviceSerial: String): File {
         val cacheDir = File(System.getProperty("user.home"), ".android_test_helper_cache")
         val safeSerial = deviceSerial.replace(Regex("[^a-zA-Z0-9_-]"), "_")
         return File(cacheDir, "system_apps_$safeSerial.cache")
-    }
-
-    private suspend fun fillBytes(
-        deviceSerial: String,
-        sizeBytes: Long,
-        completedBeforeBytes: Long,
-        totalBytes: Long,
-        logCommand: (String) -> Unit,
-        onProgress: (FillProgress) -> Unit,
-    ) {
-        executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "mkdir", "-p", FillDirectory),
-            displayCommand = "adb -s $deviceSerial shell mkdir -p $FillDirectory",
-            logCommand = logCommand,
-        )
-        onProgress(FillProgress(completedBeforeBytes.coerceAtMost(totalBytes), totalBytes))
-
-        var remainingBytes = sizeBytes
-        var completedBytes = completedBeforeBytes
-        var chunkIndex = 0
-        val runId = System.currentTimeMillis()
-
-        while (remainingBytes > 0L) {
-            val chunkBytes = min(remainingBytes, FillChunkBytes)
-            val chunkMiB = (chunkBytes / BytesInMiB).coerceAtLeast(1L)
-            val fileName = "$FillDirectory/fill_${runId}_${chunkIndex}_${chunkMiB}m.bin"
-
-            executeAdb(
-                args = listOf("-s", deviceSerial, "shell", "dd", "if=/dev/zero", "of=$fileName", "bs=1M", "count=$chunkMiB"),
-                displayCommand = "adb -s $deviceSerial shell dd if=/dev/zero of=$fileName bs=1M count=$chunkMiB",
-                logCommand = logCommand,
-            )
-
-            remainingBytes -= chunkMiB * BytesInMiB
-            completedBytes = (completedBytes + chunkMiB * BytesInMiB).coerceAtMost(totalBytes)
-            onProgress(FillProgress(completedBytes, totalBytes))
-            chunkIndex += 1
-        }
-
-        executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "sync"),
-            displayCommand = "adb -s $deviceSerial shell sync",
-            logCommand = logCommand,
-        )
     }
 
     private suspend fun loadApkMetadata(
@@ -469,7 +320,7 @@ private class JvmDataFillAdb(
     ): ApkMetadata {
         val localApk = File(tempDirectory, "${packagePath.packageName}.apk")
         return try {
-            executeAdb(
+            AdbShell.executeAdb(
                 args = listOf("-s", deviceSerial, "pull", packagePath.path, localApk.absolutePath),
                 displayCommand = "adb -s $deviceSerial pull ${packagePath.path} ${localApk.absolutePath}",
                 logCommand = logCommand,
@@ -481,94 +332,23 @@ private class JvmDataFillAdb(
             ApkMetadata()
         }
     }
-
-    private suspend fun executeAdb(
-        args: List<String>,
-        displayCommand: String,
-        logCommand: (String) -> Unit,
-    ): String {
-        logCommand(displayCommand)
-
-        return withContext(Dispatchers.IO) {
-            val process = ProcessBuilder(listOf(adbPath) + args)
-                .redirectErrorStream(true)
-                .start()
-            val outputReader = async(Dispatchers.IO) {
-                process.inputStream.bufferedReader().readText()
-            }
-            try {
-                while (!process.waitFor(100L, TimeUnit.MILLISECONDS)) {
-                    currentCoroutineContext().ensureActive()
-                }
-
-                val output = outputReader.await()
-                val exitCode = process.exitValue()
-                if (exitCode != 0) {
-                    throw AdbCommandException(displayCommand, exitCode, output)
-                }
-                output
-            } catch (error: CancellationException) {
-                process.destroyForcibly()
-                outputReader.cancel()
-                throw error
-            }
-        }
-    }
 }
 
-internal fun parseAdbDevices(output: String): List<AndroidDevice> {
-    return output
-        .lineSequence()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() && !it.startsWith("List of devices attached") }
-        .mapNotNull { line ->
-            val columns = line.split(Regex("\\s+"))
-            val serialNumber = columns.getOrNull(0) ?: return@mapNotNull null
-            val state = columns.getOrNull(1) ?: return@mapNotNull null
-            val model = columns
-                .firstOrNull { it.startsWith("model:") }
-                ?.substringAfter("model:")
-                ?.replace('_', ' ')
-                ?.takeIf { it.isNotBlank() }
-                ?: "未知型号"
-
-            AndroidDevice(
-                serialNumber = serialNumber,
-                model = model,
-                state = state,
-            )
-        }
-        .toList()
-}
-
-internal fun parseDfStorageInfo(output: String): StorageInfo {
-    val rows = output
-        .lineSequence()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .toList()
-
-    val dataRow = rows
-        .drop(1)
-        .firstOrNull { it.split(Regex("\\s+")).lastOrNull() == "/data" }
-        ?: rows.drop(1).firstOrNull()
-        ?: throw IllegalArgumentException("无法解析存储信息：$output")
-
-    val columns = dataRow.split(Regex("\\s+"))
-    val totalKiB = columns.getOrNull(1)?.toLongOrNull()
-    val usedKiB = columns.getOrNull(2)?.toLongOrNull()
-    val availableKiB = columns.getOrNull(3)?.toLongOrNull()
-
-    if (totalKiB == null || usedKiB == null || availableKiB == null) {
-        throw IllegalArgumentException("无法解析存储信息：$output")
-    }
-
-    return StorageInfo(
-        totalBytes = totalKiB * 1024L,
-        usedBytes = usedKiB * 1024L,
-        availableBytes = availableKiB * 1024L,
-    )
-}
+// XML Parsing structures & functions
+private const val AndroidAttrLabel = 0x01010001
+private const val AndroidAttrIcon = 0x01010002
+private const val AndroidAttrRoundIcon = 0x0101052C
+private const val AndroidAttrMinSdkVersion = 0x0101020C
+private const val AndroidAttrTargetSdkVersion = 0x01010270
+private const val StringPoolChunk = 0x0001
+private const val TableChunk = 0x0002
+private const val XmlStartElementChunk = 0x0102
+private const val TablePackageChunk = 0x0200
+private const val TableTypeChunk = 0x0201
+private const val ValueTypeReference = 0x01
+private const val ValueTypeString = 0x03
+private const val Utf8Flag = 0x00000100
+private const val NoIndex = -1
 
 internal data class PackagePath(
     val packageName: String,
@@ -1072,27 +852,4 @@ private fun String.isSystemApkPath(): Boolean {
 
 private fun String.toSafeFileName(): String {
     return replace(Regex("[^a-zA-Z0-9._-]"), "_")
-}
-
-private fun resolveAdbPath(): String {
-    val osName = System.getProperty("os.name").lowercase()
-    val platformFolder = when {
-        osName.contains("win") -> "platform-tools-latest-windows"
-        osName.contains("mac") || osName.contains("darwin") -> "platform-tools-latest-darwin"
-        else -> "platform-tools-latest-linux"
-    }
-    val adbBinary = if (osName.contains("win")) "adb.exe" else "adb"
-    val userDir = File(System.getProperty("user.dir")).absoluteFile
-
-    generateSequence(userDir) { it.parentFile }.forEach { directory ->
-        val candidate = directory.resolve("platform-tools")
-            .resolve(platformFolder)
-            .resolve("platform-tools")
-            .resolve(adbBinary)
-        if (candidate.exists()) {
-            return candidate.absolutePath
-        }
-    }
-
-    return adbBinary
 }
