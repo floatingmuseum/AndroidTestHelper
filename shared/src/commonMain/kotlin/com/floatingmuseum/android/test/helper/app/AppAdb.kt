@@ -103,6 +103,13 @@ interface AppAdb {
         logCommand: (String) -> Unit,
     )
 
+    suspend fun uninstallApplication(
+        deviceSerial: String,
+        packageName: String,
+        isSystem: Boolean,
+        logCommand: (String) -> Unit,
+    )
+
     suspend fun exportApplicationApk(
         deviceSerial: String,
         packageName: String,
@@ -145,3 +152,8 @@ fun filterInstalledApps(
             app.packageName.lowercase().contains(keyword)
     }
 }
+
+fun removeInstalledApp(
+    apps: List<InstalledAppInfo>,
+    packageName: String,
+): List<InstalledAppInfo> = apps.filterNot { it.packageName == packageName }

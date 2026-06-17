@@ -57,6 +57,7 @@ import com.floatingmuseum.android.test.helper.datafill.parseGiBInput
 import com.floatingmuseum.android.test.helper.app.InstalledAppInfo
 import com.floatingmuseum.android.test.helper.app.ApplicationTestPanel
 import com.floatingmuseum.android.test.helper.app.createAppAdb
+import com.floatingmuseum.android.test.helper.app.removeInstalledApp
 import com.floatingmuseum.android.test.helper.device.DeviceSystemInfo
 import com.floatingmuseum.android.test.helper.device.SystemProperty
 import com.floatingmuseum.android.test.helper.device.createDeviceAdb
@@ -422,6 +423,13 @@ fun App() {
             return nextSystemApps
         }
 
+        fun removeApplicationFromLists(packageName: String): List<InstalledAppInfo> {
+            thirdPartyApps = removeInstalledApp(thirdPartyApps, packageName)
+            val nextSystemApps = removeInstalledApp(systemApps, packageName)
+            systemApps = nextSystemApps
+            return nextSystemApps
+        }
+
         fun runApplicationAction(app: InstalledAppInfo, action: String) {
             if (isRunning) return
             val deviceSerial = selectedReadyDevice?.serialNumber
@@ -469,6 +477,17 @@ fun App() {
                             }
                             statusText = "已启用 ${app.packageName}"
                             appendCommand("状态: 已启用 ${app.packageName}")
+                        }
+                        "卸载应用" -> {
+                            appAdb.uninstallApplication(deviceSerial, app.packageName, app.isSystem, ::appendCommand)
+                            val nextSystemApps = removeApplicationFromLists(app.packageName)
+                            if (app.isSystem) {
+                                appAdb.saveCachedSystemApps(deviceSerial, nextSystemApps)
+                                val cached = appAdb.loadCachedSystemApps(deviceSerial)
+                                systemAppsCacheFormattedTime = cached?.cacheTimeFormatted
+                            }
+                            statusText = "已卸载 ${app.packageName}"
+                            appendCommand("状态: 已卸载 ${app.packageName}")
                         }
                         "导出APK" -> {
                             val outputPath = selectDirectory()

@@ -2,6 +2,7 @@ package com.floatingmuseum.android.test.helper.app
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class AppTest {
     @Test
@@ -89,6 +90,74 @@ class AppTest {
         assertEquals(listOf(apps[0]), filterInstalledApps(apps, "assistant"))
         assertEquals(listOf(apps[1]), filterInstalledApps(apps, "ANDROID.SETTINGS"))
         assertEquals(listOf(apps[2]), filterInstalledApps(apps, "camera"))
+    }
+
+    @Test
+    fun removesInstalledAppByExactPackageName() {
+        val apps = listOf(
+            testInstalledApp("com.example.target", "Target"),
+            testInstalledApp("com.example.target.beta", "Target Beta"),
+            testInstalledApp("com.android.settings", "Settings"),
+        )
+
+        assertEquals(
+            listOf(apps[1], apps[2]),
+            removeInstalledApp(apps, "com.example.target"),
+        )
+    }
+
+    @Test
+    fun buildsThirdPartyUninstallCommandWithExplicitSerial() {
+        val command = buildUninstallApplicationCommand(
+            deviceSerial = "serial-123",
+            packageName = "com.example.app",
+            isSystem = false,
+        )
+
+        assertEquals(
+            listOf("-s", "serial-123", "uninstall", "com.example.app"),
+            command.args,
+        )
+        assertEquals(
+            "adb -s serial-123 uninstall com.example.app",
+            command.displayCommand,
+        )
+    }
+
+    @Test
+    fun buildsSystemUninstallCommandForUserZeroWithExplicitSerial() {
+        val command = buildUninstallApplicationCommand(
+            deviceSerial = "serial-123",
+            packageName = "com.android.settings",
+            isSystem = true,
+        )
+
+        assertEquals(
+            listOf("-s", "serial-123", "shell", "pm", "uninstall", "--user", "0", "com.android.settings"),
+            command.args,
+        )
+        assertEquals(
+            "adb -s serial-123 shell pm uninstall --user 0 com.android.settings",
+            command.displayCommand,
+        )
+    }
+
+    @Test
+    fun acceptsSuccessfulUninstallOutput() {
+        requireSuccessfulUninstallOutput(
+            output = "\nSuccess\n",
+            displayCommand = "adb -s serial-123 uninstall com.example.app",
+        )
+    }
+
+    @Test
+    fun rejectsFailedUninstallOutputEvenWithZeroExitCode() {
+        assertFailsWith<IllegalStateException> {
+            requireSuccessfulUninstallOutput(
+                output = "Failure [DELETE_FAILED_DEVICE_POLICY_MANAGER]",
+                displayCommand = "adb -s serial-123 uninstall com.example.app",
+            )
+        }
     }
 
     private fun testInstalledApp(

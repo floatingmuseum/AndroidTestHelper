@@ -369,6 +369,25 @@ private class JvmAppAdb : AppAdb {
         )
     }
 
+    override suspend fun uninstallApplication(
+        deviceSerial: String,
+        packageName: String,
+        isSystem: Boolean,
+        logCommand: (String) -> Unit,
+    ) {
+        val command = buildUninstallApplicationCommand(
+            deviceSerial = deviceSerial,
+            packageName = packageName,
+            isSystem = isSystem,
+        )
+        val output = AdbShell.executeAdb(
+            args = command.args,
+            displayCommand = command.displayCommand,
+            logCommand = logCommand,
+        )
+        requireSuccessfulUninstallOutput(output, command.displayCommand)
+    }
+
     override suspend fun exportApplicationApk(
         deviceSerial: String,
         packageName: String,
@@ -1155,4 +1174,37 @@ private fun String.isSystemApkPath(): Boolean {
 
 private fun String.toSafeFileName(): String {
     return replace(Regex("[^a-zA-Z0-9._-]"), "_")
+}
+
+internal data class ApplicationUninstallCommand(
+    val args: List<String>,
+    val displayCommand: String,
+)
+
+internal fun buildUninstallApplicationCommand(
+    deviceSerial: String,
+    packageName: String,
+    isSystem: Boolean,
+): ApplicationUninstallCommand {
+    return if (isSystem) {
+        ApplicationUninstallCommand(
+            args = listOf("-s", deviceSerial, "shell", "pm", "uninstall", "--user", "0", packageName),
+            displayCommand = "adb -s $deviceSerial shell pm uninstall --user 0 $packageName",
+        )
+    } else {
+        ApplicationUninstallCommand(
+            args = listOf("-s", deviceSerial, "uninstall", packageName),
+            displayCommand = "adb -s $deviceSerial uninstall $packageName",
+        )
+    }
+}
+
+internal fun requireSuccessfulUninstallOutput(
+    output: String,
+    displayCommand: String,
+) {
+    val hasSuccessLine = output.lineSequence().any { it.trim() == "Success" }
+    if (!hasSuccessLine) {
+        throw IllegalStateException("卸载应用失败\n$displayCommand\n${output.trim()}")
+    }
 }

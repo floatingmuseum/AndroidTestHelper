@@ -585,9 +585,9 @@ private fun ApplicationDetailPanel(
             modifier = Modifier.fillMaxWidth(),
         )
         ApplicationActionGroup(
-            actions = listOf("启动应用", "结束应用", "清除数据", "停用应用", "启用应用", "导出APK"),
+            actions = listOf("启动应用", "结束应用", "清除数据", "停用应用", "启用应用", "导出APK", "卸载应用"),
             onAction = { action ->
-                if (app.isSystem && (action == "结束应用" || action == "清除数据" || action == "停用应用")) {
+                if (action == "卸载应用" || app.isSystem && (action == "结束应用" || action == "清除数据" || action == "停用应用")) {
                     pendingAction = action
                     showDangerousActionConfirmDialog = true
                 } else {
@@ -606,14 +606,18 @@ private fun ApplicationDetailPanel(
             },
             title = {
                 Text(
-                    text = "警告",
+                    text = "确认${pendingAction ?: "危险操作"}",
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
                 )
             },
             text = {
                 Text(
-                    text = "此操作可能对设备造成严重影响，请在知晓风险的情况下操作。",
+                    text = if (pendingAction == "卸载应用") {
+                        "将从当前设备卸载 ${app.packageName}。系统应用会执行用户 0 卸载，可能影响设备功能。"
+                    } else {
+                        "此操作可能对设备造成严重影响，请在知晓风险的情况下操作。"
+                    },
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
@@ -628,7 +632,14 @@ private fun ApplicationDetailPanel(
                         pendingAction = null
                     }
                 ) {
-                    Text("确认")
+                    Text(
+                        text = "确认",
+                        color = if (pendingAction == "卸载应用") {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
                 }
             },
             dismissButton = {
@@ -695,11 +706,20 @@ private fun ApplicationActionGroup(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     rowActions.forEach { action ->
+                        val isDangerAction = action == "卸载应用"
                         Button(
                             onClick = { onAction(action) },
                             enabled = !isRunning,
                             modifier = Modifier.weight(1f),
                             contentPadding = ButtonDefaults.TextButtonContentPadding,
+                            colors = if (isDangerAction) {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError,
+                                )
+                            } else {
+                                ButtonDefaults.buttonColors()
+                            },
                         ) {
                             Text(
                                 text = action,
