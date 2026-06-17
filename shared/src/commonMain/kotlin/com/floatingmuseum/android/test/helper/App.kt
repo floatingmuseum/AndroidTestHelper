@@ -498,6 +498,41 @@ fun App() {
             }
         }
 
+        fun clearApplicationListCache() {
+            if (isRunning) return
+            val deviceSerial = selectedReadyDevice?.serialNumber
+            if (deviceSerial == null) {
+                statusText = "先选择状态为 device 的设备"
+                appendCommand("错误: 先选择状态为 device 的设备")
+                return
+            }
+
+            scope.launch {
+                isRunning = true
+                statusText = "清空应用列表缓存..."
+                appendCommand("状态: 清空应用列表缓存...")
+                try {
+                    appAdb.clearApplicationListCache(deviceSerial)
+                    thirdPartyApps = emptyList()
+                    systemApps = emptyList()
+                    thirdPartyLoadedSerial = null
+                    systemLoadedSerial = null
+                    systemAppsCacheFormattedTime = null
+                    thirdPartyProgressCurrent = 0
+                    thirdPartyProgressTotal = 0
+                    systemProgressCurrent = 0
+                    systemProgressTotal = 0
+                    statusText = "已清空应用列表缓存"
+                    appendCommand("状态: 已清空应用列表缓存")
+                } catch (error: Throwable) {
+                    statusText = error.message ?: "清空应用列表缓存失败"
+                    appendCommand("错误: 清空应用列表缓存失败 - ${error.message ?: "未知错误"}")
+                } finally {
+                    isRunning = false
+                }
+            }
+        }
+
         fun refreshStorageForDevice(deviceSerial: String) {
             runAdbTask("读取平板存储") {
                 dataFillAdb.loadStorageInfo(deviceSerial, ::appendCommand)
@@ -947,6 +982,7 @@ fun App() {
                                         val serial = selectedReadyDevice?.serialNumber
                                         if (serial != null) loadSystemApps(serial)
                                     },
+                                    onClearCache = ::clearApplicationListCache,
                                     onApplicationAction = ::runApplicationAction,
                                     isRunning = isRunning,
                                     modifier = Modifier.fillMaxSize(),

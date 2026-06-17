@@ -107,6 +107,61 @@ class AppTest {
     }
 
     @Test
+    fun buildsStableApplicationIconCacheFileNameForSameVersion() {
+        val first = buildApplicationIconCacheFileName(
+            packageName = "com.example.app",
+            versionName = "1.2.3",
+            versionCode = 42,
+        )
+        val second = buildApplicationIconCacheFileName(
+            packageName = "com.example.app",
+            versionName = "ignored",
+            versionCode = 42,
+        )
+
+        assertEquals(first, second)
+    }
+
+    @Test
+    fun changesApplicationIconCacheFileNameWhenVersionChanges() {
+        val oldVersion = buildApplicationIconCacheFileName(
+            packageName = "com.example.app",
+            versionName = "1.2.3",
+            versionCode = 42,
+        )
+        val newVersion = buildApplicationIconCacheFileName(
+            packageName = "com.example.app",
+            versionName = "1.2.4",
+            versionCode = 43,
+        )
+
+        kotlin.test.assertNotEquals(oldVersion, newVersion)
+    }
+
+    @Test
+    fun usesVersionNameForApplicationIconCacheWhenVersionCodeMissing() {
+        val fileName = buildApplicationIconCacheFileName(
+            packageName = "com.example.app",
+            versionName = "1.2.3-beta",
+            versionCode = null,
+        )
+
+        kotlin.test.assertContains(fileName ?: "", "com.example.app__vn_1.2.3-beta__")
+    }
+
+    @Test
+    fun skipsApplicationIconCacheWhenVersionIdentityMissing() {
+        assertEquals(
+            null,
+            buildApplicationIconCacheFileName(
+                packageName = "com.example.app",
+                versionName = "-",
+                versionCode = null,
+            ),
+        )
+    }
+
+    @Test
     fun buildsThirdPartyUninstallCommandWithExplicitSerial() {
         val command = buildUninstallApplicationCommand(
             deviceSerial = "serial-123",

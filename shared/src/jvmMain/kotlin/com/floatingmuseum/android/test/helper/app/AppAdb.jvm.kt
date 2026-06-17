@@ -16,6 +16,7 @@ import java.io.File
 import java.net.JarURLConnection
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.createTempDirectory
@@ -91,15 +92,21 @@ private class JvmAppAdb : AppAdb {
             async {
                 semaphore.withPermit {
                     currentCoroutineContext().ensureActive()
-                    val iconBytes = try {
-                        val iconUri = "content://com.floatingmuseum.android.test.helper.plugin.provider/icon/${meta.packageName}"
-                        AdbShell.executeAdbBinary(
-                            args = listOf("-s", deviceSerial, "exec-out", "content", "read", "--uri", iconUri),
-                            displayCommand = "adb -s $deviceSerial exec-out content read --uri \"$iconUri\"",
-                            logCommand = logCommand
+                    val iconBytes = readCachedApplicationIcon(
+                        packageName = meta.packageName,
+                        versionName = meta.versionName,
+                        versionCode = meta.versionCode,
+                    ) ?: loadPluginApplicationIcon(
+                        deviceSerial = deviceSerial,
+                        packageName = meta.packageName,
+                        logCommand = logCommand,
+                    )?.also { icon ->
+                        saveCachedApplicationIcon(
+                            packageName = meta.packageName,
+                            versionName = meta.versionName,
+                            versionCode = meta.versionCode,
+                            iconBytes = icon,
                         )
-                    } catch (e: Exception) {
-                        null
                     }
                     val currentCount = completedCount.incrementAndGet()
                     onProgress(currentCount, total)
@@ -207,25 +214,49 @@ private class JvmAppAdb : AppAdb {
                     semaphore.withPermit {
                         currentCoroutineContext().ensureActive()
                         val dumpsysInfo = dumpsysPackages[packagePath.packageName]
+                        val cachedIconBytes = readCachedApplicationIcon(
+                            packageName = packagePath.packageName,
+                            versionName = dumpsysInfo?.versionName,
+                            versionCode = dumpsysInfo?.versionCode,
+                        )
                         val apkMetadata = loadApkMetadata(
                             deviceSerial = deviceSerial,
                             packagePath = packagePath,
                             tempDirectory = tempDirectory,
                             logCommand = logCommand,
+                            includeIcon = cachedIconBytes == null,
                         )
+                        val versionName = dumpsysInfo?.versionName?.takeIf { it.isNotBlank() }
+                            ?: apkMetadata.versionName?.takeIf { it.isNotBlank() }
+                            ?: "-"
+                        val versionCode = dumpsysInfo?.versionCode ?: apkMetadata.versionCode
+                        val iconBytes = cachedIconBytes
+                            ?: readCachedApplicationIcon(
+                                packageName = packagePath.packageName,
+                                versionName = versionName,
+                                versionCode = versionCode,
+                            )
+                            ?: apkMetadata.iconBytes?.also { icon ->
+                                saveCachedApplicationIcon(
+                                    packageName = packagePath.packageName,
+                                    versionName = versionName,
+                                    versionCode = versionCode,
+                                    iconBytes = icon,
+                                )
+                            }
 
                         val appInfo = InstalledAppInfo(
                             packageName = packagePath.packageName,
                             appName = apkMetadata.label?.takeIf { it.isNotBlank() }
                                 ?: packagePath.packageName,
-                            versionName = dumpsysInfo?.versionName?.takeIf { it.isNotBlank() } ?: "-",
-                            versionCode = dumpsysInfo?.versionCode,
+                            versionName = versionName,
+                            versionCode = versionCode,
                             compileSdkVersion = apkMetadata.compileSdkVersion ?: dumpsysInfo?.compileSdkVersion,
                             minSdkVersion = apkMetadata.minSdkVersion ?: dumpsysInfo?.minSdkVersion,
                             targetSdkVersion = apkMetadata.targetSdkVersion ?: dumpsysInfo?.targetSdkVersion,
                             isSystem = isSystem,
                             isEnabled = packagePath.packageName !in disabledPackages,
-                            iconBytes = apkMetadata.iconBytes,
+                            iconBytes = iconBytes,
                         )
                         val currentCount = completedCount.incrementAndGet()
                         onProgress(currentCount, total)
@@ -250,18 +281,18 @@ private class JvmAppAdb : AppAdb {
             val jsonText = file.readText()
             val cachedData = Json.decodeFromString<CachedSystemApps>(jsonText)
             
-            val iconsDir = File(System.getProperty("user.home"), ".android_test_helper_cache/icons")
             val restoredApps = cachedData.apps.map { app ->
-                val iconFile = File(iconsDir, "${app.packageName}.png")
-                val restoredBytes = if (iconFile.exists()) {
-                    try {
-                        iconFile.readBytes()
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        null
-                    }
-                } else {
-                    null
+                val restoredBytes = readCachedApplicationIcon(
+                    packageName = app.packageName,
+                    versionName = app.versionName,
+                    versionCode = app.versionCode,
+                ) ?: readLegacyCachedApplicationIcon(app.packageName)?.also { icon ->
+                    saveCachedApplicationIcon(
+                        packageName = app.packageName,
+                        versionName = app.versionName,
+                        versionCode = app.versionCode,
+                        iconBytes = icon,
+                    )
                 }
                 app.copy(iconBytes = restoredBytes)
             }
@@ -279,19 +310,14 @@ private class JvmAppAdb : AppAdb {
             val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
             val formattedTime = sdf.format(java.util.Date(now))
             
-            val iconsDir = File(System.getProperty("user.home"), ".android_test_helper_cache/icons")
-            if (!iconsDir.exists()) {
-                iconsDir.mkdirs()
-            }
-            
             val appsWithoutIcons = apps.map { app ->
-                if (app.iconBytes != null) {
-                    val iconFile = File(iconsDir, "${app.packageName}.png")
-                    try {
-                        iconFile.writeBytes(app.iconBytes)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+                app.iconBytes?.let { icon ->
+                    saveCachedApplicationIcon(
+                        packageName = app.packageName,
+                        versionName = app.versionName,
+                        versionCode = app.versionCode,
+                        iconBytes = icon,
+                    )
                 }
                 app.copy(iconBytes = null)
             }
@@ -304,6 +330,15 @@ private class JvmAppAdb : AppAdb {
             val jsonText = Json.encodeToString(cachedData)
             file.parentFile?.mkdirs()
             file.writeText(jsonText)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override suspend fun clearApplicationListCache(deviceSerial: String): Unit = withContext(Dispatchers.IO) {
+        try {
+            getCacheFile(deviceSerial).delete()
+            applicationIconCacheDir().deleteRecursively()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -435,9 +470,8 @@ private class JvmAppAdb : AppAdb {
     }
 
     private fun getCacheFile(deviceSerial: String): File {
-        val cacheDir = File(System.getProperty("user.home"), ".android_test_helper_cache")
         val safeSerial = deviceSerial.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-        return File(cacheDir, "system_apps_$safeSerial.cache")
+        return File(applicationCacheDir(), "system_apps_$safeSerial.cache")
     }
 
     private suspend fun loadApkMetadata(
@@ -445,6 +479,7 @@ private class JvmAppAdb : AppAdb {
         packagePath: PackagePath,
         tempDirectory: File,
         logCommand: (String) -> Unit,
+        includeIcon: Boolean = true,
     ): ApkMetadata {
         val localApk = File(tempDirectory, "${packagePath.packageName}.apk")
         return try {
@@ -453,12 +488,83 @@ private class JvmAppAdb : AppAdb {
                 displayCommand = "adb -s $deviceSerial pull ${packagePath.path} ${localApk.absolutePath}",
                 logCommand = logCommand,
             )
-            parseApkMetadata(localApk)
+            parseApkMetadata(localApk, includeIcon)
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
             ApkMetadata()
         }
+    }
+
+    private suspend fun loadPluginApplicationIcon(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ): ByteArray? {
+        return try {
+            val iconUri = "content://com.floatingmuseum.android.test.helper.plugin.provider/icon/$packageName"
+            AdbShell.executeAdbBinary(
+                args = listOf("-s", deviceSerial, "exec-out", "content", "read", "--uri", iconUri),
+                displayCommand = "adb -s $deviceSerial exec-out content read --uri \"$iconUri\"",
+                logCommand = logCommand
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun readCachedApplicationIcon(
+        packageName: String,
+        versionName: String?,
+        versionCode: Long?,
+    ): ByteArray? {
+        val iconFile = getApplicationIconCacheFile(packageName, versionName, versionCode) ?: return null
+        if (!iconFile.exists()) return null
+        return try {
+            iconFile.readBytes()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun readLegacyCachedApplicationIcon(packageName: String): ByteArray? {
+        val iconFile = File(applicationIconCacheDir(), "${packageName.toSafeFileName()}.png")
+        if (!iconFile.exists()) return null
+        return try {
+            iconFile.readBytes()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun saveCachedApplicationIcon(
+        packageName: String,
+        versionName: String?,
+        versionCode: Long?,
+        iconBytes: ByteArray,
+    ) {
+        val iconFile = getApplicationIconCacheFile(packageName, versionName, versionCode) ?: return
+        try {
+            iconFile.parentFile?.mkdirs()
+            iconFile.writeBytes(iconBytes)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun getApplicationIconCacheFile(
+        packageName: String,
+        versionName: String?,
+        versionCode: Long?,
+    ): File? {
+        val fileName = buildApplicationIconCacheFileName(
+            packageName = packageName,
+            versionName = versionName,
+            versionCode = versionCode,
+        ) ?: return null
+        return File(applicationIconCacheDir(), fileName)
     }
 
     override suspend fun getInstalledPluginVersionCode(
@@ -638,6 +744,29 @@ private class JvmAppAdb : AppAdb {
     }
 }
 
+internal fun buildApplicationIconCacheFileName(
+    packageName: String,
+    versionName: String?,
+    versionCode: Long?,
+): String? {
+    val versionToken = when {
+        versionCode != null -> "vc_$versionCode"
+        !versionName.isNullOrBlank() && versionName != "-" -> "vn_$versionName"
+        else -> return null
+    }
+    val identity = "$packageName|$versionToken"
+    val digest = identity.sha256Hex().take(16)
+    return "${packageName.toSafeFileName()}__${versionToken.toSafeFileName()}__$digest.icon"
+}
+
+private fun applicationCacheDir(): File {
+    return File(System.getProperty("user.home"), ".android_test_helper_cache")
+}
+
+private fun applicationIconCacheDir(): File {
+    return File(applicationCacheDir(), "icons")
+}
+
 // XML Parsing structures & functions
 private const val AndroidAttrLabel = 0x01010001
 private const val AndroidAttrIcon = 0x01010002
@@ -805,7 +934,7 @@ internal fun parsePackageDumpsys(output: String): Map<String, PackageDumpsysInfo
     return result
 }
 
-private fun parseApkMetadata(apkFile: File): ApkMetadata {
+private fun parseApkMetadata(apkFile: File, includeIcon: Boolean = true): ApkMetadata {
     return ZipFile(apkFile).use { zipFile ->
         val manifestEntry = zipFile.getEntry("AndroidManifest.xml") ?: return ApkMetadata()
         val manifestBytes = zipFile.getInputStream(manifestEntry).readBytes()
@@ -820,7 +949,7 @@ private fun parseApkMetadata(apkFile: File): ApkMetadata {
             else -> null
         }
 
-        val iconPaths = if (resourceBytes == null) {
+        val iconPaths = if (!includeIcon || resourceBytes == null) {
             emptyList()
         } else {
             manifestMetadata.iconResourceIds.flatMap { resourceId ->
@@ -829,7 +958,7 @@ private fun parseApkMetadata(apkFile: File): ApkMetadata {
         }
         ApkMetadata(
             label = label,
-            iconBytes = selectIconBytes(zipFile, iconPaths),
+            iconBytes = if (includeIcon) selectIconBytes(zipFile, iconPaths) else null,
             compileSdkVersion = manifestMetadata.compileSdkVersion,
             minSdkVersion = manifestMetadata.minSdkVersion,
             targetSdkVersion = manifestMetadata.targetSdkVersion,
@@ -1174,6 +1303,11 @@ private fun String.isSystemApkPath(): Boolean {
 
 private fun String.toSafeFileName(): String {
     return replace(Regex("[^a-zA-Z0-9._-]"), "_")
+}
+
+private fun String.sha256Hex(): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
+    return digest.joinToString("") { byte -> "%02x".format(byte) }
 }
 
 internal data class ApplicationUninstallCommand(

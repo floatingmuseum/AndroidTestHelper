@@ -73,6 +73,8 @@ interface AppAdb {
 
     suspend fun saveCachedSystemApps(deviceSerial: String, apps: List<InstalledAppInfo>)
 
+    suspend fun clearApplicationListCache(deviceSerial: String)
+
     suspend fun launchApplication(
         deviceSerial: String,
         packageName: String,

@@ -67,6 +67,7 @@ fun ApplicationTestPanel(
     systemProgressTotal: Int,
     onRefreshThirdParty: () -> Unit,
     onRefreshSystem: () -> Unit,
+    onClearCache: () -> Unit,
     onApplicationAction: (InstalledAppInfo, String) -> Unit,
     isRunning: Boolean,
     modifier: Modifier = Modifier,
@@ -101,6 +102,8 @@ fun ApplicationTestPanel(
                     filteredThirdPartyApps = filteredThirdPartyApps,
                     filteredSystemApps = filteredSystemApps,
                     isSearching = isSearching,
+                    isRunning = isRunning,
+                    onClearCache = onClearCache,
                 )
             }
 
@@ -296,6 +299,8 @@ private fun ApplicationListHeader(
     filteredThirdPartyApps: List<InstalledAppInfo>,
     filteredSystemApps: List<InstalledAppInfo>,
     isSearching: Boolean,
+    isRunning: Boolean,
+    onClearCache: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -323,6 +328,17 @@ private fun ApplicationListHeader(
                     label = { Text("搜索应用名或包名") },
                     modifier = Modifier.weight(1f),
                 )
+                Button(
+                    onClick = onClearCache,
+                    enabled = !isRunning,
+                    contentPadding = ButtonDefaults.TextButtonContentPadding,
+                    modifier = Modifier.height(40.dp),
+                ) {
+                    Text(
+                        text = "清空缓存",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
             Text(
                 text = applicationListDescription(
