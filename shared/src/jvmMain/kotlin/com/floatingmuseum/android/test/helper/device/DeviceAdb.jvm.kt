@@ -738,6 +738,14 @@ internal fun buildQuickActionCommand(
         DeviceQuickAction.MUTE -> buildKeyEventCommand(deviceSerial, "KEYCODE_VOLUME_MUTE")
         DeviceQuickAction.WAKE -> buildKeyEventCommand(deviceSerial, "KEYCODE_WAKEUP")
         DeviceQuickAction.SLEEP -> buildKeyEventCommand(deviceSerial, "KEYCODE_SLEEP")
+        DeviceQuickAction.REBOOT_RECOVERY -> DeviceQuickActionCommand(
+            args = listOf("-s", deviceSerial, "reboot", "recovery"),
+            displayCommand = "adb -s $deviceSerial reboot recovery",
+        )
+        DeviceQuickAction.REBOOT_FASTBOOT -> DeviceQuickActionCommand(
+            args = listOf("-s", deviceSerial, "reboot", "bootloader"),
+            displayCommand = "adb -s $deviceSerial reboot bootloader",
+        )
     }
 }
 

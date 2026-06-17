@@ -73,6 +73,8 @@ enum class DeviceQuickAction(val label: String) {
     MUTE("静音"),
     WAKE("亮屏"),
     SLEEP("熄屏"),
+    REBOOT_RECOVERY("重启至Recovery"),
+    REBOOT_FASTBOOT("重启至FastBoot"),
 }
 
 interface DeviceAdb {

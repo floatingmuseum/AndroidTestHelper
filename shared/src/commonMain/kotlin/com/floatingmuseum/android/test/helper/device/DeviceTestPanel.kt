@@ -813,8 +813,10 @@ fun DeviceTestPanel(
                     )
 
                     val shortcutActions = listOf(
-                        DeviceShortcutAction("重启", true, onReboot),
                         DeviceShortcutAction("关机", true) { onQuickAction(DeviceQuickAction.SHUTDOWN) },
+                        DeviceShortcutAction("重启", true, onReboot),
+                        DeviceShortcutAction("重启至Recovery", true) { onQuickAction(DeviceQuickAction.REBOOT_RECOVERY) },
+                        DeviceShortcutAction("重启至FastBoot", true) { onQuickAction(DeviceQuickAction.REBOOT_FASTBOOT) },
                         DeviceShortcutAction("截屏", false, onTakeScreenshot),
                         DeviceShortcutAction("APK安装", false, onInstallApplications),
                         DeviceShortcutAction("电源键", false) { onQuickAction(DeviceQuickAction.POWER) },

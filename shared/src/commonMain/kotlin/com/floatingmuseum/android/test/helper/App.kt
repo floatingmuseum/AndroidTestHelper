@@ -330,7 +330,10 @@ fun App() {
                     deviceAdb.runQuickAction(deviceSerial, action, ::appendCommand)
                     statusText = "${action.label}命令已发送"
                     appendCommand("状态: ${action.label}命令已发送完成")
-                    if (action == DeviceQuickAction.SHUTDOWN) {
+                    if (action == DeviceQuickAction.SHUTDOWN ||
+                        action == DeviceQuickAction.REBOOT_RECOVERY ||
+                        action == DeviceQuickAction.REBOOT_FASTBOOT
+                    ) {
                         selectedDeviceSerial = null
                         deviceSystemInfo = null
                         systemProperties = emptyList()

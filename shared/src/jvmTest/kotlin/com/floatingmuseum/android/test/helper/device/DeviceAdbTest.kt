@@ -332,6 +332,28 @@ class DeviceAdbTest {
     }
 
     @Test
+    fun testBuildQuickActionCommandUsesExplicitDeviceForRebootRecovery() {
+        val command = buildQuickActionCommand(
+            deviceSerial = "R58M123ABC",
+            action = DeviceQuickAction.REBOOT_RECOVERY,
+        )
+
+        assertEquals(listOf("-s", "R58M123ABC", "reboot", "recovery"), command.args)
+        assertEquals("adb -s R58M123ABC reboot recovery", command.displayCommand)
+    }
+
+    @Test
+    fun testBuildQuickActionCommandUsesExplicitDeviceForRebootFastboot() {
+        val command = buildQuickActionCommand(
+            deviceSerial = "R58M123ABC",
+            action = DeviceQuickAction.REBOOT_FASTBOOT,
+        )
+
+        assertEquals(listOf("-s", "R58M123ABC", "reboot", "bootloader"), command.args)
+        assertEquals("adb -s R58M123ABC reboot bootloader", command.displayCommand)
+    }
+
+    @Test
     fun testBuildQuickActionCommandUsesExplicitDeviceForKeyEvent() {
         val command = buildQuickActionCommand(
             deviceSerial = "R58M123ABC",
