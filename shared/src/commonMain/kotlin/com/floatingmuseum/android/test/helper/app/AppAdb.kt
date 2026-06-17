@@ -61,6 +61,12 @@ data class CachedSystemApps(
     val cacheTimeFormatted: String,
 )
 
+@Serializable
+data class PluginVersionInfo(
+    val versionCode: Long,
+    val versionName: String,
+)
+
 interface AppAdb {
     suspend fun loadInstalledApps(
         deviceSerial: String,
@@ -119,14 +125,14 @@ interface AppAdb {
         logCommand: (String) -> Unit,
     ): ApkExportResult
 
-    suspend fun getInstalledPluginVersionCode(
+    suspend fun getInstalledPluginVersionInfo(
         deviceSerial: String,
         logCommand: (String) -> Unit,
-    ): Long?
+    ): PluginVersionInfo?
 
-    suspend fun getApkVersionCode(
+    suspend fun getApkVersionInfo(
         apkBytes: ByteArray,
-    ): Long?
+    ): PluginVersionInfo?
 
     suspend fun getLocalPluginApkBytes(): ByteArray?
 

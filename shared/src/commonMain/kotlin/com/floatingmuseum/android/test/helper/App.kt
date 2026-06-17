@@ -55,6 +55,7 @@ import com.floatingmuseum.android.test.helper.datafill.createDataFillAdb
 import com.floatingmuseum.android.test.helper.datafill.formatBytes
 import com.floatingmuseum.android.test.helper.datafill.parseGiBInput
 import com.floatingmuseum.android.test.helper.app.InstalledAppInfo
+import com.floatingmuseum.android.test.helper.app.PluginVersionInfo
 import com.floatingmuseum.android.test.helper.app.ApplicationTestPanel
 import com.floatingmuseum.android.test.helper.app.createAppAdb
 import com.floatingmuseum.android.test.helper.app.removeInstalledApp
@@ -95,7 +96,7 @@ fun App() {
         var isInstallingPlugin by remember { mutableStateOf(false) }
         var isBannerDismissedThisSession by remember { mutableStateOf(false) }
         var localApkBytes by remember { mutableStateOf<ByteArray?>(null) }
-        var localApkVersionCode by remember { mutableStateOf<Long?>(null) }
+        var localApkVersionInfo by remember { mutableStateOf<PluginVersionInfo?>(null) }
         var storageInfo by remember { mutableStateOf<StorageInfo?>(null) }
         var customFillValue by remember { mutableStateOf("") }
         var remainingValue by remember { mutableStateOf("") }
@@ -688,7 +689,7 @@ fun App() {
                         val bytes = appAdb.getLocalPluginApkBytes()
                         if (bytes != null) {
                             localApkBytes = bytes
-                            localApkVersionCode = appAdb.getApkVersionCode(bytes)
+                            localApkVersionInfo = appAdb.getApkVersionInfo(bytes)
                         } else {
                             appendCommand("错误: 未能在 resources/files 下找到 ATHPlugin apk 文件")
                         }
@@ -698,15 +699,15 @@ fun App() {
                     }
                 }
 
-                val targetLocalVersion = localApkVersionCode
-                if (targetLocalVersion != null) {
+                val targetLocalVersionInfo = localApkVersionInfo
+                if (targetLocalVersionInfo != null) {
                     try {
-                        val installedVersion = appAdb.getInstalledPluginVersionCode(deviceSerial, ::appendCommand)
-                        if (installedVersion == null) {
+                        val installedVersionInfo = appAdb.getInstalledPluginVersionInfo(deviceSerial, ::appendCommand)
+                        if (installedVersionInfo == null) {
                             bannerMessage = "检测到当前设备未安装辅助插件(ATHPlugin)，安装后可极大提升应用数据获取的效率与性能。"
                             showPluginBanner = true
-                        } else if (installedVersion < targetLocalVersion) {
-                            bannerMessage = "检测到设备上已安装的辅助插件(ATHPlugin)版本过低(当前: v$installedVersion，最新: v$targetLocalVersion)，建议更新。"
+                        } else if (installedVersionInfo.versionCode < targetLocalVersionInfo.versionCode) {
+                            bannerMessage = "检测到设备上已安装的辅助插件(ATHPlugin)版本过低(当前: ${installedVersionInfo.versionName}，最新: ${targetLocalVersionInfo.versionName})，建议更新。"
                             showPluginBanner = true
                         } else {
                             showPluginBanner = false

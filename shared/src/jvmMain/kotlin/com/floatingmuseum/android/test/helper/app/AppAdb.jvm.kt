@@ -567,10 +567,10 @@ private class JvmAppAdb : AppAdb {
         return File(applicationIconCacheDir(), fileName)
     }
 
-    override suspend fun getInstalledPluginVersionCode(
+    override suspend fun getInstalledPluginVersionInfo(
         deviceSerial: String,
         logCommand: (String) -> Unit,
-    ): Long? = withContext(Dispatchers.IO) {
+    ): PluginVersionInfo? = withContext(Dispatchers.IO) {
         try {
             val output = AdbShell.executeAdb(
                 args = listOf("-s", deviceSerial, "shell", "dumpsys", "package", "com.floatingmuseum.android.test.helper.plugin"),
@@ -580,33 +580,46 @@ private class JvmAppAdb : AppAdb {
             if (output.contains("Unable to find package")) {
                 return@withContext null
             }
-            parseVersionCodeFromDumpsys(output)
+            parseVersionInfoFromDumpsys(output)
         } catch (e: Exception) {
             e.printStackTrace()
             null
         }
     }
 
-    private fun parseVersionCodeFromDumpsys(output: String): Long? {
-        return output.lineSequence().map { it.trim() }.mapNotNull { line ->
+    private fun parseVersionInfoFromDumpsys(output: String): PluginVersionInfo? {
+        var versionCode: Long? = null
+        var versionName: String? = null
+        output.lineSequence().map { it.trim() }.forEach { line ->
             if (line.startsWith("versionCode=")) {
                 val codeStr = line.substringAfter("versionCode=").substringBefore(" ").trim()
-                codeStr.toLongOrNull()
-            } else {
-                null
+                versionCode = codeStr.toLongOrNull()
+            } else if (line.startsWith("versionName=")) {
+                versionName = line.substringAfter("versionName=").trim()
             }
-        }.firstOrNull()
+        }
+        return if (versionCode != null && versionName != null) {
+            PluginVersionInfo(versionCode, versionName)
+        } else {
+            null
+        }
     }
 
-    override suspend fun getApkVersionCode(
+    override suspend fun getApkVersionInfo(
         apkBytes: ByteArray,
-    ): Long? = withContext(Dispatchers.IO) {
+    ): PluginVersionInfo? = withContext(Dispatchers.IO) {
         val tempDirectory = createTempDirectory(prefix = "ATHPluginVersionCheck").toFile()
         val tempApk = File(tempDirectory, "temp_plugin.apk")
         try {
             tempApk.writeBytes(apkBytes)
             val metadata = parseApkMetadata(tempApk)
-            metadata.versionCode
+            val code = metadata.versionCode
+            val name = metadata.versionName
+            if (code != null && name != null) {
+                PluginVersionInfo(code, name)
+            } else {
+                null
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -636,13 +649,14 @@ private class JvmAppAdb : AppAdb {
             }
 
             val output = AdbShell.executeAdb(
-                args = listOf("-s", deviceSerial, "install", "-r", tempApk.absolutePath),
-                displayCommand = "adb -s $deviceSerial install -r $apkName",
+                args = listOf("-s", deviceSerial, "install", "-r", "-t", tempApk.absolutePath),
+                displayCommand = "adb -s $deviceSerial install -r -t $apkName",
                 logCommand = logCommand
             )
             output.contains("Success")
         } catch (e: Exception) {
             e.printStackTrace()
+            logCommand("错误: 设备 $deviceSerial 上的辅助插件安装失败 - ${e.message}")
             false
         } finally {
             tempDirectory.deleteRecursively()
