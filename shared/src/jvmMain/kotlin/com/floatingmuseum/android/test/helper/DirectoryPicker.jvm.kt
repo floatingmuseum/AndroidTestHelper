@@ -2,6 +2,7 @@ package com.floatingmuseum.android.test.helper
 
 import java.awt.FileDialog
 import java.awt.Frame
+import java.awt.Desktop
 import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.UIManager
@@ -207,3 +208,35 @@ actual fun saveBytesToFile(directoryPath: String, fileName: String, bytes: ByteA
     File(directoryPath, fileName).writeBytes(bytes)
 }
 
+actual fun revealFileInDirectory(filePath: String): Boolean {
+    val file = File(filePath).absoluteFile
+    val parent = file.parentFile ?: return false
+    return try {
+        val osName = System.getProperty("os.name").lowercase()
+        when {
+            osName.contains("win") -> {
+                ProcessBuilder("explorer.exe", "/select,${file.absolutePath}").start()
+                true
+            }
+            osName.contains("mac") || osName.contains("darwin") -> {
+                ProcessBuilder("open", "-R", file.absolutePath).start()
+                true
+            }
+            else -> {
+                ProcessBuilder("xdg-open", parent.absolutePath).start()
+                true
+            }
+        }
+    } catch (error: Throwable) {
+        try {
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(parent)
+                true
+            } else {
+                false
+            }
+        } catch (fallbackError: Throwable) {
+            false
+        }
+    }
+}

@@ -23,3 +23,7 @@ expect suspend fun selectApkFiles(
  */
 expect fun saveBytesToFile(directoryPath: String, fileName: String, bytes: ByteArray)
 
+/**
+ * 打开文件所在目录，并尽量在系统文件管理器中选中该文件。
+ */
+expect fun revealFileInDirectory(filePath: String): Boolean

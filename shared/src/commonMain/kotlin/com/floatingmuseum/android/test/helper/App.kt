@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.size
@@ -36,12 +38,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.TextButton
@@ -64,16 +69,23 @@ import com.floatingmuseum.android.test.helper.device.DeviceQuickAction
 import com.floatingmuseum.android.test.helper.device.SystemProperty
 import com.floatingmuseum.android.test.helper.device.createDeviceAdb
 import com.floatingmuseum.android.test.helper.device.DeviceTestPanel
+import com.floatingmuseum.android.test.helper.devicelog.DeviceLogCaptureProgress
+import com.floatingmuseum.android.test.helper.devicelog.DeviceLogCaptureResult
+import com.floatingmuseum.android.test.helper.devicelog.DeviceLogCaptureEndState
+import com.floatingmuseum.android.test.helper.devicelog.DeviceLogPanel
+import com.floatingmuseum.android.test.helper.devicelog.createDeviceLogAdb
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 private enum class TestModule(val title: String) {
     Device("设备"),
     App("应用"),
     DataFill("数据填充"),
+    Log("日志"),
 }
 
 private const val APP_VERSION = "1.0.0"
@@ -86,6 +98,7 @@ fun App() {
         val dataFillAdb = remember { createDataFillAdb() }
         val appAdb = remember { createAppAdb() }
         val deviceAdb = remember { createDeviceAdb() }
+        val deviceLogAdb = remember { createDeviceLogAdb() }
 
         val scope = rememberCoroutineScope()
         var devices by remember { mutableStateOf<List<AndroidDevice>>(emptyList()) }
@@ -124,8 +137,13 @@ fun App() {
         var isLoadingDeviceProperties by remember { mutableStateOf(false) }
         var deviceSystemInfoLoadedSerial by remember { mutableStateOf<String?>(null) }
         var devicePropertiesLoadedSerial by remember { mutableStateOf<String?>(null) }
+        var deviceLogProgress by remember { mutableStateOf<DeviceLogCaptureProgress?>(null) }
+        var lastDeviceLogResult by remember { mutableStateOf<DeviceLogCaptureResult?>(null) }
+        var deviceLogJob by remember { mutableStateOf<Job?>(null) }
+        var deviceLogCapturingDeviceLabel by remember { mutableStateOf<String?>(null) }
         val selectedDevice = devices.firstOrNull { it.serialNumber == selectedDeviceSerial }
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
+        val isCapturingLogcat = deviceLogJob != null
 
         fun appendCommand(command: String) {
             commandLog = (commandLog + command).takeLast(200)
@@ -164,6 +182,11 @@ fun App() {
                     devicePropertiesLoadedSerial = null
                     isLoadingDeviceSystemInfo = false
                     isLoadingDeviceProperties = false
+                    if (!isCapturingLogcat) {
+                        deviceLogProgress = null
+                        lastDeviceLogResult = null
+                        deviceLogCapturingDeviceLabel = null
+                    }
 
                     if (nextSelectedDeviceSerial == null) {
                         statusText = if (discoveredDevices.isEmpty()) {
@@ -195,6 +218,9 @@ fun App() {
                             statusText = error.message ?: "读取系统信息失败"
                             appendCommand("错误: 读取系统信息失败 - ${error.message ?: "未知错误"}")
                         }
+                    } else if (selectedTestModule == TestModule.Log) {
+                        statusText = "发现 ${discoveredDevices.size} 台设备，准备抓取 Logcat"
+                        appendCommand("状态: $statusText")
                     } else {
                         statusText = "发现 ${discoveredDevices.size} 台设备，准备读取应用"
                         appendCommand("状态: $statusText")
@@ -543,6 +569,76 @@ fun App() {
             }
         }
 
+        fun captureSelectedDeviceLogs() {
+            if (isCapturingLogcat) return
+            val device = selectedReadyDevice
+            if (device == null) {
+                statusText = "先选择状态为 device 的设备"
+                appendCommand("错误: 先选择状态为 device 的设备")
+                return
+            }
+
+            val job = scope.launch {
+                deviceLogProgress = null
+                lastDeviceLogResult = null
+                deviceLogCapturingDeviceLabel = "${device.model} · ${device.serialNumber}"
+                statusText = "正在抓取 Logcat..."
+                appendCommand("状态: 开始抓取设备 ${device.serialNumber} Logcat")
+                try {
+                    val result = deviceLogAdb.captureFullLogs(
+                        deviceSerial = device.serialNumber,
+                        deviceModel = device.model,
+                        logCommand = ::appendCommand,
+                        onProgress = { progress ->
+                            deviceLogProgress = progress
+                            statusText = "抓取 Logcat：${progress.currentSection} ${progress.completedSections}/${progress.totalSections}"
+                        },
+                    )
+                    deviceLogProgress = null
+                    lastDeviceLogResult = result
+                    when (result.endState) {
+                        DeviceLogCaptureEndState.COMPLETED -> {
+                            statusText = "Logcat 抓取完成：${result.filePath}"
+                            appendCommand("状态: Logcat 抓取完成 - ${result.filePath}")
+                        }
+                        DeviceLogCaptureEndState.STOPPED -> {
+                            statusText = "Logcat 已停止，日志已保存：${result.filePath}"
+                            appendCommand("状态: Logcat 已停止，日志已保存 - ${result.filePath}")
+                        }
+                        DeviceLogCaptureEndState.INTERRUPTED -> {
+                            statusText = "Logcat 意外中止，日志已保存：${result.filePath}"
+                            appendCommand("状态: Logcat 意外中止，日志已保存 - ${result.filePath}")
+                        }
+                    }
+                } catch (error: CancellationException) {
+                    deviceLogProgress = null
+                    deviceLogCapturingDeviceLabel = null
+                    statusText = "Logcat 抓取已停止"
+                    appendCommand("状态: Logcat 抓取已停止")
+                } catch (error: Throwable) {
+                    deviceLogProgress = null
+                    deviceLogCapturingDeviceLabel = null
+                    statusText = error.message ?: "Logcat 抓取失败"
+                    appendCommand("错误: Logcat 抓取失败 - ${error.message ?: "未知错误"}")
+                } finally {
+                    deviceLogJob = null
+                    deviceLogCapturingDeviceLabel = null
+                }
+            }
+            deviceLogJob = job
+        }
+
+        fun revealDeviceLogFile(filePath: String) {
+            val opened = revealFileInDirectory(filePath)
+            if (opened) {
+                statusText = "已打开日志所在目录"
+                appendCommand("状态: 已打开日志所在目录 - $filePath")
+            } else {
+                statusText = "无法打开日志所在目录"
+                appendCommand("错误: 无法打开日志所在目录 - $filePath")
+            }
+        }
+
         fun updateApplicationEnabledState(packageName: String, isEnabled: Boolean): List<InstalledAppInfo> {
             thirdPartyApps = thirdPartyApps.map { app ->
                 if (app.packageName == packageName) app.copy(isEnabled = isEnabled) else app
@@ -765,12 +861,13 @@ fun App() {
                 .background(MaterialTheme.colorScheme.background)
                 .safeContentPadding(),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
                 if (showPluginBanner && !isBannerDismissedThisSession) {
                     PluginCheckBanner(
                         message = bannerMessage,
@@ -991,6 +1088,21 @@ fun App() {
                                 }
                             }
 
+                            TestModule.Log -> {
+                                DeviceLogPanel(
+                                    selectedDevice = selectedDevice,
+                                    isRunning = isCapturingLogcat,
+                                    progress = deviceLogProgress,
+                                    lastResult = lastDeviceLogResult,
+                                    onCaptureLogs = ::captureSelectedDeviceLogs,
+                                    onStopCapture = {
+                                        deviceLogAdb.stopCurrentCapture()
+                                    },
+                                    onRevealLogFile = ::revealDeviceLogFile,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+
                             TestModule.App -> {
                                 ApplicationTestPanel(
                                     thirdPartyApps = thirdPartyApps,
@@ -1049,6 +1161,11 @@ fun App() {
                                     systemProperties = emptyList()
                                     deviceSystemInfoLoadedSerial = null
                                     devicePropertiesLoadedSerial = null
+                                    if (!isCapturingLogcat) {
+                                        deviceLogProgress = null
+                                        lastDeviceLogResult = null
+                                        deviceLogCapturingDeviceLabel = null
+                                    }
 
                                     if (device.isReady) {
                                         if (selectedTestModule == TestModule.DataFill) {
@@ -1056,6 +1173,8 @@ fun App() {
                                         } else if (selectedTestModule == TestModule.Device) {
                                             loadDeviceSystemInfo(device.serialNumber)
                                             loadDeviceSystemProperties(device.serialNumber)
+                                        } else if (selectedTestModule == TestModule.Log) {
+                                            statusText = "已选择设备 ${device.serialNumber}，可抓取 Logcat"
                                         } else {
                                             statusText = "已选择设备 ${device.serialNumber}"
                                         }
@@ -1074,6 +1193,74 @@ fun App() {
                     },
                     modifier = Modifier.weight(1f),
                 )
+                }
+                if (isCapturingLogcat) {
+                    LogCaptureFloatingButton(
+                        deviceLabel = deviceLogCapturingDeviceLabel ?: "Logcat 正在抓取",
+                        onStop = { deviceLogAdb.stopCurrentCapture() },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 88.dp, end = 40.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogCaptureFloatingButton(
+    deviceLabel: String,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+
+    Surface(
+        modifier = modifier
+            .offset {
+                IntOffset(
+                    x = dragOffset.x.roundToInt(),
+                    y = dragOffset.y.roundToInt(),
+                )
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    dragOffset += dragAmount
+                }
+            },
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = RoundedCornerShape(8.dp),
+        tonalElevation = 6.dp,
+        shadowElevation = 6.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Logcat 正在抓取",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = deviceLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+            Button(
+                onClick = onStop,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                Text("停止")
             }
         }
     }
