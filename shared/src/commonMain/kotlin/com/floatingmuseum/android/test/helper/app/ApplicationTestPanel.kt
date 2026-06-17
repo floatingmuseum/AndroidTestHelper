@@ -555,7 +555,11 @@ private fun ApplicationDetailPanel(
                 ApplicationIcon(
                     iconBytes = app.iconBytes,
                     packageName = app.packageName,
-                    modifier = Modifier.size(56.dp),
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clickable(enabled = !isRunning && app.iconBytes != null) {
+                            onAction("保存图标")
+                        },
                 )
                 SelectionContainer {
                     Column(

@@ -203,3 +203,8 @@ private fun fallbackJFileChooser(
         null
     }
 }
+
+actual fun saveBytesToFile(directoryPath: String, fileName: String, bytes: ByteArray) {
+    File(directoryPath, fileName).writeBytes(bytes)
+}
+

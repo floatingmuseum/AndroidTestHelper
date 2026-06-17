@@ -630,6 +630,33 @@ fun App() {
                                 appendCommand("状态: 已导出 ${result.fileCount} 个 APK 到 ${result.directoryPath}")
                             }
                         }
+                        "保存图标" -> {
+                            val iconBytes = app.iconBytes
+                            if (iconBytes == null) {
+                                statusText = "无法保存：应用没有图标数据"
+                                appendCommand("错误: 无法保存：应用没有图标数据")
+                            } else {
+                                val outputPath = selectDirectory(
+                                    dialogTitle = "选择图标保存路径",
+                                    approveButtonText = "保存",
+                                )
+                                if (outputPath == null) {
+                                    statusText = "已取消保存图标"
+                                    appendCommand("状态: 已取消保存图标")
+                                } else {
+                                    val safeAppName = app.appName.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                                    val fileName = "${safeAppName}_${app.packageName}.png"
+                                    try {
+                                        saveBytesToFile(outputPath, fileName, iconBytes)
+                                        statusText = "图标已成功保存到 $outputPath/$fileName"
+                                        appendCommand("状态: 图标已成功保存到 $outputPath/$fileName")
+                                    } catch (e: Exception) {
+                                        statusText = "保存图标失败: ${e.message}"
+                                        appendCommand("错误: 保存图标失败: ${e.message}")
+                                    }
+                                }
+                            }
+                        }
                         else -> {
                             statusText = "未知应用操作：$action"
                             appendCommand("错误: 未知应用操作：$action")

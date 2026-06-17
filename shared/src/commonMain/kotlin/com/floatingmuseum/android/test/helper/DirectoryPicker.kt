@@ -17,3 +17,9 @@ expect suspend fun selectApkFiles(
     dialogTitle: String,
     approveButtonText: String,
 ): List<String>
+
+/**
+ * 将字节数据保存到本地指定目录下的文件中。
+ */
+expect fun saveBytesToFile(directoryPath: String, fileName: String, bytes: ByteArray)
+
