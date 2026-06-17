@@ -49,9 +49,8 @@ private fun selectApkFilesWithNativeDialog(
         val dialog = FileDialog(null as Frame?, dialogTitle, FileDialog.LOAD).apply {
             isMultipleMode = true
             directory = System.getProperty("user.home")
-            file = "*.apk"
             filenameFilter = java.io.FilenameFilter { _, name ->
-                name.endsWith(".apk", ignoreCase = true)
+                name.endsWith(".apk", ignoreCase = true) || name.endsWith(".xapk", ignoreCase = true)
             }
         }
         dialog.isVisible = true
@@ -168,7 +167,7 @@ private fun fallbackJFileChooserApkFiles(
         isMultiSelectionEnabled = true
         this.dialogTitle = dialogTitle
         this.approveButtonText = approveButtonText
-        fileFilter = FileNameExtensionFilter("Android APK (*.apk)", "apk")
+        fileFilter = FileNameExtensionFilter("Android APK/XAPK (*.apk, *.xapk)", "apk", "xapk")
         currentDirectory = File(System.getProperty("user.home"))
     }
     val result = chooser.showDialog(null, approveButtonText)

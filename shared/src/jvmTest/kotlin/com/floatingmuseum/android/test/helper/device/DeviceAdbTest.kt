@@ -5,6 +5,7 @@ import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlinx.serialization.json.Json
 
 class DeviceAdbTest {
 
@@ -379,5 +380,45 @@ class DeviceAdbTest {
             command.args,
         )
         assertEquals("adb -s R58M123ABC shell input keyevent KEYCODE_APP_SWITCH", command.displayCommand)
+    }
+
+    @Test
+    fun testParseXApkManifest() {
+        val jsonStr = """
+            {
+                "xapk_version": 1,
+                "package_name": "com.example.game",
+                "name": "Super Game",
+                "version_code": "100",
+                "version_name": "1.0.0",
+                "split_apks": [
+                    {
+                        "file": "com.example.game.apk",
+                        "id": "base"
+                    },
+                    {
+                        "file": "config.arm64_v8a.apk",
+                        "id": "config.arm64_v8a"
+                    }
+                ],
+                "expansions": [
+                    {
+                        "file": "main.100.com.example.game.obb",
+                        "install_path": "Android/obb/com.example.game/main.100.com.example.game.obb",
+                        "install_location": "external_obb"
+                    }
+                ]
+            }
+        """.trimIndent()
+        val json = Json { ignoreUnknownKeys = true }
+        val manifest = json.decodeFromString<XApkManifest>(jsonStr)
+        assertEquals("com.example.game", manifest.packageName)
+        assertEquals("Super Game", manifest.name)
+        assertEquals(2, manifest.splitApks.size)
+        assertEquals("com.example.game.apk", manifest.splitApks[0].file)
+        assertEquals("config.arm64_v8a.apk", manifest.splitApks[1].file)
+        assertEquals(1, manifest.expansions.size)
+        assertEquals("main.100.com.example.game.obb", manifest.expansions[0].file)
+        assertEquals("Android/obb/com.example.game/main.100.com.example.game.obb", manifest.expansions[0].installPath)
     }
 }

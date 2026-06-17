@@ -5,6 +5,11 @@ import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
+import java.nio.file.Files
+import java.util.zip.ZipFile
 
 actual fun createDeviceAdb(): DeviceAdb = JvmDeviceAdb()
 
@@ -236,7 +241,6 @@ private class JvmDeviceAdb : DeviceAdb {
     ): List<ApkInstallResult> {
         return apkFilePaths.map { filePath ->
             val file = File(filePath)
-            val command = buildInstallApplicationCommand(deviceSerial, file)
             try {
                 if (!file.exists() || !file.isFile) {
                     ApkInstallResult(
@@ -245,33 +249,39 @@ private class JvmDeviceAdb : DeviceAdb {
                         success = false,
                         message = "文件不存在或不可读取",
                     )
-                } else if (!file.extension.equals("apk", ignoreCase = true)) {
-                    ApkInstallResult(
-                        filePath = file.absolutePath,
-                        fileName = file.name,
-                        success = false,
-                        message = "不是 APK 文件",
-                    )
                 } else {
-                    val output = AdbShell.executeAdb(
-                        args = command.args,
-                        displayCommand = command.displayCommand,
-                        logCommand = logCommand,
-                    )
-                    val trimmedOutput = output.trim()
-                    if (trimmedOutput.lineSequence().any { it.trim() == "Success" }) {
-                        ApkInstallResult(
-                            filePath = file.absolutePath,
-                            fileName = file.name,
-                            success = true,
-                            message = trimmedOutput.ifBlank { "Success" },
+                    val extension = file.extension.lowercase()
+                    if (extension == "apk") {
+                        val command = buildInstallApplicationCommand(deviceSerial, file)
+                        val output = AdbShell.executeAdb(
+                            args = command.args,
+                            displayCommand = command.displayCommand,
+                            logCommand = logCommand,
                         )
+                        val trimmedOutput = output.trim()
+                        if (trimmedOutput.lineSequence().any { it.trim() == "Success" }) {
+                            ApkInstallResult(
+                                filePath = file.absolutePath,
+                                fileName = file.name,
+                                success = true,
+                                message = trimmedOutput.ifBlank { "Success" },
+                            )
+                        } else {
+                            ApkInstallResult(
+                                filePath = file.absolutePath,
+                                fileName = file.name,
+                                success = false,
+                                message = trimmedOutput.ifBlank { "安装命令未返回 Success" },
+                            )
+                        }
+                    } else if (extension == "xapk") {
+                        installXApk(deviceSerial, file, logCommand)
                     } else {
                         ApkInstallResult(
                             filePath = file.absolutePath,
                             fileName = file.name,
                             success = false,
-                            message = trimmedOutput.ifBlank { "安装命令未返回 Success" },
+                            message = "不支持的文件格式: $extension",
                         )
                     }
                 }
@@ -758,3 +768,191 @@ private fun buildKeyEventCommand(
         displayCommand = "adb -s $deviceSerial shell input keyevent $keyCode",
     )
 }
+
+private suspend fun installXApk(
+    deviceSerial: String,
+    xapkFile: File,
+    logCommand: (String) -> Unit,
+): ApkInstallResult {
+    var tempDir: File? = null
+    try {
+        tempDir = Files.createTempDirectory("xapk_install_").toFile()
+        
+        // 1. 解压 XAPK
+        unzip(xapkFile, tempDir)
+        
+        // 2. 寻找到 manifest.json 并确定基础目录
+        val json = Json { ignoreUnknownKeys = true }
+        val manifestFile = tempDir.walk().firstOrNull { it.name == "manifest.json" }
+        val baseDir = manifestFile?.parentFile ?: tempDir
+        
+        val manifest = if (manifestFile != null && manifestFile.exists()) {
+            try {
+                json.decodeFromString<XApkManifest>(manifestFile.readText())
+            } catch (e: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+        
+        // 3. 寻找 APK 文件
+        val apkFiles = if (manifest != null && manifest.splitApks.isNotEmpty()) {
+            manifest.splitApks.map { splitApk ->
+                val directFile = File(baseDir, splitApk.file)
+                if (directFile.exists()) {
+                    directFile
+                } else {
+                    baseDir.walk().firstOrNull { it.name == File(splitApk.file).name }
+                }
+            }.filterNotNull()
+        } else {
+            baseDir.walk().filter { it.extension.lowercase() == "apk" }.toList()
+        }
+        
+        if (apkFiles.isEmpty()) {
+            return ApkInstallResult(
+                filePath = xapkFile.absolutePath,
+                fileName = xapkFile.name,
+                success = false,
+                message = "XAPK 解压后未找到 APK 文件",
+            )
+        }
+        
+        // 4. 执行 APK(s) 安装
+        val installOutput = if (apkFiles.size == 1) {
+            val apkFile = apkFiles.first()
+            val args = listOf("-s", deviceSerial, "install", "-r", apkFile.absolutePath)
+            val displayCmd = "adb -s $deviceSerial install -r \"${apkFile.absolutePath}\""
+            AdbShell.executeAdb(args, displayCmd, logCommand)
+        } else {
+            val args = listOf("-s", deviceSerial, "install-multiple", "-r") + apkFiles.map { it.absolutePath }
+            val displayCmd = "adb -s $deviceSerial install-multiple -r ${apkFiles.joinToString(" ") { "\"${it.absolutePath}\"" }}"
+            AdbShell.executeAdb(args, displayCmd, logCommand)
+        }
+        
+        val trimmedOutput = installOutput.trim()
+        val isInstallSuccess = trimmedOutput.lineSequence().any { it.trim() == "Success" }
+        if (!isInstallSuccess) {
+            return ApkInstallResult(
+                filePath = xapkFile.absolutePath,
+                fileName = xapkFile.name,
+                success = false,
+                message = "安装命令未返回 Success: $trimmedOutput",
+            )
+        }
+        
+        // 5. 推送 OBB 扩展文件（如果有的话）
+        val expansions = manifest?.expansions ?: emptyList()
+        val obbResults = mutableListOf<String>()
+        var obbSuccess = true
+        
+        for (expansion in expansions) {
+            val expansionFile = baseDir.walk().firstOrNull { it.name == File(expansion.file).name }
+            if (expansionFile == null || !expansionFile.exists()) {
+                obbResults.add("找不到 OBB 文件: ${expansion.file}")
+                obbSuccess = false
+                continue
+            }
+            
+            val installPath = expansion.installPath.ifBlank {
+                if (manifest?.packageName?.isNotBlank() == true) {
+                    "Android/obb/${manifest.packageName}/${File(expansion.file).name}"
+                } else {
+                    ""
+                }
+            }
+            
+            if (installPath.isBlank()) {
+                obbResults.add("无法确定 OBB 安装路径: ${expansion.file}")
+                obbSuccess = false
+                continue
+            }
+            
+            val remotePath = installPath.replace('\\', '/')
+            val deviceObbPath = if (remotePath.startsWith("/")) {
+                if (remotePath.startsWith("/sdcard")) remotePath else "/sdcard$remotePath"
+            } else {
+                if (remotePath.startsWith("sdcard/")) "/$remotePath" else "/sdcard/$remotePath"
+            }
+            
+            val parentPath = File(deviceObbPath).parent.replace('\\', '/')
+            try {
+                // 先在设备上创建 parent 目录
+                val mkdirArgs = listOf("-s", deviceSerial, "shell", "mkdir", "-p", parentPath)
+                val mkdirDisplay = "adb -s $deviceSerial shell mkdir -p \"$parentPath\""
+                AdbShell.executeAdb(mkdirArgs, mkdirDisplay, logCommand)
+                
+                // 推送 OBB
+                val pushArgs = listOf("-s", deviceSerial, "push", expansionFile.absolutePath, deviceObbPath)
+                val pushDisplay = "adb -s $deviceSerial push \"${expansionFile.absolutePath}\" \"$deviceObbPath\""
+                AdbShell.executeAdb(pushArgs, pushDisplay, logCommand)
+            } catch (e: Exception) {
+                obbResults.add("推送 OBB 失败 (${expansion.file}): ${e.message}")
+                obbSuccess = false
+            }
+        }
+        
+        val message = if (obbResults.isEmpty()) {
+            "Success"
+        } else if (obbSuccess) {
+            "Success (含 OBB 推送)"
+        } else {
+            "APK 安装成功，但 OBB 推送失败: ${obbResults.joinToString("; ")}"
+        }
+        
+        return ApkInstallResult(
+            filePath = xapkFile.absolutePath,
+            fileName = xapkFile.name,
+            success = true,
+            message = message,
+        )
+    } finally {
+        tempDir?.let { deleteDirectory(it) }
+    }
+}
+
+private fun unzip(zipFile: File, destDir: File) {
+    ZipFile(zipFile).use { zip ->
+        val entries = zip.entries()
+        while (entries.hasMoreElements()) {
+            val entry = entries.nextElement()
+            val entryFile = File(destDir, entry.name)
+            if (entry.isDirectory) {
+                entryFile.mkdirs()
+            } else {
+                entryFile.parentFile.mkdirs()
+                zip.getInputStream(entry).use { input ->
+                    entryFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun deleteDirectory(directory: File) {
+    directory.walkBottomUp().forEach {
+        it.delete()
+    }
+}
+
+@Serializable
+internal data class XApkManifest(
+    @SerialName("package_name") val packageName: String = "",
+    val name: String = "",
+    @SerialName("split_apks") val splitApks: List<XApkSplitApk> = emptyList(),
+    val expansions: List<XApkExpansion> = emptyList()
+)
+
+@Serializable
+internal data class XApkSplitApk(
+    val file: String
+)
+
+@Serializable
+internal data class XApkExpansion(
+    val file: String,
+    @SerialName("install_path") val installPath: String = ""
+)
