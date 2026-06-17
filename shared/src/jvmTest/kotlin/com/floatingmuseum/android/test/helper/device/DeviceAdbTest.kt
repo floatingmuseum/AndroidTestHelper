@@ -1,5 +1,7 @@
 package com.floatingmuseum.android.test.helper.device
 
+import java.io.File
+import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -120,5 +122,38 @@ class DeviceAdbTest {
         assertEquals("未知", parseBatteryHealth(unknownOutput))
         assertEquals("未知", parseBatteryTemp(unknownOutput))
         assertEquals("未知", parseBatteryVoltage(unknownOutput))
+    }
+
+    @Test
+    fun testBuildScreenshotFileNameIncludesSafeSerialAndTimestamp() {
+        val capturedAt = LocalDateTime.of(2026, 6, 17, 9, 8, 7)
+
+        assertEquals(
+            "screenshot_R58M123ABC_20260617_090807.png",
+            buildScreenshotFileName("R58M123ABC", capturedAt)
+        )
+        assertEquals(
+            "screenshot_192.168.1.5_5555_20260617_090807.png",
+            buildScreenshotFileName("192.168.1.5:5555", capturedAt)
+        )
+    }
+
+    @Test
+    fun testBuildScreenshotTransferPlanUsesRemoteAndLocalTargets() {
+        val capturedAt = LocalDateTime.of(2026, 6, 17, 9, 8, 7)
+        val outputDirectory = File("screenshots").absolutePath
+
+        val plan = buildScreenshotTransferPlan(
+            deviceSerial = "serial/with:bad chars",
+            outputDirectoryPath = outputDirectory,
+            capturedAt = capturedAt,
+        )
+
+        assertEquals("screenshot_serial_with_bad_chars_20260617_090807.png", plan.fileName)
+        assertEquals(
+            "/sdcard/AndroidTestHelperScreenshots/screenshot_serial_with_bad_chars_20260617_090807.png",
+            plan.remotePath
+        )
+        assertEquals(File(outputDirectory, plan.fileName).absolutePath, plan.localPath)
     }
 }

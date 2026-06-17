@@ -1,8 +1,14 @@
 package com.floatingmuseum.android.test.helper.device
 
 import com.floatingmuseum.android.test.helper.adb.AdbShell
+import java.io.File
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 actual fun createDeviceAdb(): DeviceAdb = JvmDeviceAdb()
+
+private const val ScreenshotRemoteDirectory = "/sdcard/AndroidTestHelperScreenshots"
+private val ScreenshotTimestampFormatter = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
 
 private class JvmDeviceAdb : DeviceAdb {
     override suspend fun loadSystemInfo(
@@ -105,15 +111,41 @@ private class JvmDeviceAdb : DeviceAdb {
 
     override suspend fun takeScreenshot(
         deviceSerial: String,
+        outputDirectoryPath: String,
         logCommand: (String) -> Unit,
-    ): String {
-        val remotePath = "/sdcard/screenshot.png"
+    ): ScreenshotResult {
+        val plan = buildScreenshotTransferPlan(
+            deviceSerial = deviceSerial,
+            outputDirectoryPath = outputDirectoryPath,
+            capturedAt = LocalDateTime.now(),
+        )
+        val localDirectory = File(outputDirectoryPath)
+        if (!localDirectory.exists() && !localDirectory.mkdirs()) {
+            throw IllegalStateException("无法创建截图保存目录：${localDirectory.absolutePath}")
+        }
+        if (!localDirectory.isDirectory) {
+            throw IllegalStateException("截图保存路径不是目录：${localDirectory.absolutePath}")
+        }
+
         AdbShell.executeAdb(
-            args = listOf("-s", deviceSerial, "shell", "screencap", "-p", remotePath),
-            displayCommand = "adb -s $deviceSerial shell screencap -p $remotePath",
+            args = listOf("-s", deviceSerial, "shell", "mkdir", "-p", ScreenshotRemoteDirectory),
+            displayCommand = "adb -s $deviceSerial shell mkdir -p $ScreenshotRemoteDirectory",
             logCommand = logCommand
         )
-        return remotePath
+        AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "screencap", "-p", plan.remotePath),
+            displayCommand = "adb -s $deviceSerial shell screencap -p ${plan.remotePath}",
+            logCommand = logCommand
+        )
+        AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "pull", plan.remotePath, plan.localPath),
+            displayCommand = "adb -s $deviceSerial pull ${plan.remotePath} ${plan.localPath}",
+            logCommand = logCommand
+        )
+        return ScreenshotResult(
+            remotePath = plan.remotePath,
+            localPath = plan.localPath,
+        )
     }
 
     private suspend fun executeGetProp(
@@ -217,4 +249,35 @@ internal fun parseSystemProperties(output: String): List<SystemProperty> {
             )
         }
         .toList()
+}
+
+internal data class ScreenshotTransferPlan(
+    val fileName: String,
+    val remotePath: String,
+    val localPath: String,
+)
+
+internal fun buildScreenshotTransferPlan(
+    deviceSerial: String,
+    outputDirectoryPath: String,
+    capturedAt: LocalDateTime,
+): ScreenshotTransferPlan {
+    val fileName = buildScreenshotFileName(deviceSerial, capturedAt)
+    return ScreenshotTransferPlan(
+        fileName = fileName,
+        remotePath = "$ScreenshotRemoteDirectory/$fileName",
+        localPath = File(outputDirectoryPath, fileName).absolutePath,
+    )
+}
+
+internal fun buildScreenshotFileName(
+    deviceSerial: String,
+    capturedAt: LocalDateTime,
+): String {
+    val safeSerial = deviceSerial.toScreenshotFileToken().ifBlank { "unknown_serial" }
+    return "screenshot_${safeSerial}_${capturedAt.format(ScreenshotTimestampFormatter)}.png"
+}
+
+private fun String.toScreenshotFileToken(): String {
+    return replace(Regex("[^a-zA-Z0-9._-]"), "_").trim('_')
 }

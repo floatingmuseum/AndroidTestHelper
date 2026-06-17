@@ -458,7 +458,7 @@ fun DeviceTestPanel(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "截取设备当前的屏幕。截图生成并保存在设备上的 /sdcard/screenshot.png 文件中。",
+                                        text = "截取设备当前屏幕，选择本地目录后自动拉回电脑保存；文件名包含设备 SN 和时间戳。",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -472,7 +472,7 @@ fun DeviceTestPanel(
                                     ),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text("获取截图", fontWeight = FontWeight.Bold)
+                                    Text("选择目录并截图", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }

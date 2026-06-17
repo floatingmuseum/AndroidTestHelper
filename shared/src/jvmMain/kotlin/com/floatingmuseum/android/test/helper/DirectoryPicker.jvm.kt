@@ -8,12 +8,15 @@ import javax.swing.UIManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-actual suspend fun selectDirectory(): String? = withContext(Dispatchers.Main) {
+actual suspend fun selectDirectory(
+    dialogTitle: String,
+    approveButtonText: String,
+): String? = withContext(Dispatchers.Main) {
     val osName = System.getProperty("os.name").lowercase()
     if (osName.contains("mac")) {
         try {
             System.setProperty("apple.awt.fileDialogForDirectories", "true")
-            val dialog = FileDialog(null as Frame?, "选择 APK 导出路径", FileDialog.LOAD)
+            val dialog = FileDialog(null as Frame?, dialogTitle, FileDialog.LOAD)
             dialog.isVisible = true
             val directory = dialog.directory
             System.setProperty("apple.awt.fileDialogForDirectories", "false")
@@ -23,14 +26,17 @@ actual suspend fun selectDirectory(): String? = withContext(Dispatchers.Main) {
                 null
             }
         } catch (e: Throwable) {
-            fallbackJFileChooser()
+            fallbackJFileChooser(dialogTitle, approveButtonText)
         }
     } else {
-        fallbackJFileChooser()
+        fallbackJFileChooser(dialogTitle, approveButtonText)
     }
 }
 
-private fun fallbackJFileChooser(): String? {
+private fun fallbackJFileChooser(
+    dialogTitle: String,
+    approveButtonText: String,
+): String? {
     try {
         UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName())
     } catch (e: Throwable) {
@@ -38,10 +44,11 @@ private fun fallbackJFileChooser(): String? {
     }
     val chooser = JFileChooser().apply {
         fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-        dialogTitle = "选择 APK 导出路径"
+        this.dialogTitle = dialogTitle
+        this.approveButtonText = approveButtonText
         currentDirectory = File(System.getProperty("user.home"))
     }
-    val result = chooser.showOpenDialog(null)
+    val result = chooser.showDialog(null, approveButtonText)
     return if (result == JFileChooser.APPROVE_OPTION) {
         chooser.selectedFile.absolutePath
     } else {

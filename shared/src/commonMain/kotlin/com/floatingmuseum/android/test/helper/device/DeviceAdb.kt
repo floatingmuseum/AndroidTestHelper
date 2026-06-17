@@ -25,6 +25,11 @@ data class SystemProperty(
     val value: String,
 )
 
+data class ScreenshotResult(
+    val remotePath: String,
+    val localPath: String,
+)
+
 interface DeviceAdb {
     suspend fun loadSystemInfo(
         deviceSerial: String,
@@ -43,8 +48,9 @@ interface DeviceAdb {
 
     suspend fun takeScreenshot(
         deviceSerial: String,
+        outputDirectoryPath: String,
         logCommand: (String) -> Unit,
-    ): String
+    ): ScreenshotResult
 }
 
 expect fun createDeviceAdb(): DeviceAdb

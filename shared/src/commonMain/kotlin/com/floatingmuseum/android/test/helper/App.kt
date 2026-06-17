@@ -322,12 +322,23 @@ fun App() {
             if (isRunning) return
             scope.launch {
                 isRunning = true
-                statusText = "正在截取设备屏幕..."
-                appendCommand("状态: 开始截取设备 $deviceSerial 屏幕...")
+                statusText = "选择截图保存目录..."
+                appendCommand("状态: 选择截图保存目录")
                 try {
-                    val remotePath = deviceAdb.takeScreenshot(deviceSerial, ::appendCommand)
-                    statusText = "屏幕截图成功，保存在设备 $remotePath"
-                    appendCommand("状态: 屏幕截图成功，文件保存在设备: $remotePath")
+                    val outputPath = selectDirectory(
+                        dialogTitle = "选择截图保存路径",
+                        approveButtonText = "保存",
+                    )
+                    if (outputPath == null) {
+                        statusText = "已取消截图"
+                        appendCommand("状态: 已取消截图")
+                    } else {
+                        statusText = "正在截取设备屏幕..."
+                        appendCommand("状态: 开始截取设备 $deviceSerial 屏幕，保存到 $outputPath")
+                        val result = deviceAdb.takeScreenshot(deviceSerial, outputPath, ::appendCommand)
+                        statusText = "屏幕截图成功，已保存到 ${result.localPath}"
+                        appendCommand("状态: 屏幕截图成功，本地文件: ${result.localPath}，设备文件: ${result.remotePath}")
+                    }
                 } catch (error: Throwable) {
                     statusText = error.message ?: "屏幕截图失败"
                     appendCommand("错误: 屏幕截图失败 - ${error.message ?: "未知错误"}")
@@ -490,7 +501,10 @@ fun App() {
                             appendCommand("状态: 已卸载 ${app.packageName}")
                         }
                         "导出APK" -> {
-                            val outputPath = selectDirectory()
+                            val outputPath = selectDirectory(
+                                dialogTitle = "选择 APK 导出路径",
+                                approveButtonText = "导出",
+                            )
                             if (outputPath == null) {
                                 statusText = "已取消导出"
                                 appendCommand("状态: 已取消导出")
