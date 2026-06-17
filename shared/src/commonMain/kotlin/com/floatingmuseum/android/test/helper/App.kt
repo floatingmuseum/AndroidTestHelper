@@ -799,6 +799,46 @@ fun App() {
                                             }
                                         }
                                     },
+                                    onScreenSizeControl = { size ->
+                                        selectedReadyDevice?.serialNumber?.let { serial ->
+                                            scope.launch {
+                                                isRunning = true
+                                                statusText = "执行屏幕分辨率修改操作..."
+                                                appendCommand("状态: 执行屏幕分辨率修改操作 adb -s $serial shell wm size $size")
+                                                try {
+                                                    deviceAdb.modifyScreenSize(serial, size, ::appendCommand)
+                                                    statusText = "屏幕分辨率修改操作已执行"
+                                                    appendCommand("状态: 屏幕分辨率修改操作已执行")
+                                                    deviceSystemInfo = deviceAdb.loadSystemInfo(serial, ::appendCommand)
+                                                } catch (error: Throwable) {
+                                                    statusText = error.message ?: "屏幕分辨率修改操作失败"
+                                                    appendCommand("错误: 屏幕分辨率修改操作失败 - ${error.message ?: "未知错误"}")
+                                                } finally {
+                                                    isRunning = false
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onScreenDensityControl = { density ->
+                                        selectedReadyDevice?.serialNumber?.let { serial ->
+                                            scope.launch {
+                                                isRunning = true
+                                                statusText = "执行屏幕密度修改操作..."
+                                                appendCommand("状态: 执行屏幕密度修改操作 adb -s $serial shell wm density $density")
+                                                try {
+                                                    deviceAdb.modifyScreenDensity(serial, density, ::appendCommand)
+                                                    statusText = "屏幕密度修改操作已执行"
+                                                    appendCommand("状态: 屏幕密度修改操作已执行")
+                                                    deviceSystemInfo = deviceAdb.loadSystemInfo(serial, ::appendCommand)
+                                                } catch (error: Throwable) {
+                                                    statusText = error.message ?: "屏幕密度修改操作失败"
+                                                    appendCommand("错误: 屏幕密度修改操作失败 - ${error.message ?: "未知错误"}")
+                                                } finally {
+                                                    isRunning = false
+                                                }
+                                            }
+                                        }
+                                    },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }

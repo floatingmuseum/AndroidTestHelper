@@ -78,6 +78,31 @@ private class JvmDeviceAdb : DeviceAdb {
         }
         val ipAddress = parseIpAddress(ipOutput)
 
+        val dumpsysWindowDisplaysOutput = try {
+            AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "dumpsys", "window", "displays"),
+                displayCommand = "adb -s $deviceSerial shell dumpsys window displays",
+                logCommand = logCommand
+            )
+        } catch (e: Throwable) {
+            ""
+        }
+        val displayId = parseDisplayId(dumpsysWindowDisplaysOutput)
+        val displayInit = parseDisplayInit(dumpsysWindowDisplaysOutput)
+        val displayCur = parseDisplayCur(dumpsysWindowDisplaysOutput)
+        val displayApp = parseDisplayApp(dumpsysWindowDisplaysOutput)
+
+        val dumpsysDisplayOutput = try {
+            AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "dumpsys", "display"),
+                displayCommand = "adb -s $deviceSerial shell dumpsys display",
+                logCommand = logCommand
+            )
+        } catch (e: Throwable) {
+            ""
+        }
+        val displayRefreshRate = parseDisplayRefreshRate(dumpsysDisplayOutput)
+
         return DeviceSystemInfo(
             brand = brand,
             model = model,
@@ -100,6 +125,11 @@ private class JvmDeviceAdb : DeviceAdb {
             batteryChargeCounter = batteryChargeCounter,
             batteryPresent = batteryPresent,
             batteryTechnology = batteryTechnology,
+            displayId = displayId,
+            displayInit = displayInit,
+            displayCur = displayCur,
+            displayApp = displayApp,
+            displayRefreshRate = displayRefreshRate,
         )
     }
 
@@ -251,6 +281,42 @@ private class JvmDeviceAdb : DeviceAdb {
         )
     }
 
+    override suspend fun modifyScreenSize(
+        deviceSerial: String,
+        size: String,
+        logCommand: (String) -> Unit,
+    ) {
+        val args = if (size.trim().lowercase() == "reset") {
+            listOf("-s", deviceSerial, "shell", "wm", "size", "reset")
+        } else {
+            listOf("-s", deviceSerial, "shell", "wm", "size", size)
+        }
+        val displayCmd = "adb -s $deviceSerial shell wm size $size"
+        AdbShell.executeAdb(
+            args = args,
+            displayCommand = displayCmd,
+            logCommand = logCommand
+        )
+    }
+
+    override suspend fun modifyScreenDensity(
+        deviceSerial: String,
+        density: String,
+        logCommand: (String) -> Unit,
+    ) {
+        val args = if (density.trim().lowercase() == "reset") {
+            listOf("-s", deviceSerial, "shell", "wm", "density", "reset")
+        } else {
+            listOf("-s", deviceSerial, "shell", "wm", "density", density)
+        }
+        val displayCmd = "adb -s $deviceSerial shell wm density $density"
+        AdbShell.executeAdb(
+            args = args,
+            displayCommand = displayCmd,
+            logCommand = logCommand
+        )
+    }
+
     private suspend fun executeGetProp(
         deviceSerial: String,
         propKey: String,
@@ -269,8 +335,56 @@ private class JvmDeviceAdb : DeviceAdb {
 }
 
 internal fun parseScreenSize(output: String): String {
-    val regex = Regex("""Physical size:\s*(\d+x\d+)""")
+    val overrideRegex = Regex("""Override size:\s*(\d+x\d+)""")
+    val physicalRegex = Regex("""Physical size:\s*(\d+x\d+)""")
+    val overrideMatch = overrideRegex.find(output)?.groupValues?.get(1)
+    val physicalMatch = physicalRegex.find(output)?.groupValues?.get(1)
+    return when {
+        overrideMatch != null && physicalMatch != null -> "$overrideMatch (物理: $physicalMatch)"
+        overrideMatch != null -> overrideMatch
+        physicalMatch != null -> physicalMatch
+        else -> "未知"
+    }
+}
+
+internal fun parseDisplayId(output: String): String {
+    val regex = Regex("""Display:\s+mDisplayId=(\d+)""")
     return regex.find(output)?.groupValues?.get(1) ?: "未知"
+}
+
+internal fun parseDisplayInit(output: String): String {
+    val regex = Regex("""\binit=(\d+x\d+\s+\d+dpi|\d+x\d+)""")
+    return regex.find(output)?.groupValues?.get(1) ?: "未知"
+}
+
+internal fun parseDisplayCur(output: String): String {
+    val regex = Regex("""\bcur=(\d+x\d+)""")
+    return regex.find(output)?.groupValues?.get(1) ?: "未知"
+}
+
+internal fun parseDisplayApp(output: String): String {
+    val regex = Regex("""\bapp=(\d+x\d+)""")
+    return regex.find(output)?.groupValues?.get(1) ?: "未知"
+}
+
+internal fun parseDisplayRefreshRate(output: String): String {
+    val fpsRegex = Regex("""fps\s*[=:\s]\s*(\d+(?:\.\d+)?)""")
+    val fpsMatch = fpsRegex.find(output)?.groupValues?.get(1)
+    if (fpsMatch != null) return "$fpsMatch Hz"
+
+    val renderRateRegex = Regex("""renderFrameRate\s+(\d+(?:\.\d+)?)""")
+    val renderRateMatch = renderRateRegex.find(output)?.groupValues?.get(1)
+    if (renderRateMatch != null) return "$renderRateMatch Hz"
+
+    val defaultRateRegex = Regex("""mDefaultRefreshRate:\s*(\d+(?:\.\d+)?)""")
+    val defaultRateMatch = defaultRateRegex.find(output)?.groupValues?.get(1)
+    if (defaultRateMatch != null) return "$defaultRateMatch Hz"
+
+    val refreshRateRegex = Regex("""\b(?:mRefreshRate|refreshRate|fps)\b\s*[=:\s]\s*(\d+(?:\.\d+)?)""", RegexOption.IGNORE_CASE)
+    val refreshRateMatch = refreshRateRegex.find(output)?.groupValues?.get(1)
+    if (refreshRateMatch != null) return "$refreshRateMatch Hz"
+
+    return "未知"
 }
 
 internal fun parseScreenDensity(output: String): String {

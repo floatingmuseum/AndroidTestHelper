@@ -15,6 +15,12 @@ class DeviceAdbTest {
         """.trimIndent()
         assertEquals("1600x2560", parseScreenSize(output))
 
+        val outputWithOverride = """
+            Physical size: 1600x2560
+            Override size: 1200x1920
+        """.trimIndent()
+        assertEquals("1200x1920 (物理: 1600x2560)", parseScreenSize(outputWithOverride))
+
         val outputUnknown = """
             Something else
         """.trimIndent()
@@ -91,6 +97,35 @@ class DeviceAdbTest {
 
         val unknown = "something else"
         assertEquals("未知", parseScreenDensity(unknown))
+    }
+
+    @Test
+    fun testParseDisplayDetails() {
+        val dumpsysWindowDisplays = """
+            WINDOW MANAGER DISPLAY CONTENTS (dumpsys window displays)
+              Display: mDisplayId=0 (organized)
+                init=1600x2560 320dpi mMinSizeOfResizeableTaskDp=220 cur=2560x1600 app=2560x1600 rng=1600x1600-2560x2560
+        """.trimIndent()
+
+        assertEquals("0", parseDisplayId(dumpsysWindowDisplays))
+        assertEquals("1600x2560 320dpi", parseDisplayInit(dumpsysWindowDisplays))
+        assertEquals("2560x1600", parseDisplayCur(dumpsysWindowDisplays))
+        assertEquals("2560x1600", parseDisplayApp(dumpsysWindowDisplays))
+
+        val dumpsysDisplayWithFps = """
+            mOverrideDisplayInfo=DisplayInfo{"内置屏幕", displayId 0, fps 90.0, vsync 90.0}
+        """.trimIndent()
+        assertEquals("90.0 Hz", parseDisplayRefreshRate(dumpsysDisplayWithFps))
+
+        val dumpsysDisplayWithRenderRate = """
+            renderFrameRate 120.0
+        """.trimIndent()
+        assertEquals("120.0 Hz", parseDisplayRefreshRate(dumpsysDisplayWithRenderRate))
+
+        val dumpsysDisplayWithDefaultRate = """
+            mDefaultRefreshRate: 60.0
+        """.trimIndent()
+        assertEquals("60.0 Hz", parseDisplayRefreshRate(dumpsysDisplayWithDefaultRate))
     }
 
     @Test

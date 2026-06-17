@@ -64,6 +64,8 @@ fun DeviceTestPanel(
     onQuickAction: (DeviceQuickAction) -> Unit,
     isRunning: Boolean,
     onBatteryControl: ((args: List<String>) -> Unit)? = null,
+    onScreenSizeControl: ((String) -> Unit)? = null,
+    onScreenDensityControl: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -239,10 +241,158 @@ fun DeviceTestPanel(
                                             modifier = Modifier
                                                 .fillMaxSize()
                                                 .verticalScroll(rememberScrollState()),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                            verticalArrangement = Arrangement.spacedBy(16.dp)
                                         ) {
-                                            InfoRow("屏幕分辨率", systemInfo.screenSize)
-                                            InfoRow("屏幕密度 (Density)", systemInfo.screenDensity)
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                                )
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(16.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "屏幕基本参数",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    InfoRow("屏幕分辨率", systemInfo.screenSize)
+                                                    InfoRow("屏幕密度 (Density)", systemInfo.screenDensity)
+                                                    InfoRow("屏幕刷新率", systemInfo.displayRefreshRate)
+                                                }
+                                            }
+
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                                )
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(16.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "显示屏详细配置 (dumpsys)",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    InfoRow("显示屏 ID (mDisplayId)", systemInfo.displayId)
+                                                    InfoRow("物理初始配置 (init)", systemInfo.displayInit)
+                                                    InfoRow("当前显示配置 (cur)", systemInfo.displayCur)
+                                                    InfoRow("应用可用区域 (app)", systemInfo.displayApp)
+                                                }
+                                            }
+
+                                            if (onScreenSizeControl != null || onScreenDensityControl != null) {
+                                                Card(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
+                                                    )
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier.padding(16.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = "屏幕模拟与调试 (仅测试使用)",
+                                                            style = MaterialTheme.typography.titleSmall,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.error
+                                                        )
+
+                                                        if (onScreenSizeControl != null) {
+                                                            var mockSizeText by remember { mutableStateOf("") }
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                                verticalAlignment = Alignment.CenterVertically
+                                                            ) {
+                                                                Text("设置分辨率 (例如 1080x1920)", style = MaterialTheme.typography.bodyMedium)
+                                                                Row(
+                                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
+                                                                    OutlinedTextField(
+                                                                        value = mockSizeText,
+                                                                        onValueChange = { mockSizeText = it },
+                                                                        modifier = Modifier.width(150.dp),
+                                                                        singleLine = true,
+                                                                        placeholder = { Text("宽x高") }
+                                                                    )
+                                                                    Button(
+                                                                        onClick = {
+                                                                            if (mockSizeText.trim().isNotEmpty()) {
+                                                                                onScreenSizeControl(mockSizeText.trim())
+                                                                            }
+                                                                        },
+                                                                        enabled = !isRunning && mockSizeText.isNotEmpty(),
+                                                                        modifier = Modifier.height(36.dp)
+                                                                    ) {
+                                                                        Text("修改")
+                                                                    }
+                                                                }
+                                                            }
+                                                            Button(
+                                                                onClick = { onScreenSizeControl("reset") },
+                                                                enabled = !isRunning,
+                                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                                                modifier = Modifier.fillMaxWidth().height(40.dp)
+                                                            ) {
+                                                                Text("重置屏幕分辨率 (Reset)")
+                                                            }
+                                                        }
+
+                                                        if (onScreenDensityControl != null) {
+                                                            Spacer(modifier = Modifier.height(8.dp))
+                                                            var mockDensityText by remember { mutableStateOf("") }
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                                verticalAlignment = Alignment.CenterVertically
+                                                            ) {
+                                                                Text("设置屏幕密度 (例如 480)", style = MaterialTheme.typography.bodyMedium)
+                                                                Row(
+                                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
+                                                                    OutlinedTextField(
+                                                                        value = mockDensityText,
+                                                                        onValueChange = { mockDensityText = it.filter { c -> c.isDigit() } },
+                                                                        modifier = Modifier.width(150.dp),
+                                                                        singleLine = true,
+                                                                        placeholder = { Text("DPI") }
+                                                                    )
+                                                                    Button(
+                                                                        onClick = {
+                                                                            if (mockDensityText.trim().isNotEmpty()) {
+                                                                                onScreenDensityControl(mockDensityText.trim())
+                                                                            }
+                                                                        },
+                                                                        enabled = !isRunning && mockDensityText.isNotEmpty(),
+                                                                        modifier = Modifier.height(36.dp)
+                                                                    ) {
+                                                                        Text("修改")
+                                                                    }
+                                                                }
+                                                            }
+                                                            Button(
+                                                                onClick = { onScreenDensityControl("reset") },
+                                                                enabled = !isRunning,
+                                                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                                                modifier = Modifier.fillMaxWidth().height(40.dp)
+                                                            ) {
+                                                                Text("重置屏幕密度 (Reset)")
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     } else {
                                         Box(

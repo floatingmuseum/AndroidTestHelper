@@ -25,6 +25,11 @@ data class DeviceSystemInfo(
     val batteryChargeCounter: String = "未知",
     val batteryPresent: String = "未知",
     val batteryTechnology: String = "未知",
+    val displayId: String = "未知",
+    val displayInit: String = "未知",
+    val displayCur: String = "未知",
+    val displayApp: String = "未知",
+    val displayRefreshRate: String = "未知",
 )
 
 @Serializable
@@ -95,6 +100,18 @@ interface DeviceAdb {
     suspend fun controlBattery(
         deviceSerial: String,
         args: List<String>,
+        logCommand: (String) -> Unit,
+    )
+
+    suspend fun modifyScreenSize(
+        deviceSerial: String,
+        size: String,
+        logCommand: (String) -> Unit,
+    )
+
+    suspend fun modifyScreenDensity(
+        deviceSerial: String,
+        density: String,
         logCommand: (String) -> Unit,
     )
 }
