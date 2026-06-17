@@ -30,6 +30,13 @@ data class ScreenshotResult(
     val localPath: String,
 )
 
+data class ApkInstallResult(
+    val filePath: String,
+    val fileName: String,
+    val success: Boolean,
+    val message: String,
+)
+
 interface DeviceAdb {
     suspend fun loadSystemInfo(
         deviceSerial: String,
@@ -51,6 +58,12 @@ interface DeviceAdb {
         outputDirectoryPath: String,
         logCommand: (String) -> Unit,
     ): ScreenshotResult
+
+    suspend fun installApplications(
+        deviceSerial: String,
+        apkFilePaths: List<String>,
+        logCommand: (String) -> Unit,
+    ): List<ApkInstallResult>
 }
 
 expect fun createDeviceAdb(): DeviceAdb

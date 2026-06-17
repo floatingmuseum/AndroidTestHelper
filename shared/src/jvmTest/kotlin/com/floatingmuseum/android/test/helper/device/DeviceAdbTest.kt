@@ -156,4 +156,23 @@ class DeviceAdbTest {
         )
         assertEquals(File(outputDirectory, plan.fileName).absolutePath, plan.localPath)
     }
+
+    @Test
+    fun testBuildInstallApplicationCommandUsesExplicitDeviceAndApkPath() {
+        val apkFile = File("local apps/demo.apk").absoluteFile
+
+        val command = buildInstallApplicationCommand(
+            deviceSerial = "R58M123ABC",
+            apkFile = apkFile,
+        )
+
+        assertEquals(
+            listOf("-s", "R58M123ABC", "install", "-r", apkFile.absolutePath),
+            command.args,
+        )
+        assertEquals(
+            "adb -s R58M123ABC install -r \"${apkFile.absolutePath}\"",
+            command.displayCommand,
+        )
+    }
 }

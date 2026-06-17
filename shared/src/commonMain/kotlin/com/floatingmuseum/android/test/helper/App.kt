@@ -348,6 +348,62 @@ fun App() {
             }
         }
 
+        fun installSelectedApplications(deviceSerial: String) {
+            if (isRunning) return
+            scope.launch {
+                isRunning = true
+                statusText = "选择要安装的 APK..."
+                appendCommand("状态: 选择要安装的 APK")
+                try {
+                    val apkPaths = selectApkFiles(
+                        dialogTitle = "选择要安装的 APK",
+                        approveButtonText = "安装",
+                    )
+                    if (apkPaths.isEmpty()) {
+                        statusText = "已取消安装应用"
+                        appendCommand("状态: 已取消安装应用")
+                    } else {
+                        statusText = "正在安装 ${apkPaths.size} 个应用..."
+                        appendCommand("状态: 开始向设备 $deviceSerial 安装 ${apkPaths.size} 个 APK")
+                        val results = deviceAdb.installApplications(deviceSerial, apkPaths, ::appendCommand)
+                        val successCount = results.count { it.success }
+                        val failureResults = results.filterNot { it.success }
+
+                        results.forEach { result ->
+                            if (result.success) {
+                                appendCommand("状态: 安装成功 - ${result.fileName}")
+                            } else {
+                                appendCommand("错误: 安装失败 - ${result.fileName} - ${result.message}")
+                            }
+                        }
+
+                        if (successCount > 0) {
+                            thirdPartyApps = emptyList()
+                            thirdPartyLoadedSerial = null
+                            systemApps = emptyList()
+                            systemLoadedSerial = null
+                            systemAppsCacheFormattedTime = null
+                        }
+
+                        statusText = if (failureResults.isEmpty()) {
+                            "应用安装完成，成功 $successCount / ${results.size}"
+                        } else {
+                            "应用安装完成，成功 $successCount / ${results.size}，失败 ${failureResults.size} 个"
+                        }
+                        appendCommand("状态: $statusText")
+                    }
+                } catch (error: CancellationException) {
+                    statusText = "安装应用已停止"
+                    appendCommand("状态: 安装应用已停止")
+                } catch (error: Throwable) {
+                    statusText = error.message ?: "安装应用失败"
+                    appendCommand("错误: 安装应用失败 - ${error.message ?: "未知错误"}")
+                } finally {
+                    isRunning = false
+                }
+            }
+        }
+
         fun loadThirdPartyApps(deviceSerial: String) {
             if (isRunning) return
             scope.launch {
@@ -688,6 +744,9 @@ fun App() {
                                     },
                                     onTakeScreenshot = {
                                         selectedReadyDevice?.serialNumber?.let { takeSelectedDeviceScreenshot(it) }
+                                    },
+                                    onInstallApplications = {
+                                        selectedReadyDevice?.serialNumber?.let { installSelectedApplications(it) }
                                     },
                                     isRunning = isRunning,
                                     modifier = Modifier.fillMaxSize(),

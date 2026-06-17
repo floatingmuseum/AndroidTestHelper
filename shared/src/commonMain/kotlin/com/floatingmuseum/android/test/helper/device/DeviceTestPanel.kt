@@ -60,6 +60,7 @@ fun DeviceTestPanel(
     onRefreshProperties: () -> Unit,
     onReboot: () -> Unit,
     onTakeScreenshot: () -> Unit,
+    onInstallApplications: () -> Unit,
     isRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -473,6 +474,50 @@ fun DeviceTestPanel(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text("选择目录并截图", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        // 安装应用卡片
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.15f)
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f)
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "安装应用",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.tertiary
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "选择一个或多个本地 APK，按选择顺序依次安装到当前设备。每个安装命令都会写入命令记录。",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                Button(
+                                    onClick = onInstallApplications,
+                                    enabled = !isRunning,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.tertiary
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("选择 APK 并安装", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }

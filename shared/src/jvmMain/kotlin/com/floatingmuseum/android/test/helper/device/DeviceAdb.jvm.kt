@@ -4,6 +4,7 @@ import com.floatingmuseum.android.test.helper.adb.AdbShell
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.CancellationException
 
 actual fun createDeviceAdb(): DeviceAdb = JvmDeviceAdb()
 
@@ -148,6 +149,65 @@ private class JvmDeviceAdb : DeviceAdb {
         )
     }
 
+    override suspend fun installApplications(
+        deviceSerial: String,
+        apkFilePaths: List<String>,
+        logCommand: (String) -> Unit,
+    ): List<ApkInstallResult> {
+        return apkFilePaths.map { filePath ->
+            val file = File(filePath)
+            val command = buildInstallApplicationCommand(deviceSerial, file)
+            try {
+                if (!file.exists() || !file.isFile) {
+                    ApkInstallResult(
+                        filePath = file.absolutePath,
+                        fileName = file.name,
+                        success = false,
+                        message = "文件不存在或不可读取",
+                    )
+                } else if (!file.extension.equals("apk", ignoreCase = true)) {
+                    ApkInstallResult(
+                        filePath = file.absolutePath,
+                        fileName = file.name,
+                        success = false,
+                        message = "不是 APK 文件",
+                    )
+                } else {
+                    val output = AdbShell.executeAdb(
+                        args = command.args,
+                        displayCommand = command.displayCommand,
+                        logCommand = logCommand,
+                    )
+                    val trimmedOutput = output.trim()
+                    if (trimmedOutput.lineSequence().any { it.trim() == "Success" }) {
+                        ApkInstallResult(
+                            filePath = file.absolutePath,
+                            fileName = file.name,
+                            success = true,
+                            message = trimmedOutput.ifBlank { "Success" },
+                        )
+                    } else {
+                        ApkInstallResult(
+                            filePath = file.absolutePath,
+                            fileName = file.name,
+                            success = false,
+                            message = trimmedOutput.ifBlank { "安装命令未返回 Success" },
+                        )
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                ApkInstallResult(
+                    filePath = file.absolutePath,
+                    fileName = file.name,
+                    success = false,
+                    message = error.message ?: "未知错误",
+                )
+            }
+        }
+    }
+
     private suspend fun executeGetProp(
         deviceSerial: String,
         propKey: String,
@@ -280,4 +340,19 @@ internal fun buildScreenshotFileName(
 
 private fun String.toScreenshotFileToken(): String {
     return replace(Regex("[^a-zA-Z0-9._-]"), "_").trim('_')
+}
+
+internal data class ApplicationInstallCommand(
+    val args: List<String>,
+    val displayCommand: String,
+)
+
+internal fun buildInstallApplicationCommand(
+    deviceSerial: String,
+    apkFile: File,
+): ApplicationInstallCommand {
+    return ApplicationInstallCommand(
+        args = listOf("-s", deviceSerial, "install", "-r", apkFile.absolutePath),
+        displayCommand = "adb -s $deviceSerial install -r \"${apkFile.absolutePath}\"",
+    )
 }
