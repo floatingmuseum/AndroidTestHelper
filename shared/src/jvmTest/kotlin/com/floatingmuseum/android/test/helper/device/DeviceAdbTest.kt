@@ -99,6 +99,10 @@ class DeviceAdbTest {
             Current Battery Service state:
               AC powered: false
               USB powered: true
+              Wireless powered: false
+              Max charging current: 500000
+              Max charging voltage: 5000000
+              Charge counter: 2841000
               status: 2
               health: 2
               present: true
@@ -106,11 +110,20 @@ class DeviceAdbTest {
               scale: 100
               temp: 290
               voltage: 4123
+              technology: Li-poly
         """.trimIndent()
         assertEquals("充电中", parseBatteryStatus(output))
         assertEquals("良好", parseBatteryHealth(output))
         assertEquals("29.0 °C", parseBatteryTemp(output))
         assertEquals("4123 mV", parseBatteryVoltage(output))
+        assertEquals("否", parseBatteryACPowered(output))
+        assertEquals("是", parseBatteryUSBPowered(output))
+        assertEquals("否", parseBatteryWirelessPowered(output))
+        assertEquals("500 mA (500000 μA)", parseBatteryMaxChargingCurrent(output))
+        assertEquals("5.0 V (5000 mV)", parseBatteryMaxChargingVoltage(output))
+        assertEquals("2841 mAh (2841000 μAh)", parseBatteryChargeCounter(output))
+        assertEquals("是", parseBatteryPresent(output))
+        assertEquals("Li-poly", parseBatteryTechnology(output))
 
         val unknownOutput = """
               status: 9
@@ -122,6 +135,14 @@ class DeviceAdbTest {
         assertEquals("未知", parseBatteryHealth(unknownOutput))
         assertEquals("未知", parseBatteryTemp(unknownOutput))
         assertEquals("未知", parseBatteryVoltage(unknownOutput))
+        assertEquals("未知", parseBatteryACPowered(unknownOutput))
+        assertEquals("未知", parseBatteryUSBPowered(unknownOutput))
+        assertEquals("未知", parseBatteryWirelessPowered(unknownOutput))
+        assertEquals("未知", parseBatteryMaxChargingCurrent(unknownOutput))
+        assertEquals("未知", parseBatteryMaxChargingVoltage(unknownOutput))
+        assertEquals("未知", parseBatteryChargeCounter(unknownOutput))
+        assertEquals("未知", parseBatteryPresent(unknownOutput))
+        assertEquals("未知", parseBatteryTechnology(unknownOutput))
     }
 
     @Test

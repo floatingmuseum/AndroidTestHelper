@@ -58,6 +58,14 @@ private class JvmDeviceAdb : DeviceAdb {
         val batteryHealth = parseBatteryHealth(batteryOutput)
         val batteryTemp = parseBatteryTemp(batteryOutput)
         val batteryVoltage = parseBatteryVoltage(batteryOutput)
+        val batteryACPowered = parseBatteryACPowered(batteryOutput)
+        val batteryUSBPowered = parseBatteryUSBPowered(batteryOutput)
+        val batteryWirelessPowered = parseBatteryWirelessPowered(batteryOutput)
+        val batteryMaxChargingCurrent = parseBatteryMaxChargingCurrent(batteryOutput)
+        val batteryMaxChargingVoltage = parseBatteryMaxChargingVoltage(batteryOutput)
+        val batteryChargeCounter = parseBatteryChargeCounter(batteryOutput)
+        val batteryPresent = parseBatteryPresent(batteryOutput)
+        val batteryTechnology = parseBatteryTechnology(batteryOutput)
 
         val ipOutput = try {
             AdbShell.executeAdb(
@@ -84,6 +92,14 @@ private class JvmDeviceAdb : DeviceAdb {
             batteryHealth = batteryHealth,
             batteryTemp = batteryTemp,
             batteryVoltage = batteryVoltage,
+            batteryACPowered = batteryACPowered,
+            batteryUSBPowered = batteryUSBPowered,
+            batteryWirelessPowered = batteryWirelessPowered,
+            batteryMaxChargingCurrent = batteryMaxChargingCurrent,
+            batteryMaxChargingVoltage = batteryMaxChargingVoltage,
+            batteryChargeCounter = batteryChargeCounter,
+            batteryPresent = batteryPresent,
+            batteryTechnology = batteryTechnology,
         )
     }
 
@@ -221,6 +237,20 @@ private class JvmDeviceAdb : DeviceAdb {
         )
     }
 
+    override suspend fun controlBattery(
+        deviceSerial: String,
+        args: List<String>,
+        logCommand: (String) -> Unit,
+    ) {
+        val fullArgs = listOf("-s", deviceSerial, "shell", "dumpsys", "battery") + args
+        val displayCmd = "adb -s $deviceSerial shell dumpsys battery ${args.joinToString(" ")}"
+        AdbShell.executeAdb(
+            args = fullArgs,
+            displayCommand = displayCmd,
+            logCommand = logCommand
+        )
+    }
+
     private suspend fun executeGetProp(
         deviceSerial: String,
         propKey: String,
@@ -257,12 +287,12 @@ internal fun parseScreenDensity(output: String): String {
 }
 
 internal fun parseBatteryLevel(output: String): Int? {
-    val regex = Regex("""level:\s*(\d+)""")
+    val regex = Regex("(?m)^\\s*level:\\s*(\\d+)")
     return regex.find(output)?.groupValues?.get(1)?.toIntOrNull()
 }
 
 internal fun parseBatteryStatus(output: String): String {
-    val regex = Regex("""status:\s*(\d+)""")
+    val regex = Regex("(?m)^\\s*status:\\s*(\\d+)")
     val statusInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return "未知"
     return when (statusInt) {
         1 -> "未知"
@@ -275,7 +305,7 @@ internal fun parseBatteryStatus(output: String): String {
 }
 
 internal fun parseBatteryHealth(output: String): String {
-    val regex = Regex("""health:\s*(\d+)""")
+    val regex = Regex("(?m)^\\s*health:\\s*(\\d+)")
     val healthInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return "未知"
     return when (healthInt) {
         1 -> "未知"
@@ -290,15 +320,66 @@ internal fun parseBatteryHealth(output: String): String {
 }
 
 internal fun parseBatteryTemp(output: String): String {
-    val regex = Regex("""temp:\s*(\d+)""")
+    val regex = Regex("(?m)^\\s*temp:\\s*(\\d+)")
     val tempInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return "未知"
     return "${tempInt / 10.0} °C"
 }
 
 internal fun parseBatteryVoltage(output: String): String {
-    val regex = Regex("""voltage:\s*(\d+)""")
+    val regex = Regex("(?m)^\\s*voltage:\\s*(\\d+)")
     val voltageInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return "未知"
     return "$voltageInt mV"
+}
+
+internal fun parseBatteryACPowered(output: String): String {
+    val regex = Regex("(?m)^\\s*AC powered:\\s*(\\w+)")
+    val match = regex.find(output)?.groupValues?.get(1) ?: return "未知"
+    return if (match.equals("true", ignoreCase = true)) "是" else "否"
+}
+
+internal fun parseBatteryUSBPowered(output: String): String {
+    val regex = Regex("(?m)^\\s*USB powered:\\s*(\\w+)")
+    val match = regex.find(output)?.groupValues?.get(1) ?: return "未知"
+    return if (match.equals("true", ignoreCase = true)) "是" else "否"
+}
+
+internal fun parseBatteryWirelessPowered(output: String): String {
+    val regex = Regex("(?m)^\\s*Wireless powered:\\s*(\\w+)")
+    val match = regex.find(output)?.groupValues?.get(1) ?: return "未知"
+    return if (match.equals("true", ignoreCase = true)) "是" else "否"
+}
+
+internal fun parseBatteryMaxChargingCurrent(output: String): String {
+    val regex = Regex("(?m)^\\s*Max charging current:\\s*(\\d+)")
+    val currentInt = regex.find(output)?.groupValues?.get(1)?.toLongOrNull() ?: return "未知"
+    val mA = currentInt / 1000
+    return "$mA mA (${currentInt} μA)"
+}
+
+internal fun parseBatteryMaxChargingVoltage(output: String): String {
+    val regex = Regex("(?m)^\\s*Max charging voltage:\\s*(\\d+)")
+    val voltageInt = regex.find(output)?.groupValues?.get(1)?.toLongOrNull() ?: return "未知"
+    val mV = voltageInt / 1000
+    val V = voltageInt / 1000000.0
+    return "$V V ($mV mV)"
+}
+
+internal fun parseBatteryChargeCounter(output: String): String {
+    val regex = Regex("(?m)^\\s*Charge counter:\\s*(\\d+)")
+    val counterInt = regex.find(output)?.groupValues?.get(1)?.toLongOrNull() ?: return "未知"
+    val mAh = counterInt / 1000
+    return "$mAh mAh (${counterInt} μAh)"
+}
+
+internal fun parseBatteryPresent(output: String): String {
+    val regex = Regex("(?m)^\\s*present:\\s*(\\w+)")
+    val match = regex.find(output)?.groupValues?.get(1) ?: return "未知"
+    return if (match.equals("true", ignoreCase = true)) "是" else "否"
+}
+
+internal fun parseBatteryTechnology(output: String): String {
+    val regex = Regex("(?m)^\\s*technology:\\s*(.+)")
+    return regex.find(output)?.groupValues?.get(1)?.trim() ?: "未知"
 }
 
 internal fun parseIpAddress(output: String): String {

@@ -63,6 +63,7 @@ fun DeviceTestPanel(
     onInstallApplications: () -> Unit,
     onQuickAction: (DeviceQuickAction) -> Unit,
     isRunning: Boolean,
+    onBatteryControl: ((args: List<String>) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -262,13 +263,217 @@ fun DeviceTestPanel(
                                             modifier = Modifier
                                                 .fillMaxSize()
                                                 .verticalScroll(rememberScrollState()),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                            verticalArrangement = Arrangement.spacedBy(16.dp)
                                         ) {
-                                            InfoRow("电池电量", systemInfo.batteryLevel?.let { "$it%" } ?: "未知")
-                                            InfoRow("电池状态", systemInfo.batteryStatus)
-                                            InfoRow("电池健康度", systemInfo.batteryHealth)
-                                            InfoRow("电池温度", systemInfo.batteryTemp)
-                                            InfoRow("电池电压", systemInfo.batteryVoltage)
+                                            // 电池基本状况
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                                )
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(16.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "电池基本状况",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    InfoRow("电池电量", systemInfo.batteryLevel?.let { "$it%" } ?: "未知")
+                                                    InfoRow("电池状态", systemInfo.batteryStatus)
+                                                    InfoRow("电池健康度", systemInfo.batteryHealth)
+                                                    InfoRow("电池温度", systemInfo.batteryTemp)
+                                                    InfoRow("电池电压", systemInfo.batteryVoltage)
+                                                    InfoRow("电池在位", systemInfo.batteryPresent)
+                                                    InfoRow("电池技术", systemInfo.batteryTechnology)
+                                                }
+                                            }
+
+                                            // 供电与充电参数
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                                )
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(16.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "供电与充电参数",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    InfoRow("AC 交流电供电", systemInfo.batteryACPowered)
+                                                    InfoRow("USB 接口供电", systemInfo.batteryUSBPowered)
+                                                    InfoRow("无线充电供电", systemInfo.batteryWirelessPowered)
+                                                    InfoRow("最大充电电流", systemInfo.batteryMaxChargingCurrent)
+                                                    InfoRow("最大充电电压", systemInfo.batteryMaxChargingVoltage)
+                                                    InfoRow("当前电量计数", systemInfo.batteryChargeCounter)
+                                                }
+                                            }
+
+                                            // 模拟调试控制卡片
+                                            if (onBatteryControl != null) {
+                                                Card(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
+                                                    )
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier.padding(16.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = "电池模拟调试 (仅测试使用)",
+                                                            style = MaterialTheme.typography.titleSmall,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.error
+                                                        )
+
+                                                        // 模拟拔掉充电器
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text("模拟拔掉充电器", style = MaterialTheme.typography.bodyMedium)
+                                                            Button(
+                                                                onClick = { onBatteryControl(listOf("unplug")) },
+                                                                enabled = !isRunning,
+                                                                modifier = Modifier.height(36.dp)
+                                                            ) {
+                                                                Text("模拟拔除")
+                                                            }
+                                                        }
+
+                                                        // 模拟设置电量百分比
+                                                        var mockLevelText by remember { mutableStateOf("") }
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text("模拟设置电量 (%)", style = MaterialTheme.typography.bodyMedium)
+                                                            Row(
+                                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                                verticalAlignment = Alignment.CenterVertically
+                                                            ) {
+                                                                OutlinedTextField(
+                                                                    value = mockLevelText,
+                                                                    onValueChange = { mockLevelText = it.filter { c -> c.isDigit() } },
+                                                                    modifier = Modifier.width(100.dp),
+                                                                    singleLine = true,
+                                                                    placeholder = { Text("0-100") }
+                                                                )
+                                                                Button(
+                                                                    onClick = {
+                                                                        val lvl = mockLevelText.toIntOrNull()
+                                                                        if (lvl != null && lvl in 0..100) {
+                                                                            onBatteryControl(listOf("set", "level", lvl.toString()))
+                                                                        }
+                                                                    },
+                                                                    enabled = !isRunning && mockLevelText.isNotEmpty(),
+                                                                    modifier = Modifier.height(36.dp)
+                                                                ) {
+                                                                    Text("设置")
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // 模拟设置温度
+                                                        var mockTempText by remember { mutableStateOf("") }
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text("模拟设置温度 (°C)", style = MaterialTheme.typography.bodyMedium)
+                                                            Row(
+                                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                                verticalAlignment = Alignment.CenterVertically
+                                                            ) {
+                                                                OutlinedTextField(
+                                                                    value = mockTempText,
+                                                                    onValueChange = { mockTempText = it },
+                                                                    modifier = Modifier.width(100.dp),
+                                                                    singleLine = true,
+                                                                    placeholder = { Text("例如 32") }
+                                                                )
+                                                                Button(
+                                                                    onClick = {
+                                                                        val tempDouble = mockTempText.toDoubleOrNull()
+                                                                        if (tempDouble != null) {
+                                                                            val tempInt = (tempDouble * 10).toInt()
+                                                                            onBatteryControl(listOf("set", "temp", tempInt.toString()))
+                                                                        }
+                                                                    },
+                                                                    enabled = !isRunning && mockTempText.isNotEmpty(),
+                                                                    modifier = Modifier.height(36.dp)
+                                                                ) {
+                                                                    Text("设置")
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // 模拟设置状态
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text("模拟设置充电状态", style = MaterialTheme.typography.bodyMedium)
+                                                            Row(
+                                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                                verticalAlignment = Alignment.CenterVertically
+                                                            ) {
+                                                                Button(
+                                                                    onClick = { onBatteryControl(listOf("set", "status", "2")) },
+                                                                    enabled = !isRunning,
+                                                                    modifier = Modifier.height(32.dp),
+                                                                    contentPadding = ButtonDefaults.ContentPadding
+                                                                ) {
+                                                                    Text("充电", style = MaterialTheme.typography.labelMedium)
+                                                                }
+                                                                Button(
+                                                                    onClick = { onBatteryControl(listOf("set", "status", "3")) },
+                                                                    enabled = !isRunning,
+                                                                    modifier = Modifier.height(32.dp),
+                                                                    contentPadding = ButtonDefaults.ContentPadding
+                                                                ) {
+                                                                    Text("放电", style = MaterialTheme.typography.labelMedium)
+                                                                }
+                                                                Button(
+                                                                    onClick = { onBatteryControl(listOf("set", "status", "5")) },
+                                                                    enabled = !isRunning,
+                                                                    modifier = Modifier.height(32.dp),
+                                                                    contentPadding = ButtonDefaults.ContentPadding
+                                                                ) {
+                                                                    Text("充满", style = MaterialTheme.typography.labelMedium)
+                                                                }
+                                                            }
+                                                        }
+
+                                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                                        // 恢复真实状态
+                                                        Button(
+                                                            onClick = { onBatteryControl(listOf("reset")) },
+                                                            enabled = !isRunning,
+                                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                                            modifier = Modifier.fillMaxWidth().height(40.dp)
+                                                        ) {
+                                                            Text("恢复电池真实状态 (Reset)")
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     } else {
                                         Box(

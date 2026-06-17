@@ -779,6 +779,26 @@ fun App() {
                                         }
                                     },
                                     isRunning = isRunning,
+                                    onBatteryControl = { args ->
+                                        selectedReadyDevice?.serialNumber?.let { serial ->
+                                            scope.launch {
+                                                isRunning = true
+                                                statusText = "执行电池模拟操作..."
+                                                appendCommand("状态: 执行电池模拟操作 adb -s $serial shell dumpsys battery ${args.joinToString(" ")}")
+                                                try {
+                                                    deviceAdb.controlBattery(serial, args, ::appendCommand)
+                                                    statusText = "电池模拟操作已执行"
+                                                    appendCommand("状态: 电池模拟操作已执行")
+                                                    deviceSystemInfo = deviceAdb.loadSystemInfo(serial, ::appendCommand)
+                                                } catch (error: Throwable) {
+                                                    statusText = error.message ?: "电池模拟操作失败"
+                                                    appendCommand("错误: 电池模拟操作失败 - ${error.message ?: "未知错误"}")
+                                                } finally {
+                                                    isRunning = false
+                                                }
+                                            }
+                                        }
+                                    },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }

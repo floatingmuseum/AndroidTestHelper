@@ -17,6 +17,14 @@ data class DeviceSystemInfo(
     val batteryHealth: String = "未知",
     val batteryTemp: String = "未知",
     val batteryVoltage: String = "未知",
+    val batteryACPowered: String = "未知",
+    val batteryUSBPowered: String = "未知",
+    val batteryWirelessPowered: String = "未知",
+    val batteryMaxChargingCurrent: String = "未知",
+    val batteryMaxChargingVoltage: String = "未知",
+    val batteryChargeCounter: String = "未知",
+    val batteryPresent: String = "未知",
+    val batteryTechnology: String = "未知",
 )
 
 @Serializable
@@ -81,6 +89,12 @@ interface DeviceAdb {
     suspend fun runQuickAction(
         deviceSerial: String,
         action: DeviceQuickAction,
+        logCommand: (String) -> Unit,
+    )
+
+    suspend fun controlBattery(
+        deviceSerial: String,
+        args: List<String>,
         logCommand: (String) -> Unit,
     )
 }
