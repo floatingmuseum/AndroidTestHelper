@@ -817,6 +817,7 @@ fun DeviceTestPanel(
                         DeviceShortcutAction("重启", true, onReboot),
                         DeviceShortcutAction("重启至Recovery", true) { onQuickAction(DeviceQuickAction.REBOOT_RECOVERY) },
                         DeviceShortcutAction("重启至FastBoot", true) { onQuickAction(DeviceQuickAction.REBOOT_FASTBOOT) },
+                        DeviceShortcutAction("查看当前界面", false) { onQuickAction(DeviceQuickAction.CURRENT_ACTIVITY) },
                         DeviceShortcutAction("截屏", false, onTakeScreenshot),
                         DeviceShortcutAction("APK安装", false, onInstallApplications),
                         DeviceShortcutAction("电源键", false) { onQuickAction(DeviceQuickAction.POWER) },

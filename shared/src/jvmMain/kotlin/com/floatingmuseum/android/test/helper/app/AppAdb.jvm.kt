@@ -31,14 +31,20 @@ private class JvmAppAdb : AppAdb {
         onProgress: (current: Int, total: Int) -> Unit,
     ): List<InstalledAppInfo> = withContext(Dispatchers.IO) {
         val hasPlugin = isPluginInstalled(deviceSerial, logCommand)
-        if (hasPlugin) {
+        val apps = if (hasPlugin) {
             try {
-                return@withContext loadInstalledAppsWithPlugin(deviceSerial, isSystem, logCommand, onProgress)
+                loadInstalledAppsWithPlugin(deviceSerial, isSystem, logCommand, onProgress)
             } catch (e: Exception) {
                 e.printStackTrace()
+                loadInstalledAppsWithAdb(deviceSerial, isSystem, logCommand, onProgress)
             }
+        } else {
+            loadInstalledAppsWithAdb(deviceSerial, isSystem, logCommand, onProgress)
         }
-        return@withContext loadInstalledAppsWithAdb(deviceSerial, isSystem, logCommand, onProgress)
+        for (app in apps) {
+            com.floatingmuseum.android.test.helper.device.AppLabelCache.put(app.packageName, app.appName)
+        }
+        apps
     }
 
     private suspend fun isPluginInstalled(deviceSerial: String, logCommand: (String) -> Unit): Boolean {

@@ -421,4 +421,76 @@ class DeviceAdbTest {
         assertEquals("main.100.com.example.game.obb", manifest.expansions[0].file)
         assertEquals("Android/obb/com.example.game/main.100.com.example.game.obb", manifest.expansions[0].installPath)
     }
+
+    @Test
+    fun testBuildQuickActionCommandForCurrentActivity() {
+        val command = buildQuickActionCommand(
+            deviceSerial = "R58M123ABC",
+            action = DeviceQuickAction.CURRENT_ACTIVITY,
+        )
+
+        assertEquals(
+            listOf("-s", "R58M123ABC", "shell", "dumpsys window | grep mCurrentFocus"),
+            command.args,
+        )
+        assertEquals("adb -s R58M123ABC shell \"dumpsys window | grep mCurrentFocus\"", command.displayCommand)
+    }
+
+    @Test
+    fun testParseCurrentActivity() {
+        // Test format 1: mCurrentFocus window dumpsys output with u0
+        val output1 = "  mCurrentFocus=Window{8f2d5a3 u0 com.floatingmuseum.android.test.helper/com.floatingmuseum.android.test.helper.MainActivity}"
+        val res1 = parseCurrentActivity(output1)
+        kotlin.test.assertNotNull(res1)
+        assertEquals("com.floatingmuseum.android.test.helper", res1.first)
+        assertEquals("com.floatingmuseum.android.test.helper.MainActivity", res1.second)
+
+        // Test format 2: mCurrentFocus window dumpsys output with exiting flag
+        val output2 = "  mCurrentFocus=Window{8f2d5a3 u0 com.floatingmuseum.android.test.helper/com.floatingmuseum.android.test.helper.MainActivity EXITING}"
+        val res2 = parseCurrentActivity(output2)
+        kotlin.test.assertNotNull(res2)
+        assertEquals("com.floatingmuseum.android.test.helper", res2.first)
+        assertEquals("com.floatingmuseum.android.test.helper.MainActivity", res2.second)
+
+        // Test format 3: mCurrentFocus window dumpsys output without u0
+        val output3 = "  mCurrentFocus=Window{8f2d5a3 com.floatingmuseum.android.test.helper/com.floatingmuseum.android.test.helper.MainActivity}"
+        val res3 = parseCurrentActivity(output3)
+        kotlin.test.assertNotNull(res3)
+        assertEquals("com.floatingmuseum.android.test.helper", res3.first)
+        assertEquals("com.floatingmuseum.android.test.helper.MainActivity", res3.second)
+
+        // Test format 4: mResumedActivity dumpsys activity output with relative activity name
+        val output4 = "    mResumedActivity: ActivityRecord{8b671cc u0 com.floatingmuseum.android.test.helper/.MainActivity t12}"
+        val res4 = parseCurrentActivity(output4)
+        kotlin.test.assertNotNull(res4)
+        assertEquals("com.floatingmuseum.android.test.helper", res4.first)
+        assertEquals("com.floatingmuseum.android.test.helper.MainActivity", res4.second)
+
+        // Test format 5: mResumedActivity dumpsys activity output with short relative name
+        val output5 = "    mResumedActivity: ActivityRecord{8b671cc u0 com.floatingmuseum.android.test.helper/MainActivity t12}"
+        val res5 = parseCurrentActivity(output5)
+        kotlin.test.assertNotNull(res5)
+        assertEquals("com.floatingmuseum.android.test.helper", res5.first)
+        assertEquals("com.floatingmuseum.android.test.helper.MainActivity", res5.second)
+
+        // Test format 6: null or invalid inputs
+        assertNull(parseCurrentActivity("mCurrentFocus=null"))
+        assertNull(parseCurrentActivity("something completely random"))
+    }
+
+    @Test
+    fun testParseAppNameFromJsonAndContentQueryJson() {
+        val mockJson = """[{"packageName":"com.floatingmuseum.android.test.helper","appName":"AndroidTestHelper","versionName":"1.0.2"}]"""
+        val appName = parseAppNameFromJson(mockJson)
+        assertEquals("AndroidTestHelper", appName)
+
+        val invalidJson = """{"error":"not found"}"""
+        assertNull(parseAppNameFromJson(invalidJson))
+
+        val mockContentOutput = """
+            Row: 0 json_data=[{"packageName":"com.floatingmuseum.android.test.helper","appName":"AndroidTestHelper"}]
+        """.trimIndent()
+        val parsedJson = parseContentQueryJson(mockContentOutput)
+        assertEquals("""[{"packageName":"com.floatingmuseum.android.test.helper","appName":"AndroidTestHelper"}]""", parsedJson)
+    }
 }

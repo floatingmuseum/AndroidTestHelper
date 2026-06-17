@@ -75,6 +75,7 @@ enum class DeviceQuickAction(val label: String) {
     SLEEP("熄屏"),
     REBOOT_RECOVERY("重启至Recovery"),
     REBOOT_FASTBOOT("重启至FastBoot"),
+    CURRENT_ACTIVITY("查看当前界面"),
 }
 
 interface DeviceAdb {

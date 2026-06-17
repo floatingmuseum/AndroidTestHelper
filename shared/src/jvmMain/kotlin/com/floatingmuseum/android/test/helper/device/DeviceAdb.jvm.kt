@@ -303,12 +303,64 @@ private class JvmDeviceAdb : DeviceAdb {
         action: DeviceQuickAction,
         logCommand: (String) -> Unit,
     ) {
+        if (action == DeviceQuickAction.CURRENT_ACTIVITY) {
+            runCurrentActivityAction(deviceSerial, logCommand)
+            return
+        }
         val command = buildQuickActionCommand(deviceSerial, action)
         AdbShell.executeAdb(
             args = command.args,
             displayCommand = command.displayCommand,
             logCommand = logCommand,
         )
+    }
+
+    private suspend fun runCurrentActivityAction(
+        deviceSerial: String,
+        logCommand: (String) -> Unit,
+    ) {
+        var result: Pair<String, String>? = null
+
+        // 1. 尝试使用 dumpsys window | grep mCurrentFocus
+        val displayCommand1 = "adb -s $deviceSerial shell \"dumpsys window | grep mCurrentFocus\""
+        val args1 = listOf("-s", deviceSerial, "shell", "dumpsys window | grep mCurrentFocus")
+        try {
+            val output1 = AdbShell.executeAdb(args1, displayCommand1, logCommand)
+            result = parseCurrentActivity(output1)
+        } catch (e: Exception) {
+            // 忽略
+        }
+
+        // 2. 尝试 dumpsys activity resumed | grep mResumedActivity
+        if (result == null) {
+            val displayCommand2 = "adb -s $deviceSerial shell \"dumpsys activity resumed | grep mResumedActivity\""
+            val args2 = listOf("-s", deviceSerial, "shell", "dumpsys activity resumed | grep mResumedActivity")
+            try {
+                val output2 = AdbShell.executeAdb(args2, displayCommand2, logCommand)
+                result = parseCurrentActivity(output2)
+            } catch (e: Exception) {
+                // 忽略
+            }
+        }
+
+        // 3. 尝试 dumpsys activity activities | grep mResumedActivity
+        if (result == null) {
+            val displayCommand3 = "adb -s $deviceSerial shell \"dumpsys activity activities | grep mResumedActivity\""
+            val args3 = listOf("-s", deviceSerial, "shell", "dumpsys activity activities | grep mResumedActivity")
+            try {
+                val output3 = AdbShell.executeAdb(args3, displayCommand3, logCommand)
+                result = parseCurrentActivity(output3)
+            } catch (e: Exception) {
+                // 忽略
+            }
+        }
+
+        if (result != null) {
+            logCommand("状态: 当前界面包名: ${result.first}")
+            logCommand("状态: 当前界面Activity: ${result.second}")
+        } else {
+            logCommand("错误: 无法获取当前界面信息")
+        }
     }
 
     override suspend fun controlBattery(
@@ -756,7 +808,24 @@ internal fun buildQuickActionCommand(
             args = listOf("-s", deviceSerial, "reboot", "bootloader"),
             displayCommand = "adb -s $deviceSerial reboot bootloader",
         )
+        DeviceQuickAction.CURRENT_ACTIVITY -> DeviceQuickActionCommand(
+            args = listOf("-s", deviceSerial, "shell", "dumpsys window | grep mCurrentFocus"),
+            displayCommand = "adb -s $deviceSerial shell \"dumpsys window | grep mCurrentFocus\"",
+        )
     }
+}
+
+internal fun parseCurrentActivity(output: String): Pair<String, String>? {
+    val regex = """([a-zA-Z0-9._]+)/([a-zA-Z0-9._]+)""".toRegex()
+    val matchResult = regex.find(output) ?: return null
+    val packageName = matchResult.groupValues[1]
+    val rawActivityName = matchResult.groupValues[2]
+    val fullActivityName = when {
+        rawActivityName.startsWith(".") -> "$packageName$rawActivityName"
+        !rawActivityName.contains(".") -> "$packageName.$rawActivityName"
+        else -> rawActivityName
+    }
+    return Pair(packageName, fullActivityName)
 }
 
 private fun buildKeyEventCommand(
@@ -956,3 +1025,26 @@ internal data class XApkExpansion(
     val file: String,
     @SerialName("install_path") val installPath: String = ""
 )
+
+object AppLabelCache {
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    fun put(packageName: String, appName: String) {
+        cache[packageName] = appName
+    }
+
+    fun get(packageName: String): String? {
+        return cache[packageName]
+    }
+}
+
+internal fun parseAppNameFromJson(jsonStr: String): String? {
+    val regex = """"appName"\s*:\s*"([^"]+)"""".toRegex()
+    return regex.find(jsonStr)?.groupValues?.get(1)
+}
+
+internal fun parseContentQueryJson(output: String): String? {
+    val key = "json_data="
+    val line = output.lineSequence().firstOrNull { it.contains(key) } ?: return null
+    return line.substringAfter(key).trim()
+}
