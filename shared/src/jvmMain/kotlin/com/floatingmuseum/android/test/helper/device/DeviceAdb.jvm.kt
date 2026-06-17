@@ -22,6 +22,28 @@ private class JvmDeviceAdb : DeviceAdb {
         val sdkVersion = executeGetProp(deviceSerial, "ro.build.version.sdk", logCommand)
         val cpuAbi = executeGetProp(deviceSerial, "ro.product.cpu.abi", logCommand)
 
+        val cpuInfoOutput = try {
+            AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "cat", "/proc/cpuinfo"),
+                displayCommand = "adb -s $deviceSerial shell cat /proc/cpuinfo",
+                logCommand = logCommand
+            )
+        } catch (e: Throwable) {
+            ""
+        }
+        val cpuDetails = parseCpuInfo(cpuInfoOutput)
+
+        val memoryInfoOutput = try {
+            AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "cat", "/proc/meminfo"),
+                displayCommand = "adb -s $deviceSerial shell cat /proc/meminfo",
+                logCommand = logCommand
+            )
+        } catch (e: Throwable) {
+            ""
+        }
+        val memoryDetails = parseMemoryInfo(memoryInfoOutput)
+
         val wmSizeOutput = try {
             AdbShell.executeAdb(
                 args = listOf("-s", deviceSerial, "shell", "wm", "size"),
@@ -113,6 +135,18 @@ private class JvmDeviceAdb : DeviceAdb {
             screenSize = screenSize,
             ipAddress = ipAddress,
             screenDensity = screenDensity,
+            cpuProcessor = cpuDetails.processor,
+            cpuHardware = cpuDetails.hardware,
+            cpuArchitecture = cpuDetails.architecture,
+            cpuCoreCount = cpuDetails.coreCount,
+            cpuFeatures = cpuDetails.features,
+            memoryTotal = memoryDetails.total,
+            memoryFree = memoryDetails.free,
+            memoryAvailable = memoryDetails.available,
+            memoryBuffers = memoryDetails.buffers,
+            memoryCached = memoryDetails.cached,
+            memorySwapTotal = memoryDetails.swapTotal,
+            memorySwapFree = memoryDetails.swapFree,
             batteryStatus = batteryStatus,
             batteryHealth = batteryHealth,
             batteryTemp = batteryTemp,
@@ -385,6 +419,121 @@ internal fun parseDisplayRefreshRate(output: String): String {
     if (refreshRateMatch != null) return "$refreshRateMatch Hz"
 
     return "未知"
+}
+
+internal data class CpuInfoDetails(
+    val processor: String = "未知",
+    val hardware: String = "未知",
+    val architecture: String = "未知",
+    val coreCount: String = "未知",
+    val features: String = "未知",
+)
+
+internal fun parseCpuInfo(output: String): CpuInfoDetails {
+    val values = parseColonKeyValues(output)
+    val indexedProcessors = output.lineSequence()
+        .mapNotNull { line ->
+            val match = Regex("""(?i)^\s*processor\s*:\s*(\d+)\s*$""").find(line)
+            match?.groupValues?.get(1)?.toIntOrNull()
+        }
+        .toSet()
+    val cpuCores = values.firstValue("cpu cores")?.toIntOrNull()
+    val coreCount = when {
+        indexedProcessors.isNotEmpty() -> indexedProcessors.size.toString()
+        cpuCores != null -> cpuCores.toString()
+        else -> "未知"
+    }
+    return CpuInfoDetails(
+        processor = values.firstExactValue("Processor")
+            ?: values.firstValue("model name")
+            ?: values.firstValue("Hardware")
+            ?: "未知",
+        hardware = values.firstValue("Hardware")
+            ?: values.firstValue("model name")
+            ?: values.firstExactValue("Processor")
+            ?: "未知",
+        architecture = values.firstValue("CPU architecture")
+            ?: values.firstValue("cpu architecture")
+            ?: "未知",
+        coreCount = coreCount,
+        features = values.firstValue("Features")
+            ?: values.firstValue("flags")
+            ?: "未知",
+    )
+}
+
+internal data class MemoryInfoDetails(
+    val total: String = "未知",
+    val free: String = "未知",
+    val available: String = "未知",
+    val buffers: String = "未知",
+    val cached: String = "未知",
+    val swapTotal: String = "未知",
+    val swapFree: String = "未知",
+)
+
+internal fun parseMemoryInfo(output: String): MemoryInfoDetails {
+    val values = parseColonKeyValues(output)
+    return MemoryInfoDetails(
+        total = values.firstMemoryValue("MemTotal"),
+        free = values.firstMemoryValue("MemFree"),
+        available = values.firstMemoryValue("MemAvailable"),
+        buffers = values.firstMemoryValue("Buffers"),
+        cached = values.firstMemoryValue("Cached"),
+        swapTotal = values.firstMemoryValue("SwapTotal"),
+        swapFree = values.firstMemoryValue("SwapFree"),
+    )
+}
+
+private fun parseColonKeyValues(output: String): Map<String, List<String>> {
+    val regex = Regex("""^\s*([^:]+):\s*(.*?)\s*$""")
+    return output.lineSequence()
+        .mapNotNull { line ->
+            val match = regex.find(line) ?: return@mapNotNull null
+            match.groupValues[1].trim() to match.groupValues[2].trim()
+        }
+        .groupBy({ it.first }, { it.second })
+}
+
+private fun Map<String, List<String>>.firstValue(key: String): String? {
+    return entries.firstOrNull { it.key.equals(key, ignoreCase = true) }
+        ?.value
+        ?.firstOrNull()
+        ?.takeIf { it.isNotBlank() }
+}
+
+private fun Map<String, List<String>>.firstExactValue(key: String): String? {
+    return this[key]?.firstOrNull()?.takeIf { it.isNotBlank() }
+}
+
+private fun Map<String, List<String>>.firstMemoryValue(key: String): String {
+    val rawValue = firstValue(key) ?: return "未知"
+    val kb = Regex("""(\d+)\s*kB""", RegexOption.IGNORE_CASE)
+        .find(rawValue)
+        ?.groupValues
+        ?.get(1)
+        ?.toLongOrNull()
+        ?: return rawValue.ifBlank { "未知" }
+    return formatMemoryKilobytes(kb)
+}
+
+internal fun formatMemoryKilobytes(kilobytes: Long): String {
+    val gib = kilobytes / 1024.0 / 1024.0
+    return if (gib >= 1.0) {
+        "${formatDecimal(gib)} GiB (${kilobytes} kB)"
+    } else {
+        val mib = kilobytes / 1024.0
+        "${formatDecimal(mib)} MiB (${kilobytes} kB)"
+    }
+}
+
+private fun formatDecimal(value: Double): String {
+    val rounded = kotlin.math.round(value * 10.0) / 10.0
+    return if (rounded % 1.0 == 0.0) {
+        rounded.toInt().toString()
+    } else {
+        rounded.toString()
+    }
 }
 
 internal fun parseScreenDensity(output: String): String {

@@ -129,6 +129,94 @@ class DeviceAdbTest {
     }
 
     @Test
+    fun testParseCpuInfo() {
+        val output = """
+            Processor       : ARMv7 Processor rev 0 (v7l)
+            processor       : 0
+            BogoMIPS        : 38.40
+
+            processor       : 1
+            BogoMIPS        : 38.40
+
+            processor       : 2
+            BogoMIPS        : 38.40
+
+            processor       : 3
+            BogoMIPS        : 38.40
+            Features        : swp half thumb fastmult vfp edsp neon vfpv3 tls vfpv4
+            CPU implementer : 0x51
+            CPU architecture: 7
+            CPU variant     : 0x2
+            CPU part        : 0x06f
+            CPU revision    : 0
+
+            Hardware        : Qualcomm MSM 8974 HAMMERHEAD (Flattened Device Tree)
+            Revision        : 000b
+            Serial          : 0000000000000000
+        """.trimIndent()
+
+        val details = parseCpuInfo(output)
+
+        assertEquals("ARMv7 Processor rev 0 (v7l)", details.processor)
+        assertEquals("Qualcomm MSM 8974 HAMMERHEAD (Flattened Device Tree)", details.hardware)
+        assertEquals("7", details.architecture)
+        assertEquals("4", details.coreCount)
+        assertEquals("swp half thumb fastmult vfp edsp neon vfpv3 tls vfpv4", details.features)
+    }
+
+    @Test
+    fun testParseCpuInfoFallsBackToModelNameAndCpuCores() {
+        val output = """
+            processor       : 0
+            vendor_id       : GenuineIntel
+            cpu family      : 6
+            model name      : Intel(R) Core(TM) i7
+            cpu cores       : 2
+            flags           : fpu vme de pse
+        """.trimIndent()
+
+        val details = parseCpuInfo(output)
+
+        assertEquals("Intel(R) Core(TM) i7", details.processor)
+        assertEquals("Intel(R) Core(TM) i7", details.hardware)
+        assertEquals("未知", details.architecture)
+        assertEquals("1", details.coreCount)
+        assertEquals("fpu vme de pse", details.features)
+    }
+
+    @Test
+    fun testParseMemoryInfo() {
+        val output = """
+            MemTotal:        8388608 kB
+            MemFree:          486564 kB
+            MemAvailable:    4194304 kB
+            Buffers:           15224 kB
+            Cached:            72464 kB
+            SwapTotal:        262140 kB
+            SwapFree:         207572 kB
+        """.trimIndent()
+
+        val details = parseMemoryInfo(output)
+
+        assertEquals("8 GiB (8388608 kB)", details.total)
+        assertEquals("475.2 MiB (486564 kB)", details.free)
+        assertEquals("4 GiB (4194304 kB)", details.available)
+        assertEquals("14.9 MiB (15224 kB)", details.buffers)
+        assertEquals("70.8 MiB (72464 kB)", details.cached)
+        assertEquals("256 MiB (262140 kB)", details.swapTotal)
+        assertEquals("202.7 MiB (207572 kB)", details.swapFree)
+    }
+
+    @Test
+    fun testParseMemoryInfoHandlesMissingValues() {
+        val details = parseMemoryInfo("MemTotal:        1024 kB")
+
+        assertEquals("1 MiB (1024 kB)", details.total)
+        assertEquals("未知", details.available)
+        assertEquals("未知", details.free)
+    }
+
+    @Test
     fun testParseBatteryDetails() {
         val output = """
             Current Battery Service state:

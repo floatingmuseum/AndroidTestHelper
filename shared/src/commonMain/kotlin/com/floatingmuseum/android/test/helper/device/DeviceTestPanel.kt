@@ -44,6 +44,7 @@ import com.floatingmuseum.android.test.helper.AndroidDevice
 
 private enum class InfoSection {
     BASIC,
+    HARDWARE,
     SCREEN,
     BATTERY,
     PROPERTIES
@@ -122,6 +123,7 @@ fun DeviceTestPanel(
                             val isSelected = selectedSection == section
                             val title = when (section) {
                                 InfoSection.BASIC -> "基础信息"
+                                InfoSection.HARDWARE -> "硬件资源"
                                 InfoSection.SCREEN -> "屏幕信息"
                                 InfoSection.BATTERY -> "电池信息"
                                 InfoSection.PROPERTIES -> "系统属性"
@@ -221,6 +223,78 @@ fun DeviceTestPanel(
                                             InfoRow("SDK 版本", "API ${systemInfo.sdkVersion}")
                                             InfoRow("CPU 架构 (ABI)", systemInfo.cpuAbi)
                                             InfoRow("IP 地址", systemInfo.ipAddress)
+                                        }
+                                    } else {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "暂无数据，请点击上方选项卡刷新获取",
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+
+                                InfoSection.HARDWARE -> {
+                                    if (systemInfo != null) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .verticalScroll(rememberScrollState()),
+                                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                                        ) {
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                                )
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(16.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "CPU 信息 (/proc/cpuinfo)",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    InfoRow("CPU 架构 (ABI)", systemInfo.cpuAbi)
+                                                    InfoRow("处理器", systemInfo.cpuProcessor)
+                                                    InfoRow("硬件平台", systemInfo.cpuHardware)
+                                                    InfoRow("CPU 架构版本", systemInfo.cpuArchitecture)
+                                                    InfoRow("核心数", systemInfo.cpuCoreCount)
+                                                    InfoTextBlock("特性", systemInfo.cpuFeatures)
+                                                }
+                                            }
+
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                                )
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(16.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "内存信息 (/proc/meminfo)",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    InfoRow("总内存 (MemTotal)", systemInfo.memoryTotal)
+                                                    InfoRow("可用内存 (MemAvailable)", systemInfo.memoryAvailable)
+                                                    InfoRow("空闲内存 (MemFree)", systemInfo.memoryFree)
+                                                    InfoRow("缓冲区 (Buffers)", systemInfo.memoryBuffers)
+                                                    InfoRow("页缓存 (Cached)", systemInfo.memoryCached)
+                                                    InfoRow("Swap 总量", systemInfo.memorySwapTotal)
+                                                    InfoRow("Swap 空闲", systemInfo.memorySwapFree)
+                                                }
+                                            }
                                         }
                                     } else {
                                         Box(
@@ -850,6 +924,41 @@ private fun InfoRow(label: String, value: String) {
                 text = value,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+private fun InfoTextBlock(label: String, value: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        SelectionContainer {
+            Text(
+                text = value,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                    .background(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                    .padding(8.dp),
+                style = MaterialTheme.typography.bodyMedium,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurface
             )
