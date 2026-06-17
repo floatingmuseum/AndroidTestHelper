@@ -59,6 +59,7 @@ import com.floatingmuseum.android.test.helper.app.ApplicationTestPanel
 import com.floatingmuseum.android.test.helper.app.createAppAdb
 import com.floatingmuseum.android.test.helper.app.removeInstalledApp
 import com.floatingmuseum.android.test.helper.device.DeviceSystemInfo
+import com.floatingmuseum.android.test.helper.device.DeviceQuickAction
 import com.floatingmuseum.android.test.helper.device.SystemProperty
 import com.floatingmuseum.android.test.helper.device.createDeviceAdb
 import com.floatingmuseum.android.test.helper.device.DeviceTestPanel
@@ -312,6 +313,30 @@ fun App() {
                 } catch (error: Throwable) {
                     statusText = error.message ?: "重启设备失败"
                     appendCommand("错误: 重启设备失败 - ${error.message ?: "未知错误"}")
+                } finally {
+                    isRunning = false
+                }
+            }
+        }
+
+        fun runSelectedDeviceQuickAction(deviceSerial: String, action: DeviceQuickAction) {
+            if (isRunning) return
+            scope.launch {
+                isRunning = true
+                statusText = "正在执行${action.label}..."
+                appendCommand("状态: 开始执行${action.label} $deviceSerial")
+                try {
+                    deviceAdb.runQuickAction(deviceSerial, action, ::appendCommand)
+                    statusText = "${action.label}命令已发送"
+                    appendCommand("状态: ${action.label}命令已发送完成")
+                    if (action == DeviceQuickAction.SHUTDOWN) {
+                        selectedDeviceSerial = null
+                        deviceSystemInfo = null
+                        systemProperties = emptyList()
+                    }
+                } catch (error: Throwable) {
+                    statusText = error.message ?: "${action.label}失败"
+                    appendCommand("错误: ${action.label}失败 - ${error.message ?: "未知错误"}")
                 } finally {
                     isRunning = false
                 }
@@ -747,6 +772,11 @@ fun App() {
                                     },
                                     onInstallApplications = {
                                         selectedReadyDevice?.serialNumber?.let { installSelectedApplications(it) }
+                                    },
+                                    onQuickAction = { action ->
+                                        selectedReadyDevice?.serialNumber?.let {
+                                            runSelectedDeviceQuickAction(it, action)
+                                        }
                                     },
                                     isRunning = isRunning,
                                     modifier = Modifier.fillMaxSize(),

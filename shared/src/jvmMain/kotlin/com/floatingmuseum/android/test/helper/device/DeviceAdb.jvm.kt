@@ -208,6 +208,19 @@ private class JvmDeviceAdb : DeviceAdb {
         }
     }
 
+    override suspend fun runQuickAction(
+        deviceSerial: String,
+        action: DeviceQuickAction,
+        logCommand: (String) -> Unit,
+    ) {
+        val command = buildQuickActionCommand(deviceSerial, action)
+        AdbShell.executeAdb(
+            args = command.args,
+            displayCommand = command.displayCommand,
+            logCommand = logCommand,
+        )
+    }
+
     private suspend fun executeGetProp(
         deviceSerial: String,
         propKey: String,
@@ -354,5 +367,42 @@ internal fun buildInstallApplicationCommand(
     return ApplicationInstallCommand(
         args = listOf("-s", deviceSerial, "install", "-r", apkFile.absolutePath),
         displayCommand = "adb -s $deviceSerial install -r \"${apkFile.absolutePath}\"",
+    )
+}
+
+internal data class DeviceQuickActionCommand(
+    val args: List<String>,
+    val displayCommand: String,
+)
+
+internal fun buildQuickActionCommand(
+    deviceSerial: String,
+    action: DeviceQuickAction,
+): DeviceQuickActionCommand {
+    return when (action) {
+        DeviceQuickAction.SHUTDOWN -> DeviceQuickActionCommand(
+            args = listOf("-s", deviceSerial, "reboot", "-p"),
+            displayCommand = "adb -s $deviceSerial reboot -p",
+        )
+
+        DeviceQuickAction.POWER -> buildKeyEventCommand(deviceSerial, "KEYCODE_POWER")
+        DeviceQuickAction.MENU -> buildKeyEventCommand(deviceSerial, "KEYCODE_APP_SWITCH")
+        DeviceQuickAction.HOME -> buildKeyEventCommand(deviceSerial, "KEYCODE_HOME")
+        DeviceQuickAction.BACK -> buildKeyEventCommand(deviceSerial, "KEYCODE_BACK")
+        DeviceQuickAction.VOLUME_UP -> buildKeyEventCommand(deviceSerial, "KEYCODE_VOLUME_UP")
+        DeviceQuickAction.VOLUME_DOWN -> buildKeyEventCommand(deviceSerial, "KEYCODE_VOLUME_DOWN")
+        DeviceQuickAction.MUTE -> buildKeyEventCommand(deviceSerial, "KEYCODE_VOLUME_MUTE")
+        DeviceQuickAction.WAKE -> buildKeyEventCommand(deviceSerial, "KEYCODE_WAKEUP")
+        DeviceQuickAction.SLEEP -> buildKeyEventCommand(deviceSerial, "KEYCODE_SLEEP")
+    }
+}
+
+private fun buildKeyEventCommand(
+    deviceSerial: String,
+    keyCode: String,
+): DeviceQuickActionCommand {
+    return DeviceQuickActionCommand(
+        args = listOf("-s", deviceSerial, "shell", "input", "keyevent", keyCode),
+        displayCommand = "adb -s $deviceSerial shell input keyevent $keyCode",
     )
 }

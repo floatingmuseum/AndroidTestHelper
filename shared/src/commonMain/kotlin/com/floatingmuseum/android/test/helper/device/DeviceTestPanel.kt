@@ -61,6 +61,7 @@ fun DeviceTestPanel(
     onReboot: () -> Unit,
     onTakeScreenshot: () -> Unit,
     onInstallApplications: () -> Unit,
+    onQuickAction: (DeviceQuickAction) -> Unit,
     isRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -382,142 +383,53 @@ fun DeviceTestPanel(
                         fontWeight = FontWeight.SemiBold
                     )
 
+                    val shortcutActions = listOf(
+                        DeviceShortcutAction("重启", true, onReboot),
+                        DeviceShortcutAction("关机", true) { onQuickAction(DeviceQuickAction.SHUTDOWN) },
+                        DeviceShortcutAction("截屏", false, onTakeScreenshot),
+                        DeviceShortcutAction("APK安装", false, onInstallApplications),
+                        DeviceShortcutAction("电源键", false) { onQuickAction(DeviceQuickAction.POWER) },
+                        DeviceShortcutAction("菜单键", false) { onQuickAction(DeviceQuickAction.MENU) },
+                        DeviceShortcutAction("HOME键", false) { onQuickAction(DeviceQuickAction.HOME) },
+                        DeviceShortcutAction("返回键", false) { onQuickAction(DeviceQuickAction.BACK) },
+                        DeviceShortcutAction("音量加", false) { onQuickAction(DeviceQuickAction.VOLUME_UP) },
+                        DeviceShortcutAction("音量减", false) { onQuickAction(DeviceQuickAction.VOLUME_DOWN) },
+                        DeviceShortcutAction("静音", false) { onQuickAction(DeviceQuickAction.MUTE) },
+                        DeviceShortcutAction("亮屏", false) { onQuickAction(DeviceQuickAction.WAKE) },
+                        DeviceShortcutAction("熄屏", false) { onQuickAction(DeviceQuickAction.SLEEP) },
+                    )
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.14f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(12.dp)
                             .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // 重启设备卡片
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
-                            ),
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                        shortcutActions.chunked(3).forEach { rowActions ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Column {
-                                    Text(
-                                        text = "重启设备 (Reboot)",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "向 Android 设备发送重启命令。重启后设备会重新引导，并且与测试助手的连接会断开。",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                rowActions.forEach { action ->
+                                    DeviceShortcutButton(
+                                        action = action,
+                                        enabled = !isRunning,
+                                        modifier = Modifier.weight(1f)
                                     )
                                 }
-
-                                Button(
-                                    onClick = onReboot,
-                                    enabled = !isRunning,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.error,
-                                        contentColor = MaterialTheme.colorScheme.onError
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text("重启设备", fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-
-                        // 快捷屏幕截图卡片
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
-                            ),
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "快捷屏幕截图",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "截取设备当前屏幕，选择本地目录后自动拉回电脑保存；文件名包含设备 SN 和时间戳。",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                Button(
-                                    onClick = onTakeScreenshot,
-                                    enabled = !isRunning,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text("选择目录并截图", fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-
-                        // 安装应用卡片
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.15f)
-                            ),
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f)
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "安装应用",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.tertiary
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "选择一个或多个本地 APK，按选择顺序依次安装到当前设备。每个安装命令都会写入命令记录。",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                Button(
-                                    onClick = onInstallApplications,
-                                    enabled = !isRunning,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.tertiary
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text("选择 APK 并安装", fontWeight = FontWeight.Bold)
+                                repeat(3 - rowActions.size) {
+                                    Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
                         }
@@ -525,6 +437,42 @@ fun DeviceTestPanel(
                 }
             }
         }
+    }
+}
+
+private data class DeviceShortcutAction(
+    val label: String,
+    val isDanger: Boolean,
+    val onClick: () -> Unit,
+)
+
+@Composable
+private fun DeviceShortcutButton(
+    action: DeviceShortcutAction,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val colors = if (action.isDanger) {
+        ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.error,
+            contentColor = MaterialTheme.colorScheme.onError,
+        )
+    } else {
+        ButtonDefaults.buttonColors()
+    }
+    Button(
+        onClick = action.onClick,
+        enabled = enabled,
+        colors = colors,
+        modifier = modifier.height(38.dp)
+    ) {
+        Text(
+            text = action.label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

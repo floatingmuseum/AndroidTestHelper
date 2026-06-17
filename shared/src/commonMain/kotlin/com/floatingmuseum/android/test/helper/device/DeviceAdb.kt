@@ -37,6 +37,19 @@ data class ApkInstallResult(
     val message: String,
 )
 
+enum class DeviceQuickAction(val label: String) {
+    SHUTDOWN("关机"),
+    POWER("电源键"),
+    MENU("菜单键"),
+    HOME("HOME键"),
+    BACK("返回键"),
+    VOLUME_UP("音量加"),
+    VOLUME_DOWN("音量减"),
+    MUTE("静音"),
+    WAKE("亮屏"),
+    SLEEP("熄屏"),
+}
+
 interface DeviceAdb {
     suspend fun loadSystemInfo(
         deviceSerial: String,
@@ -64,6 +77,12 @@ interface DeviceAdb {
         apkFilePaths: List<String>,
         logCommand: (String) -> Unit,
     ): List<ApkInstallResult>
+
+    suspend fun runQuickAction(
+        deviceSerial: String,
+        action: DeviceQuickAction,
+        logCommand: (String) -> Unit,
+    )
 }
 
 expect fun createDeviceAdb(): DeviceAdb

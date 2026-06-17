@@ -175,4 +175,43 @@ class DeviceAdbTest {
             command.displayCommand,
         )
     }
+
+    @Test
+    fun testBuildQuickActionCommandUsesExplicitDeviceForShutdown() {
+        val command = buildQuickActionCommand(
+            deviceSerial = "R58M123ABC",
+            action = DeviceQuickAction.SHUTDOWN,
+        )
+
+        assertEquals(listOf("-s", "R58M123ABC", "reboot", "-p"), command.args)
+        assertEquals("adb -s R58M123ABC reboot -p", command.displayCommand)
+    }
+
+    @Test
+    fun testBuildQuickActionCommandUsesExplicitDeviceForKeyEvent() {
+        val command = buildQuickActionCommand(
+            deviceSerial = "R58M123ABC",
+            action = DeviceQuickAction.HOME,
+        )
+
+        assertEquals(
+            listOf("-s", "R58M123ABC", "shell", "input", "keyevent", "KEYCODE_HOME"),
+            command.args,
+        )
+        assertEquals("adb -s R58M123ABC shell input keyevent KEYCODE_HOME", command.displayCommand)
+    }
+
+    @Test
+    fun testBuildQuickActionCommandMapsMenuToAppSwitch() {
+        val command = buildQuickActionCommand(
+            deviceSerial = "R58M123ABC",
+            action = DeviceQuickAction.MENU,
+        )
+
+        assertEquals(
+            listOf("-s", "R58M123ABC", "shell", "input", "keyevent", "KEYCODE_APP_SWITCH"),
+            command.args,
+        )
+        assertEquals("adb -s R58M123ABC shell input keyevent KEYCODE_APP_SWITCH", command.displayCommand)
+    }
 }
