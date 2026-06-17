@@ -706,7 +706,7 @@ fun App() {
                             bannerMessage = "检测到当前设备未安装辅助插件(ATHPlugin)，安装后可极大提升应用数据获取的效率与性能。"
                             showPluginBanner = true
                         } else if (installedVersion < targetLocalVersion) {
-                            bannerMessage = "检测到设备上已安装的辅助插件(ATHPlugin)版本过低(设备: v$installedVersion，本地: v$targetLocalVersion)，建议更新。"
+                            bannerMessage = "检测到设备上已安装的辅助插件(ATHPlugin)版本过低(当前: v$installedVersion，最新: v$targetLocalVersion)，建议更新。"
                             showPluginBanner = true
                         } else {
                             showPluginBanner = false
