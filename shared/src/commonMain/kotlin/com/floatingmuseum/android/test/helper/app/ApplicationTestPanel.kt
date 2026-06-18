@@ -886,22 +886,27 @@ private fun ApplicationDetailInfoPanel(
                                 .verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Text(
-                                text = "来源: ${content.source.title}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (isComponentSection) {
-                                val countText = if (detailSearchQuery.isBlank()) {
-                                    "共 $totalComponentCount 个${selectedSection.title}"
-                                } else {
-                                    "匹配 ${filteredItems.size} / $totalComponentCount 个${selectedSection.title}"
-                                }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Text(
-                                    text = countText,
+                                    text = "来源: ${content.source.title}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                if (isComponentSection) {
+                                    val countText = if (detailSearchQuery.isBlank()) {
+                                        "共 $totalComponentCount 个${selectedSection.title}"
+                                    } else {
+                                        "匹配 ${filteredItems.size} / $totalComponentCount 个${selectedSection.title}"
+                                    }
+                                    Text(
+                                        text = countText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                             if (isSearchableSection) {
                                 OutlinedTextField(
