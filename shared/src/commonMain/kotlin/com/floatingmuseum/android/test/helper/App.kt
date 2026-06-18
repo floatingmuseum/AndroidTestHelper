@@ -125,6 +125,7 @@ fun App() {
         var thirdPartyApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
         var systemApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
         var thirdPartyLoadedSerial by remember { mutableStateOf<String?>(null) }
+        var thirdPartyAutoRefreshAttemptedSerial by remember { mutableStateOf<String?>(null) }
         var systemLoadedSerial by remember { mutableStateOf<String?>(null) }
         var isLoadingThirdParty by remember { mutableStateOf(false) }
         var isLoadingSystem by remember { mutableStateOf(false) }
@@ -177,6 +178,7 @@ fun App() {
                     thirdPartyApps = emptyList()
                     systemApps = emptyList()
                     thirdPartyLoadedSerial = null
+                    thirdPartyAutoRefreshAttemptedSerial = null
                     systemLoadedSerial = null
                     systemAppsCacheFormattedTime = null
                     thirdPartyProgressCurrent = 0
@@ -445,6 +447,7 @@ fun App() {
                         if (successCount > 0) {
                             thirdPartyApps = emptyList()
                             thirdPartyLoadedSerial = null
+                            thirdPartyAutoRefreshAttemptedSerial = null
                             systemApps = emptyList()
                             systemLoadedSerial = null
                             systemAppsCacheFormattedTime = null
@@ -940,6 +943,24 @@ fun App() {
             }
         }
 
+        LaunchedEffect(
+            selectedTestModule,
+            selectedReadyDevice?.serialNumber,
+            isRunning,
+            thirdPartyAutoRefreshAttemptedSerial,
+        ) {
+            val deviceSerial = selectedReadyDevice?.serialNumber
+            if (selectedTestModule == TestModule.App &&
+                deviceSerial != null &&
+                !isRunning &&
+                thirdPartyLoadedSerial != deviceSerial &&
+                thirdPartyAutoRefreshAttemptedSerial != deviceSerial
+            ) {
+                thirdPartyAutoRefreshAttemptedSerial = deviceSerial
+                loadThirdPartyApps(deviceSerial)
+            }
+        }
+
         Surface(
             modifier = Modifier
                 .fillMaxSize()
@@ -1239,6 +1260,7 @@ fun App() {
                                     thirdPartyApps = emptyList()
                                     systemApps = emptyList()
                                     thirdPartyLoadedSerial = null
+                                    thirdPartyAutoRefreshAttemptedSerial = null
                                     systemLoadedSerial = null
                                     systemAppsCacheFormattedTime = null
                                     thirdPartyProgressCurrent = 0
