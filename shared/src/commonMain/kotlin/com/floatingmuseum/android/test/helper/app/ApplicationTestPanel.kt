@@ -966,11 +966,35 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
         }
         section == ApplicationDetailSection.PERMISSIONS -> {
             val parsedName = extractDetailAttribute(value, "name")
-            val searchableName = parsedName ?: value
+            val (title, body) = if (parsedName != null) {
+                val remaining = removeDetailAttribute(value, "name").ifBlank {
+                    if (label.startsWith("权限")) "已声明" else label
+                }
+                Pair(parsedName, remaining)
+            } else {
+                val delimiter = when {
+                    value.contains(" | ") -> " | "
+                    value.contains(" · ") -> " · "
+                    else -> null
+                }
+                if (delimiter != null) {
+                    val parts = value.split(delimiter)
+                    val name = parts.first().trim()
+                    val remaining = parts.drop(1).joinToString(" · ").trim()
+                    Pair(name, remaining.ifBlank { if (label.startsWith("权限")) "已声明" else label })
+                } else if (value.contains(": ")) {
+                    val parts = value.split(": ", limit = 2)
+                    val name = parts[0].trim()
+                    val remaining = parts[1].trim()
+                    Pair(name, remaining)
+                } else {
+                    Pair(value.trim(), if (label.startsWith("权限")) "已声明" else label)
+                }
+            }
             DisplayApplicationDetailItem(
-                title = label,
-                body = value,
-                searchableName = searchableName,
+                title = title,
+                body = body,
+                searchableName = title,
             )
         }
         else -> DisplayApplicationDetailItem(
