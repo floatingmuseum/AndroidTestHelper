@@ -88,6 +88,9 @@ There are two strategies to fetch the installed application list:
    - The plugin returns a JSON array containing metadata (packageName, appName, versionName, versionCode, targetSdkVersion, minSdkVersion, compileSdkVersion, isSystem, isEnabled) in one database cell.
    - Icons are loaded lazily. When rendering an icon, PC reads the raw binary stream directly:
      `adb -s <serial> exec-out content read --uri content://com.floatingmuseum.android.test.helper.plugin.provider/icon/<packageName>`
+   - Keep the root `ATHPLUGIN_API.md` document in sync with every ATHPlugin ContentProvider call:
+     - When adding, removing, or changing a plugin URI, query parameter, response field, parsing rule, or fallback behavior, update `ATHPLUGIN_API.md` in the same change.
+     - Treat `ATHPLUGIN_API.md` as the handoff contract for the ATHPlugin implementation side.
      
 2. **Standard ADB Fallback Mode (Slow)**:
    - Used when `ATHPlugin` is not installed or any feature call fails.
