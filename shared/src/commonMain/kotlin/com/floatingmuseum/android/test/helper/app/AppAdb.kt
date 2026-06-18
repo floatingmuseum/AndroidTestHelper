@@ -67,6 +67,34 @@ data class PluginVersionInfo(
     val versionName: String,
 )
 
+enum class ApplicationDetailSection(val title: String, val pluginKey: String) {
+    BASIC("基础", "basic"),
+    PERMISSIONS("权限", "permissions"),
+    ACTIVITIES("Activity", "activities"),
+    SERVICES("Service", "services"),
+    BROADCAST_RECEIVERS("BroadcastReceiver", "receivers"),
+    CONTENT_PROVIDERS("ContentProvider", "providers"),
+    SIGNATURES("签名", "signatures"),
+}
+
+enum class ApplicationDetailSource(val title: String) {
+    ATH_PLUGIN("ATHPlugin"),
+    ADB("ADB"),
+}
+
+@Serializable
+data class ApplicationDetailItem(
+    val label: String,
+    val value: String,
+)
+
+@Serializable
+data class ApplicationDetailContent(
+    val section: ApplicationDetailSection,
+    val source: ApplicationDetailSource,
+    val items: List<ApplicationDetailItem>,
+)
+
 interface AppAdb {
     suspend fun loadInstalledApps(
         deviceSerial: String,
@@ -80,6 +108,13 @@ interface AppAdb {
     suspend fun saveCachedSystemApps(deviceSerial: String, apps: List<InstalledAppInfo>)
 
     suspend fun clearApplicationListCache(deviceSerial: String)
+
+    suspend fun loadApplicationDetail(
+        deviceSerial: String,
+        app: InstalledAppInfo,
+        section: ApplicationDetailSection,
+        logCommand: (String) -> Unit,
+    ): ApplicationDetailContent
 
     suspend fun launchApplication(
         deviceSerial: String,

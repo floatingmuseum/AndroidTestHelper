@@ -79,6 +79,78 @@ class AppTest {
     }
 
     @Test
+    fun parsesApplicationDumpsysBasicItems() {
+        val items = parsePackageDumpsysBasicItems(
+            """
+            Package [com.example.app] (123abc):
+              userId=10234
+              codePath=/data/app/~~token/com.example.app/base.apk
+              resourcePath=/data/app/~~token/com.example.app/base.apk
+              legacyNativeLibraryDir=/data/app/~~token/com.example.app/lib
+              primaryCpuAbi=arm64-v8a
+              dataDir=/data/user/0/com.example.app
+              User 0: ceDataInode=123 installed=true hidden=false suspended=false stopped=false notLaunched=false enabled=0
+            """.trimIndent(),
+        )
+
+        assertEquals("10234", items.first { it.label == "userId" }.value)
+        assertEquals("/data/user/0/com.example.app", items.first { it.label == "dataDir" }.value)
+        assertEquals(
+            "ceDataInode=123 installed=true hidden=false suspended=false stopped=false notLaunched=false enabled=0",
+            items.first { it.label == "User 0" }.value,
+        )
+    }
+
+    @Test
+    fun parsesApplicationDumpsysPermissionLines() {
+        val items = parsePackageDumpsysPermissionItems(
+            """
+            requested permissions:
+              android.permission.INTERNET
+              com.example.permission.INTERNAL
+            install permissions:
+              android.permission.CAMERA: granted=true
+            runtime permissions:
+              android.permission.POST_NOTIFICATIONS: granted=false, flags=[ USER_SET ]
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(
+                "android.permission.INTERNET",
+                "com.example.permission.INTERNAL",
+                "android.permission.CAMERA: granted=true",
+                "android.permission.POST_NOTIFICATIONS: granted=false, flags=[ USER_SET ]",
+            ),
+            items.map { it.value },
+        )
+    }
+
+    @Test
+    fun parsesApplicationDumpsysSigningBlock() {
+        val items = parsePackageDumpsysSigningItems(
+            """
+            Package [com.example.app] (123abc):
+              Signing Details:
+                Scheme: v3
+                Signatures: [308203]
+                past signatures: []
+              install permissions:
+                android.permission.INTERNET: granted=true
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(
+                "Scheme: v3",
+                "Signatures: [308203]",
+                "past signatures: []",
+            ),
+            items.map { it.value },
+        )
+    }
+
+    @Test
     fun filtersInstalledAppsByNameOrPackage() {
         val apps = listOf(
             testInstalledApp("com.su.assistant.pro", "Dev Assistant"),

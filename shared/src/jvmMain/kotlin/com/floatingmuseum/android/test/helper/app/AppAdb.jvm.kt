@@ -73,6 +73,11 @@ private class JvmAppAdb : AppAdb {
         val isEnabled: Boolean
     )
 
+    @kotlinx.serialization.Serializable
+    private data class PluginApplicationDetailPayload(
+        val items: List<ApplicationDetailItem> = emptyList(),
+    )
+
     private suspend fun loadInstalledAppsWithPlugin(
         deviceSerial: String,
         isSystem: Boolean,
@@ -347,6 +352,127 @@ private class JvmAppAdb : AppAdb {
             applicationIconCacheDir().deleteRecursively()
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    override suspend fun loadApplicationDetail(
+        deviceSerial: String,
+        app: InstalledAppInfo,
+        section: ApplicationDetailSection,
+        logCommand: (String) -> Unit,
+    ): ApplicationDetailContent = withContext(Dispatchers.IO) {
+        val hasPlugin = isPluginInstalled(deviceSerial, logCommand)
+        if (hasPlugin) {
+            try {
+                return@withContext loadApplicationDetailWithPlugin(
+                    deviceSerial = deviceSerial,
+                    packageName = app.packageName,
+                    section = section,
+                    logCommand = logCommand,
+                )
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                error.printStackTrace()
+            }
+        }
+
+        loadApplicationDetailWithAdb(
+            deviceSerial = deviceSerial,
+            app = app,
+            section = section,
+            logCommand = logCommand,
+        )
+    }
+
+    private suspend fun loadApplicationDetailWithPlugin(
+        deviceSerial: String,
+        packageName: String,
+        section: ApplicationDetailSection,
+        logCommand: (String) -> Unit,
+    ): ApplicationDetailContent {
+        val uri = "content://com.floatingmuseum.android.test.helper.plugin.provider/details/$packageName?section=${section.pluginKey}"
+        val output = AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "content", "query", "--uri", uri),
+            displayCommand = "adb -s $deviceSerial shell content query --uri \"$uri\"",
+            logCommand = logCommand,
+        )
+        val jsonStr = parseContentQueryJson(output) ?: throw IllegalStateException("未从 ATHPlugin 获取应用详情")
+        val payload = Json {
+            ignoreUnknownKeys = true
+        }.decodeFromString<PluginApplicationDetailPayload>(jsonStr)
+        return ApplicationDetailContent(
+            section = section,
+            source = ApplicationDetailSource.ATH_PLUGIN,
+            items = payload.items,
+        )
+    }
+
+    private suspend fun loadApplicationDetailWithAdb(
+        deviceSerial: String,
+        app: InstalledAppInfo,
+        section: ApplicationDetailSection,
+        logCommand: (String) -> Unit,
+    ): ApplicationDetailContent {
+        val dumpsysOutput = AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "dumpsys", "package", app.packageName),
+            displayCommand = "adb -s $deviceSerial shell dumpsys package ${app.packageName}",
+            logCommand = logCommand,
+        )
+        val manifestDetails = when (section) {
+            ApplicationDetailSection.BASIC,
+            ApplicationDetailSection.PERMISSIONS,
+            ApplicationDetailSection.ACTIVITIES,
+            ApplicationDetailSection.SERVICES,
+            ApplicationDetailSection.BROADCAST_RECEIVERS,
+            ApplicationDetailSection.CONTENT_PROVIDERS -> loadApplicationManifestDetails(
+                deviceSerial = deviceSerial,
+                packageName = app.packageName,
+                logCommand = logCommand,
+            )
+            ApplicationDetailSection.SIGNATURES -> null
+        }
+        val items = buildApplicationDetailItems(
+            app = app,
+            section = section,
+            dumpsysOutput = dumpsysOutput,
+            manifestDetails = manifestDetails,
+        )
+        return ApplicationDetailContent(
+            section = section,
+            source = ApplicationDetailSource.ADB,
+            items = items,
+        )
+    }
+
+    private suspend fun loadApplicationManifestDetails(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ): ManifestDetails? {
+        val pathOutput = AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "pm", "path", packageName),
+            displayCommand = "adb -s $deviceSerial shell pm path $packageName",
+            logCommand = logCommand,
+        )
+        val baseApkPath = parsePmPathOutput(pathOutput).firstOrNull { it.endsWith("/base.apk") }
+            ?: parsePmPathOutput(pathOutput).firstOrNull()
+            ?: return null
+        val tempDirectory = createTempDirectory(prefix = "AndroidTestHelperAppDetail").toFile()
+        val localApk = File(tempDirectory, "$packageName.apk")
+        return try {
+            AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "pull", baseApkPath, localApk.absolutePath),
+                displayCommand = "adb -s $deviceSerial pull $baseApkPath ${localApk.absolutePath}",
+                logCommand = logCommand,
+            )
+            parseApkManifestDetails(localApk, packageName)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            error.printStackTrace()
+            null
+        } finally {
+            tempDirectory.deleteRecursively()
         }
     }
 
@@ -790,11 +916,16 @@ private fun applicationIconCacheDir(): File {
 // XML Parsing structures & functions
 private const val AndroidAttrLabel = 0x01010001
 private const val AndroidAttrIcon = 0x01010002
+private const val AndroidAttrName = 0x01010003
+private const val AndroidAttrPermission = 0x01010006
+private const val AndroidAttrEnabled = 0x0101000E
 private const val AndroidAttrRoundIcon = 0x0101052C
+private const val AndroidAttrExported = 0x01010010
 private const val AndroidAttrMinSdkVersion = 0x0101020C
 private const val AndroidAttrTargetSdkVersion = 0x01010270
 private const val AndroidAttrVersionCode = 0x0101021B
 private const val AndroidAttrVersionName = 0x0101021C
+private const val AndroidAttrAuthorities = 0x01010018
 private const val StringPoolChunk = 0x0001
 private const val TableChunk = 0x0002
 private const val XmlStartElementChunk = 0x0102
@@ -828,6 +959,23 @@ private data class ApkMetadata(
     val versionName: String? = null,
 )
 
+private data class ManifestDetails(
+    val packageName: String,
+    val requestedPermissions: List<String> = emptyList(),
+    val activities: List<ApplicationComponentDetail> = emptyList(),
+    val services: List<ApplicationComponentDetail> = emptyList(),
+    val receivers: List<ApplicationComponentDetail> = emptyList(),
+    val providers: List<ApplicationComponentDetail> = emptyList(),
+)
+
+private data class ApplicationComponentDetail(
+    val name: String,
+    val exported: String? = null,
+    val enabled: String? = null,
+    val permission: String? = null,
+    val authorities: String? = null,
+)
+
 private data class ManifestMetadata(
     val label: String? = null,
     val labelResourceId: Int? = null,
@@ -837,12 +985,19 @@ private data class ManifestMetadata(
     val targetSdkVersion: Int? = null,
     val versionCode: Long? = null,
     val versionName: String? = null,
+    val details: ManifestDetails = ManifestDetails(packageName = ""),
 )
 
 private data class AttributeValue(
     val rawString: String?,
     val dataType: Int,
     val data: Int,
+)
+
+private data class XmlAttribute(
+    val name: String?,
+    val resourceId: Int?,
+    val value: AttributeValue,
 )
 
 private data class ResourceValue(
@@ -954,6 +1109,156 @@ internal fun parsePackageDumpsys(output: String): Map<String, PackageDumpsysInfo
     return result
 }
 
+private fun buildApplicationDetailItems(
+    app: InstalledAppInfo,
+    section: ApplicationDetailSection,
+    dumpsysOutput: String,
+    manifestDetails: ManifestDetails?,
+): List<ApplicationDetailItem> {
+    return when (section) {
+        ApplicationDetailSection.BASIC -> buildApplicationBasicDetailItems(app, dumpsysOutput, manifestDetails)
+        ApplicationDetailSection.PERMISSIONS -> buildApplicationPermissionItems(manifestDetails, dumpsysOutput)
+        ApplicationDetailSection.ACTIVITIES -> buildApplicationComponentItems(manifestDetails?.activities.orEmpty())
+        ApplicationDetailSection.SERVICES -> buildApplicationComponentItems(manifestDetails?.services.orEmpty())
+        ApplicationDetailSection.BROADCAST_RECEIVERS -> buildApplicationComponentItems(manifestDetails?.receivers.orEmpty())
+        ApplicationDetailSection.CONTENT_PROVIDERS -> buildApplicationComponentItems(manifestDetails?.providers.orEmpty())
+        ApplicationDetailSection.SIGNATURES -> parsePackageDumpsysSigningItems(dumpsysOutput)
+    }.ifEmpty {
+        listOf(ApplicationDetailItem("状态", "未解析到该分类信息"))
+    }
+}
+
+private fun buildApplicationBasicDetailItems(
+    app: InstalledAppInfo,
+    dumpsysOutput: String,
+    manifestDetails: ManifestDetails?,
+): List<ApplicationDetailItem> {
+    return listOf(
+        ApplicationDetailItem("应用名", app.appName),
+        ApplicationDetailItem("包名", app.packageName),
+        ApplicationDetailItem("版本名", app.versionName),
+        ApplicationDetailItem("版本号", app.versionCode?.toString() ?: "-"),
+        ApplicationDetailItem("compileSdkVersion", formatDetailSdkVersion(app.compileSdkVersion)),
+        ApplicationDetailItem("minSdkVersion", formatDetailSdkVersion(app.minSdkVersion)),
+        ApplicationDetailItem("targetSdkVersion", formatDetailSdkVersion(app.targetSdkVersion)),
+        ApplicationDetailItem("应用类型", if (app.isSystem) "系统应用" else "第三方应用"),
+        ApplicationDetailItem("启用状态", if (app.isEnabled) "已启用" else "已停用"),
+    ) + listOfNotNull(
+        manifestDetails?.packageName?.takeIf { it.isNotBlank() }?.let { ApplicationDetailItem("Manifest package", it) },
+    ) + parsePackageDumpsysBasicItems(dumpsysOutput)
+}
+
+internal fun parsePackageDumpsysBasicItems(output: String): List<ApplicationDetailItem> {
+    val keys = listOf(
+        "userId",
+        "codePath",
+        "resourcePath",
+        "legacyNativeLibraryDir",
+        "primaryCpuAbi",
+        "secondaryCpuAbi",
+        "dataDir",
+    )
+    val result = mutableListOf<ApplicationDetailItem>()
+    output.lineSequence()
+        .map { it.trim() }
+        .forEach { line ->
+            keys.firstOrNull { line.startsWith("$it=") }?.let { key ->
+                result += ApplicationDetailItem(key, line.substringAfter('=').trim())
+            }
+            if (line.startsWith("User 0:")) {
+                result += ApplicationDetailItem("User 0", line.removePrefix("User 0:").trim())
+            }
+        }
+    return result.distinctBy { it.label to it.value }
+}
+
+private fun buildApplicationPermissionItems(
+    manifestDetails: ManifestDetails?,
+    dumpsysOutput: String,
+): List<ApplicationDetailItem> {
+    val declaredItems = manifestDetails?.requestedPermissions.orEmpty().map {
+        ApplicationDetailItem("声明权限", it)
+    }
+    val installedItems = parsePackageDumpsysPermissionItems(dumpsysOutput)
+    return (declaredItems + installedItems).distinctBy { it.label to it.value }
+}
+
+internal fun parsePackageDumpsysPermissionItems(output: String): List<ApplicationDetailItem> {
+    return output.lineSequence()
+        .map { it.trim() }
+        .filter { line ->
+            line.contains(".permission.", ignoreCase = true) ||
+                line.startsWith("android.permission.") ||
+                line.startsWith("permission.")
+        }
+        .map { line -> ApplicationDetailItem("安装态", line) }
+        .distinctBy { it.value }
+        .toList()
+}
+
+private fun buildApplicationComponentItems(
+    components: List<ApplicationComponentDetail>,
+): List<ApplicationDetailItem> {
+    return components.map { component ->
+        val attributes = listOfNotNull(
+            component.exported?.let { "exported=$it" },
+            component.enabled?.let { "enabled=$it" },
+            component.permission?.let { "permission=$it" },
+            component.authorities?.let { "authorities=$it" },
+        )
+        ApplicationDetailItem(
+            label = component.name,
+            value = attributes.joinToString(" · ").ifBlank { "已声明" },
+        )
+    }
+}
+
+internal fun parsePackageDumpsysSigningItems(output: String): List<ApplicationDetailItem> {
+    val block = extractIndentedBlock(output, "Signing Details:")
+        .ifEmpty { extractIndentedBlock(output, "Signing:")
+        }
+    val lines = if (block.isNotEmpty()) {
+        block
+    } else {
+        output.lineSequence()
+            .map { it.trim() }
+            .filter {
+                it.contains("signature", ignoreCase = true) ||
+                    it.contains("cert", ignoreCase = true) ||
+                    it.contains("Signing", ignoreCase = true)
+            }
+            .toList()
+    }
+    return lines
+        .filter { it.isNotBlank() }
+        .mapIndexed { index, line -> ApplicationDetailItem("签名 ${index + 1}", line) }
+        .distinctBy { it.value }
+}
+
+private fun extractIndentedBlock(output: String, heading: String): List<String> {
+    val lines = output.lines()
+    val headingIndex = lines.indexOfFirst { it.trim() == heading }
+    if (headingIndex < 0) return emptyList()
+    val headingIndent = lines[headingIndex].takeWhile { it == ' ' }.length
+    val result = mutableListOf<String>()
+    for (index in headingIndex + 1 until lines.size) {
+        val rawLine = lines[index]
+        val line = rawLine.trim()
+        if (line.isBlank()) {
+            if (result.isNotEmpty()) break
+            continue
+        }
+        val indent = rawLine.takeWhile { it == ' ' }.length
+        if (indent <= headingIndent && result.isNotEmpty()) break
+        result += line
+    }
+    return result
+}
+
+private fun formatDetailSdkVersion(sdkVersion: Int?): String {
+    return sdkVersion?.toString() ?: "-"
+}
+
 private fun parseApkMetadata(apkFile: File, includeIcon: Boolean = true): ApkMetadata {
     return ZipFile(apkFile).use { zipFile ->
         val manifestEntry = zipFile.getEntry("AndroidManifest.xml") ?: return ApkMetadata()
@@ -988,11 +1293,24 @@ private fun parseApkMetadata(apkFile: File, includeIcon: Boolean = true): ApkMet
     }
 }
 
-private fun parseAndroidManifestMetadata(bytes: ByteArray): ManifestMetadata {
+private fun parseApkManifestDetails(apkFile: File, fallbackPackageName: String): ManifestDetails {
+    return ZipFile(apkFile).use { zipFile ->
+        val manifestEntry = zipFile.getEntry("AndroidManifest.xml") ?: return ManifestDetails(fallbackPackageName)
+        val manifestBytes = zipFile.getInputStream(manifestEntry).readBytes()
+        val details = parseAndroidManifestMetadata(manifestBytes, fallbackPackageName).details
+        details.copy(packageName = details.packageName.ifBlank { fallbackPackageName })
+    }
+}
+
+private fun parseAndroidManifestMetadata(
+    bytes: ByteArray,
+    fallbackPackageName: String = "",
+): ManifestMetadata {
     val buffer = bytes.asLittleEndianBuffer()
     var offset = 8
     var strings = emptyList<String>()
     var resourceMap = emptyList<Int>()
+    var manifestPackageName = fallbackPackageName
     var labelString: String? = null
     var labelResourceId: Int? = null
     var iconResourceId: Int? = null
@@ -1002,6 +1320,11 @@ private fun parseAndroidManifestMetadata(bytes: ByteArray): ManifestMetadata {
     var targetSdkVersion: Int? = null
     var versionCode: Long? = null
     var versionName: String? = null
+    val requestedPermissions = mutableListOf<String>()
+    val activities = mutableListOf<ApplicationComponentDetail>()
+    val services = mutableListOf<ApplicationComponentDetail>()
+    val receivers = mutableListOf<ApplicationComponentDetail>()
+    val providers = mutableListOf<ApplicationComponentDetail>()
 
     while (offset + 8 <= bytes.size) {
         val type = buffer.uShort(offset)
@@ -1014,53 +1337,78 @@ private fun parseAndroidManifestMetadata(bytes: ByteArray): ManifestMetadata {
             XmlStartElementChunk -> {
                 val tagNameIndex = buffer.getInt(offset + 20)
                 val tagName = strings.getOrNull(tagNameIndex)
-                if (tagName == "manifest" || tagName == "uses-sdk" || tagName == "application") {
-                    val attrStart = buffer.uShort(offset + 24)
-                    val attrSize = buffer.uShort(offset + 26)
-                    val attrCount = buffer.uShort(offset + 28)
-                    val attrsOffset = offset + 16 + attrStart
+                val attrStart = buffer.uShort(offset + 24)
+                val attrSize = buffer.uShort(offset + 26)
+                val attrCount = buffer.uShort(offset + 28)
+                val attrsOffset = offset + 16 + attrStart
+                val attrs = (0 until attrCount).map { index ->
+                    val attrOffset = attrsOffset + index * attrSize
+                    val attrNameIndex = buffer.getInt(attrOffset + 4)
+                    XmlAttribute(
+                        name = strings.getOrNull(attrNameIndex),
+                        resourceId = resourceMap.getOrNull(attrNameIndex),
+                        value = parseXmlAttributeValue(buffer, strings, attrOffset),
+                    )
+                }
 
-                    repeat(attrCount) { index ->
-                        val attrOffset = attrsOffset + index * attrSize
-                        val attrNameIndex = buffer.getInt(attrOffset + 4)
-                        val attrName = strings.getOrNull(attrNameIndex)
-                        val attrResourceId = resourceMap.getOrNull(attrNameIndex)
-                        val value = parseXmlAttributeValue(buffer, strings, attrOffset)
+                fun attr(name: String, resourceId: Int): AttributeValue? {
+                    return attrs.firstOrNull { it.name == name || it.resourceId == resourceId }?.value
+                }
 
-                        when {
-                            attrName == "label" || attrResourceId == AndroidAttrLabel -> {
-                                if (value.dataType == ValueTypeString) {
-                                    labelString = value.rawString ?: strings.getOrNull(value.data)
-                                } else if (value.dataType == ValueTypeReference) {
-                                    labelResourceId = value.data
-                                }
-                            }
-                            attrName == "icon" || attrResourceId == AndroidAttrIcon -> {
-                                if (value.dataType == ValueTypeReference) {
-                                    iconResourceId = value.data
-                                }
-                            }
-                            attrName == "roundIcon" || attrResourceId == AndroidAttrRoundIcon -> {
-                                if (value.dataType == ValueTypeReference) {
-                                    roundIconResourceId = value.data
-                                }
-                            }
-                            attrName == "compileSdkVersion" -> {
-                                compileSdkVersion = value.asInt(strings)
-                            }
-                            attrName == "minSdkVersion" || attrResourceId == AndroidAttrMinSdkVersion -> {
-                                minSdkVersion = value.asInt(strings)
-                            }
-                            attrName == "targetSdkVersion" || attrResourceId == AndroidAttrTargetSdkVersion -> {
-                                targetSdkVersion = value.asInt(strings)
-                            }
-                            attrName == "versionCode" || attrResourceId == AndroidAttrVersionCode -> {
-                                versionCode = value.asInt(strings)?.toLong()
-                            }
-                            attrName == "versionName" || attrResourceId == AndroidAttrVersionName -> {
-                                versionName = value.rawString ?: strings.getOrNull(value.data)
+                fun attrString(name: String, resourceId: Int): String? {
+                    val value = attr(name, resourceId) ?: return null
+                    return value.rawString ?: strings.getOrNull(value.data)
+                }
+
+                when (tagName) {
+                    "manifest" -> {
+                        manifestPackageName = attrs.firstOrNull { it.name == "package" }?.value?.let { value ->
+                            value.rawString ?: strings.getOrNull(value.data)
+                        } ?: fallbackPackageName
+
+                        attr("compileSdkVersion", 0)?.let { compileSdkVersion = it.asInt(strings) }
+                        attr("versionCode", AndroidAttrVersionCode)?.let { versionCode = it.asInt(strings)?.toLong() }
+                        attrString("versionName", AndroidAttrVersionName)?.let { versionName = it }
+                    }
+                    "uses-sdk" -> {
+                        attr("minSdkVersion", AndroidAttrMinSdkVersion)?.let { minSdkVersion = it.asInt(strings) }
+                        attr("targetSdkVersion", AndroidAttrTargetSdkVersion)?.let { targetSdkVersion = it.asInt(strings) }
+                    }
+                    "uses-permission" -> {
+                        attrString("name", AndroidAttrName)?.takeIf { it.isNotBlank() }?.let {
+                            requestedPermissions += it
+                        }
+                    }
+                    "application" -> {
+                        attr("label", AndroidAttrLabel)?.let { value ->
+                            if (value.dataType == ValueTypeString) {
+                                labelString = value.rawString ?: strings.getOrNull(value.data)
+                            } else if (value.dataType == ValueTypeReference) {
+                                labelResourceId = value.data
                             }
                         }
+                        attr("icon", AndroidAttrIcon)?.let { value ->
+                            if (value.dataType == ValueTypeReference) {
+                                iconResourceId = value.data
+                            }
+                        }
+                        attr("roundIcon", AndroidAttrRoundIcon)?.let { value ->
+                            if (value.dataType == ValueTypeReference) {
+                                roundIconResourceId = value.data
+                            }
+                        }
+                    }
+                    "activity", "activity-alias" -> {
+                        parseComponentDetail(attrs, strings, manifestPackageName)?.let { activities += it }
+                    }
+                    "service" -> {
+                        parseComponentDetail(attrs, strings, manifestPackageName)?.let { services += it }
+                    }
+                    "receiver" -> {
+                        parseComponentDetail(attrs, strings, manifestPackageName)?.let { receivers += it }
+                    }
+                    "provider" -> {
+                        parseComponentDetail(attrs, strings, manifestPackageName)?.let { providers += it }
                     }
                 }
             }
@@ -1078,7 +1426,48 @@ private fun parseAndroidManifestMetadata(bytes: ByteArray): ManifestMetadata {
         targetSdkVersion = targetSdkVersion,
         versionCode = versionCode,
         versionName = versionName,
+        details = ManifestDetails(
+            packageName = manifestPackageName,
+            requestedPermissions = requestedPermissions.distinct(),
+            activities = activities.distinctBy { it.name },
+            services = services.distinctBy { it.name },
+            receivers = receivers.distinctBy { it.name },
+            providers = providers.distinctBy { it.name },
+        ),
     )
+}
+
+private fun parseComponentDetail(
+    attrs: List<XmlAttribute>,
+    strings: List<String>,
+    packageName: String,
+): ApplicationComponentDetail? {
+    fun attr(name: String, resourceId: Int): AttributeValue? {
+        return attrs.firstOrNull { it.name == name || it.resourceId == resourceId }?.value
+    }
+
+    fun attrString(name: String, resourceId: Int): String? {
+        val value = attr(name, resourceId) ?: return null
+        return value.asDisplayString(strings)
+    }
+
+    val rawName = attrString("name", AndroidAttrName)?.takeIf { it.isNotBlank() } ?: return null
+    return ApplicationComponentDetail(
+        name = normalizeComponentName(packageName, rawName),
+        exported = attrString("exported", AndroidAttrExported),
+        enabled = attrString("enabled", AndroidAttrEnabled),
+        permission = attrString("permission", AndroidAttrPermission),
+        authorities = attrString("authorities", AndroidAttrAuthorities),
+    )
+}
+
+private fun normalizeComponentName(packageName: String, componentName: String): String {
+    return when {
+        componentName.startsWith(".") -> "$packageName$componentName"
+        "." in componentName -> componentName
+        packageName.isBlank() -> componentName
+        else -> "$packageName.$componentName"
+    }
 }
 
 private fun parseXmlAttributeValue(
@@ -1100,6 +1489,16 @@ private fun AttributeValue.asInt(strings: List<String>): Int? {
     return rawString?.toIntOrNull()
         ?: strings.getOrNull(data)?.toIntOrNull()
         ?: data.takeIf { it >= 0 }
+}
+
+private fun AttributeValue.asDisplayString(strings: List<String>): String? {
+    rawString?.takeIf { it.isNotBlank() }?.let { return it }
+    strings.getOrNull(data)?.takeIf { it.isNotBlank() }?.let { return it }
+    return when (dataType) {
+        0x12 -> if (data != 0) "true" else "false"
+        ValueTypeReference -> "@0x${data.toUInt().toString(16)}"
+        else -> data.toString()
+    }
 }
 
 private fun parseXmlResourceMap(

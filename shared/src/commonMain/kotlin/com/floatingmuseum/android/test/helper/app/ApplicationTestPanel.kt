@@ -1,12 +1,17 @@
 package com.floatingmuseum.android.test.helper.app
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +30,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -32,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +77,10 @@ fun ApplicationTestPanel(
     onRefreshSystem: () -> Unit,
     onClearCache: () -> Unit,
     onApplicationAction: (InstalledAppInfo, String) -> Unit,
+    applicationDetailPackageName: String?,
+    applicationDetailSections: Map<ApplicationDetailSection, ApplicationDetailContent>,
+    loadingApplicationDetailSection: ApplicationDetailSection?,
+    onLoadApplicationDetail: (InstalledAppInfo, ApplicationDetailSection) -> Unit,
     isRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -117,6 +129,10 @@ fun ApplicationTestPanel(
                         app = selectedApp,
                         onBack = { selectedAppPackageName = null },
                         onAction = { action -> onApplicationAction(selectedApp, action) },
+                        detailPackageName = applicationDetailPackageName,
+                        detailSections = applicationDetailSections,
+                        loadingDetailSection = loadingApplicationDetailSection,
+                        onLoadDetailSection = { section -> onLoadApplicationDetail(selectedApp, section) },
                         isRunning = isRunning,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -529,81 +545,116 @@ private fun ApplicationDetailPanel(
     app: InstalledAppInfo,
     onBack: () -> Unit,
     onAction: (String) -> Unit,
+    detailPackageName: String?,
+    detailSections: Map<ApplicationDetailSection, ApplicationDetailContent>,
+    loadingDetailSection: ApplicationDetailSection?,
+    onLoadDetailSection: (ApplicationDetailSection) -> Unit,
     isRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
     var showDangerousActionConfirmDialog by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<String?>(null) }
+    var selectedDetailSection by remember(app.packageName) { mutableStateOf(ApplicationDetailSection.BASIC) }
+    val visibleDetailSections = if (detailPackageName == app.packageName) {
+        detailSections
+    } else {
+        emptyMap()
+    }
 
-    Column(
+    LaunchedEffect(app.packageName, selectedDetailSection, visibleDetailSections[selectedDetailSection], loadingDetailSection, isRunning) {
+        if (
+            visibleDetailSections[selectedDetailSection] == null &&
+            loadingDetailSection != selectedDetailSection &&
+            !isRunning
+        ) {
+            onLoadDetailSection(selectedDetailSection)
+        }
+    }
+
+    Row(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .fillMaxHeight(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.fillMaxWidth(),
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(
-                modifier = Modifier.padding(14.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                ApplicationIcon(
-                    iconBytes = app.iconBytes,
-                    packageName = app.packageName,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clickable(enabled = !isRunning && app.iconBytes != null) {
-                            onAction("保存图标")
-                        },
-                )
-                SelectionContainer {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = app.appName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = app.packageName,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = "${app.versionName}(${app.versionCode?.toString() ?: "-"})",
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ApplicationIcon(
+                        iconBytes = app.iconBytes,
+                        packageName = app.packageName,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clickable(enabled = !isRunning && app.iconBytes != null) {
+                                onAction("保存图标")
+                            },
+                    )
+                    SelectionContainer {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = app.appName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = app.packageName,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "${app.versionName}(${app.versionCode?.toString() ?: "-"})",
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    Button(onClick = onBack) {
+                        Text("返回")
                     }
                 }
-                Button(onClick = onBack) {
-                    Text("返回")
-                }
             }
-        }
 
-        ApplicationInfoBlock(
-            lines = listOf(
-                "compileSdkVersion: ${formatSdkVersion(app.compileSdkVersion)}",
-                "minSdkVersion: ${formatSdkVersion(app.minSdkVersion)}",
-                "targetSdkVersion: ${formatSdkVersion(app.targetSdkVersion)}",
-                "应用类型: ${if (app.isSystem) "系统应用" else "第三方应用"}",
-                "启用状态: ${if (app.isEnabled) "已启用" else "已停用"}",
-            ),
-            modifier = Modifier.fillMaxWidth(),
-        )
+            ApplicationDetailInfoPanel(
+                selectedSection = selectedDetailSection,
+                detailSections = visibleDetailSections,
+                loadingSection = loadingDetailSection,
+                isRunning = isRunning,
+                onSelectSection = { section ->
+                    if (selectedDetailSection == section) {
+                        if (!isRunning && loadingDetailSection != section) {
+                            onLoadDetailSection(section)
+                        }
+                    } else {
+                        selectedDetailSection = section
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            )
+        }
         ApplicationActionGroup(
             actions = listOf("启动应用", "结束应用", "清除数据", "停用应用", "启用应用", "导出APK", "卸载应用"),
             onAction = { action ->
@@ -615,6 +666,7 @@ private fun ApplicationDetailPanel(
                 }
             },
             isRunning = isRunning,
+            modifier = Modifier.weight(1f),
         )
     }
 
@@ -677,29 +729,325 @@ private fun ApplicationDetailPanel(
 }
 
 @Composable
-private fun ApplicationInfoBlock(
-    lines: List<String>,
+private fun ApplicationDetailInfoPanel(
+    selectedSection: ApplicationDetailSection,
+    detailSections: Map<ApplicationDetailSection, ApplicationDetailContent>,
+    loadingSection: ApplicationDetailSection?,
+    isRunning: Boolean,
+    onSelectSection: (ApplicationDetailSection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(8.dp),
+    var detailSearchQuery by remember(selectedSection) { mutableStateOf("") }
+    val isSearchableSection = selectedSection.isSearchableDetailSection()
+    val isComponentSection = selectedSection.isApplicationComponentSection()
+
+    Column(
         modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        SelectionContainer {
-            Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                lines.forEach { line ->
-                    Text(
-                        text = line,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ApplicationDetailSection.values().forEach { section ->
+                val isSelected = selectedSection == section
+                val isLoading = loadingSection == section
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                        )
+                        .clickable(enabled = !isLoading) {
+                            onSelectSection(section)
+                        }
+                        .border(
+                            width = 1.dp,
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Text(
+                            text = section.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            maxLines = 1,
+                        )
+                        if (isSelected) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            } else {
+                                Text(
+                                    text = "↻",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                        }
+                    }
                 }
             }
+        }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
+            ),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            ),
+        ) {
+            val content = detailSections[selectedSection]
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+            ) {
+                when {
+                    loadingSection == selectedSection -> {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                            Text(
+                                text = "正在获取${selectedSection.title}信息...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    content == null -> {
+                        Text(
+                            text = if (isRunning) {
+                                "等待当前任务完成后获取信息。"
+                            } else {
+                                "暂无数据，请点击上方选项卡获取。"
+                            },
+                            modifier = Modifier.align(Alignment.Center),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    content.items.isEmpty() -> {
+                        Text(
+                            text = "该分类无可显示信息。",
+                            modifier = Modifier.align(Alignment.Center),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    else -> {
+                        val displayItems = content.items.map { item ->
+                            item.toDisplayDetailItem(selectedSection)
+                        }
+                        val filteredItems = displayItems.filter { item ->
+                            detailSearchQuery.isBlank() ||
+                                item.searchableName.contains(detailSearchQuery.trim(), ignoreCase = true)
+                        }
+                        val isPlaceholderItem = content.items.size == 1 && content.items.first().label == "状态"
+                        val totalComponentCount = if (isPlaceholderItem) 0 else displayItems.size
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                text = "来源: ${content.source.title}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (isComponentSection) {
+                                val countText = if (detailSearchQuery.isBlank()) {
+                                    "共 $totalComponentCount 个${selectedSection.title}"
+                                } else {
+                                    "匹配 ${filteredItems.size} / $totalComponentCount 个${selectedSection.title}"
+                                }
+                                Text(
+                                    text = countText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (isSearchableSection) {
+                                OutlinedTextField(
+                                    value = detailSearchQuery,
+                                    onValueChange = { detailSearchQuery = it },
+                                    label = {
+                                        Text(
+                                            if (selectedSection == ApplicationDetailSection.PERMISSIONS) {
+                                                "搜索权限名"
+                                            } else {
+                                                "搜索 name"
+                                            }
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                )
+                            }
+                            if (filteredItems.isEmpty()) {
+                                Text(
+                                    text = "没有匹配的信息。",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 24.dp),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                filteredItems.forEach { item ->
+                                    ApplicationDetailRow(
+                                        item = item,
+                                        searchQuery = detailSearchQuery.takeIf { isSearchableSection }.orEmpty(),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class DisplayApplicationDetailItem(
+    val title: String,
+    val body: String,
+    val searchableName: String,
+)
+
+private fun ApplicationDetailItem.toDisplayDetailItem(
+    section: ApplicationDetailSection,
+): DisplayApplicationDetailItem {
+    return when {
+        section.isApplicationComponentSection() -> {
+            val parsedName = extractDetailAttribute(value, "name")
+            val title = parsedName ?: label
+            DisplayApplicationDetailItem(
+                title = title,
+                body = removeDetailAttribute(value, "name").ifBlank { "已声明" },
+                searchableName = title,
+            )
+        }
+        section == ApplicationDetailSection.PERMISSIONS -> {
+            val parsedName = extractDetailAttribute(value, "name")
+            val searchableName = parsedName ?: value
+            DisplayApplicationDetailItem(
+                title = label,
+                body = value,
+                searchableName = searchableName,
+            )
+        }
+        else -> DisplayApplicationDetailItem(
+            title = label,
+            body = value,
+            searchableName = label,
+        )
+    }
+}
+
+private fun ApplicationDetailSection.isSearchableDetailSection(): Boolean {
+    return this == ApplicationDetailSection.PERMISSIONS || isApplicationComponentSection()
+}
+
+private fun ApplicationDetailSection.isApplicationComponentSection(): Boolean {
+    return this == ApplicationDetailSection.ACTIVITIES ||
+        this == ApplicationDetailSection.SERVICES ||
+        this == ApplicationDetailSection.BROADCAST_RECEIVERS ||
+        this == ApplicationDetailSection.CONTENT_PROVIDERS
+}
+
+private fun extractDetailAttribute(
+    text: String,
+    attributeName: String,
+): String? {
+    val match = Regex("""(?:^|\s|\||·)$attributeName=([^|·\s]+)""").find(text) ?: return null
+    return match.groupValues[1].trim().takeIf { it.isNotBlank() }
+}
+
+private fun removeDetailAttribute(
+    text: String,
+    attributeName: String,
+): String {
+    val withoutAttribute = Regex("""(?:^|\s|\||·)$attributeName=[^|·\s]+""").replace(text, " ")
+    return withoutAttribute
+        .split('|', '·')
+        .map { it.trim() }
+        .filterNot { it.startsWith("$attributeName=") }
+        .filter { it.isNotBlank() }
+        .joinToString(" · ")
+}
+
+@Composable
+private fun ApplicationDetailRow(
+    item: DisplayApplicationDetailItem,
+    searchQuery: String,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(4.dp),
+            )
+            .background(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(4.dp),
+            )
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        SelectionContainer {
+            Text(
+                text = highlightedSearchText(item.title, searchQuery),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        SelectionContainer {
+            Text(
+                text = highlightedSearchText(item.body, searchQuery),
+                style = MaterialTheme.typography.bodyMedium,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 }
@@ -709,18 +1057,21 @@ private fun ApplicationActionGroup(
     actions: List<String>,
     onAction: (String) -> Unit,
     isRunning: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .fillMaxHeight(),
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            actions.chunked(5).forEach { rowActions ->
+            actions.chunked(2).forEach { rowActions ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -748,49 +1099,12 @@ private fun ApplicationActionGroup(
                             )
                         }
                     }
-                    repeat(5 - rowActions.size) {
+                    repeat(2 - rowActions.size) {
                         Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
         }
-    }
-}
-
-private fun formatSdkVersion(sdkVersion: Int?): String {
-    if (sdkVersion == null) return "-"
-    val androidVersion = androidVersionName(sdkVersion)
-    return if (androidVersion == null) {
-        sdkVersion.toString()
-    } else {
-        "$sdkVersion(${androidVersion.version},${androidVersion.name})"
-    }
-}
-
-private data class AndroidVersionName(
-    val version: String,
-    val name: String,
-)
-
-private fun androidVersionName(sdkVersion: Int): AndroidVersionName? {
-    return when (sdkVersion) {
-        21 -> AndroidVersionName("Android 5.0", "Lollipop")
-        22 -> AndroidVersionName("Android 5.1", "Lollipop")
-        23 -> AndroidVersionName("Android 6", "Marshmallow")
-        24 -> AndroidVersionName("Android 7.0", "Nougat")
-        25 -> AndroidVersionName("Android 7.1", "Nougat")
-        26 -> AndroidVersionName("Android 8.0", "Oreo")
-        27 -> AndroidVersionName("Android 8.1", "Oreo")
-        28 -> AndroidVersionName("Android 9", "Pie")
-        29 -> AndroidVersionName("Android 10", "Q")
-        30 -> AndroidVersionName("Android 11", "R")
-        31 -> AndroidVersionName("Android 12", "Snow Cone")
-        32 -> AndroidVersionName("Android 12L", "Snow Cone v2")
-        33 -> AndroidVersionName("Android 13", "Tiramisu")
-        34 -> AndroidVersionName("Android 14", "Upside Down Cake")
-        35 -> AndroidVersionName("Android 15", "Vanilla Ice Cream")
-        36 -> AndroidVersionName("Android 16", "Baklava")
-        else -> null
     }
 }
 

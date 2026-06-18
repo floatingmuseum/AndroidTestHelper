@@ -60,6 +60,8 @@ import com.floatingmuseum.android.test.helper.datafill.createDataFillAdb
 import com.floatingmuseum.android.test.helper.datafill.formatBytes
 import com.floatingmuseum.android.test.helper.datafill.parseGiBInput
 import com.floatingmuseum.android.test.helper.app.InstalledAppInfo
+import com.floatingmuseum.android.test.helper.app.ApplicationDetailContent
+import com.floatingmuseum.android.test.helper.app.ApplicationDetailSection
 import com.floatingmuseum.android.test.helper.app.PluginVersionInfo
 import com.floatingmuseum.android.test.helper.app.ApplicationTestPanel
 import com.floatingmuseum.android.test.helper.app.createAppAdb
@@ -131,6 +133,11 @@ fun App() {
         var thirdPartyProgressTotal by remember { mutableStateOf(0) }
         var systemProgressCurrent by remember { mutableStateOf(0) }
         var systemProgressTotal by remember { mutableStateOf(0) }
+        var applicationDetailPackageName by remember { mutableStateOf<String?>(null) }
+        var applicationDetailSections by remember {
+            mutableStateOf<Map<ApplicationDetailSection, ApplicationDetailContent>>(emptyMap())
+        }
+        var loadingApplicationDetailSection by remember { mutableStateOf<ApplicationDetailSection?>(null) }
         var deviceSystemInfo by remember { mutableStateOf<DeviceSystemInfo?>(null) }
         var systemProperties by remember { mutableStateOf<List<SystemProperty>>(emptyList()) }
         var isLoadingDeviceSystemInfo by remember { mutableStateOf(false) }
@@ -176,6 +183,9 @@ fun App() {
                     thirdPartyProgressTotal = 0
                     systemProgressCurrent = 0
                     systemProgressTotal = 0
+                    applicationDetailPackageName = null
+                    applicationDetailSections = emptyMap()
+                    loadingApplicationDetailSection = null
                     deviceSystemInfo = null
                     systemProperties = emptyList()
                     deviceSystemInfoLoadedSerial = null
@@ -438,6 +448,9 @@ fun App() {
                             systemApps = emptyList()
                             systemLoadedSerial = null
                             systemAppsCacheFormattedTime = null
+                            applicationDetailPackageName = null
+                            applicationDetailSections = emptyMap()
+                            loadingApplicationDetailSection = null
                         }
 
                         statusText = if (failureResults.isEmpty()) {
@@ -468,6 +481,9 @@ fun App() {
                 thirdPartyLoadedSerial = deviceSerial
                 thirdPartyProgressCurrent = 0
                 thirdPartyProgressTotal = 0
+                applicationDetailPackageName = null
+                applicationDetailSections = emptyMap()
+                loadingApplicationDetailSection = null
                 statusText = "读取第三方应用..."
                 appendCommand("状态: 读取第三方应用...")
                 try {
@@ -500,6 +516,9 @@ fun App() {
                 systemAppsCacheFormattedTime = null
                 systemProgressCurrent = 0
                 systemProgressTotal = 0
+                applicationDetailPackageName = null
+                applicationDetailSections = emptyMap()
+                loadingApplicationDetailSection = null
                 statusText = "读取系统应用..."
                 appendCommand("状态: 读取系统应用...")
                 try {
@@ -552,12 +571,70 @@ fun App() {
                     thirdPartyProgressTotal = 0
                     systemProgressCurrent = 0
                     systemProgressTotal = 0
+                    applicationDetailPackageName = null
+                    applicationDetailSections = emptyMap()
+                    loadingApplicationDetailSection = null
                     statusText = "已清空应用列表缓存"
                     appendCommand("状态: 已清空应用列表缓存")
                 } catch (error: Throwable) {
                     statusText = error.message ?: "清空应用列表缓存失败"
                     appendCommand("错误: 清空应用列表缓存失败 - ${error.message ?: "未知错误"}")
                 } finally {
+                    isRunning = false
+                }
+            }
+        }
+
+        fun loadApplicationDetail(app: InstalledAppInfo, section: ApplicationDetailSection) {
+            if (isRunning) return
+            val deviceSerial = selectedReadyDevice?.serialNumber
+            if (deviceSerial == null) {
+                statusText = "先选择状态为 device 的设备"
+                appendCommand("错误: 先选择状态为 device 的设备")
+                return
+            }
+
+            scope.launch {
+                isRunning = true
+                if (applicationDetailPackageName != app.packageName) {
+                    applicationDetailPackageName = app.packageName
+                    applicationDetailSections = emptyMap()
+                }
+                loadingApplicationDetailSection = section
+                statusText = "读取 ${app.packageName} ${section.title}信息..."
+                appendCommand("状态: 读取 ${app.packageName} ${section.title}信息...")
+                try {
+                    val content = appAdb.loadApplicationDetail(
+                        deviceSerial = deviceSerial,
+                        app = app,
+                        section = section,
+                        logCommand = ::appendCommand,
+                    )
+                    if (applicationDetailPackageName == app.packageName) {
+                        applicationDetailSections = applicationDetailSections + (section to content)
+                    }
+                    statusText = "已读取 ${app.packageName} ${section.title}信息"
+                    appendCommand("状态: 已读取 ${app.packageName} ${section.title}信息")
+                } catch (error: Throwable) {
+                    val message = error.message ?: "读取应用详情失败"
+                    if (applicationDetailPackageName == app.packageName) {
+                        applicationDetailSections = applicationDetailSections + (
+                            section to ApplicationDetailContent(
+                                section = section,
+                                source = com.floatingmuseum.android.test.helper.app.ApplicationDetailSource.ADB,
+                                items = listOf(
+                                    com.floatingmuseum.android.test.helper.app.ApplicationDetailItem(
+                                        label = "错误",
+                                        value = message,
+                                    ),
+                                ),
+                            )
+                        )
+                    }
+                    statusText = message
+                    appendCommand("错误: 读取 ${app.packageName} ${section.title}信息失败 - $message")
+                } finally {
+                    loadingApplicationDetailSection = null
                     isRunning = false
                 }
             }
@@ -647,6 +724,9 @@ fun App() {
                 if (app.packageName == packageName) app.copy(isEnabled = isEnabled) else app
             }
             systemApps = nextSystemApps
+            if (applicationDetailPackageName == packageName) {
+                applicationDetailSections = applicationDetailSections - ApplicationDetailSection.BASIC
+            }
             return nextSystemApps
         }
 
@@ -654,6 +734,11 @@ fun App() {
             thirdPartyApps = removeInstalledApp(thirdPartyApps, packageName)
             val nextSystemApps = removeInstalledApp(systemApps, packageName)
             systemApps = nextSystemApps
+            if (applicationDetailPackageName == packageName) {
+                applicationDetailPackageName = null
+                applicationDetailSections = emptyMap()
+                loadingApplicationDetailSection = null
+            }
             return nextSystemApps
         }
 
@@ -1127,6 +1212,10 @@ fun App() {
                                     },
                                     onClearCache = ::clearApplicationListCache,
                                     onApplicationAction = ::runApplicationAction,
+                                    applicationDetailPackageName = applicationDetailPackageName,
+                                    applicationDetailSections = applicationDetailSections,
+                                    loadingApplicationDetailSection = loadingApplicationDetailSection,
+                                    onLoadApplicationDetail = ::loadApplicationDetail,
                                     isRunning = isRunning,
                                     modifier = Modifier.fillMaxSize(),
                                 )
@@ -1156,6 +1245,9 @@ fun App() {
                                     thirdPartyProgressTotal = 0
                                     systemProgressCurrent = 0
                                     systemProgressTotal = 0
+                                    applicationDetailPackageName = null
+                                    applicationDetailSections = emptyMap()
+                                    loadingApplicationDetailSection = null
 
                                     deviceSystemInfo = null
                                     systemProperties = emptyList()
