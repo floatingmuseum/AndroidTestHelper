@@ -179,6 +179,10 @@ interface AppAdb {
 
     fun getIgnoredPluginCheckVersion(): String?
     fun saveIgnoredPluginCheckVersion(version: String)
+    suspend fun isPluginEnabled(
+        deviceSerial: String,
+        logCommand: (String) -> Unit,
+    ): Boolean
 }
 
 expect fun createAppAdb(): AppAdb

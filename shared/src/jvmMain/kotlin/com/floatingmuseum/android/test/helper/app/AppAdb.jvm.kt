@@ -818,6 +818,23 @@ private class JvmAppAdb : AppAdb {
         }
     }
 
+    override suspend fun isPluginEnabled(
+        deviceSerial: String,
+        logCommand: (String) -> Unit,
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val output = AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "pm", "list", "packages", "-d", "com.floatingmuseum.android.test.helper.plugin"),
+                displayCommand = "adb -s $deviceSerial shell pm list packages -d com.floatingmuseum.android.test.helper.plugin",
+                logCommand = logCommand
+            )
+            !output.contains("package:com.floatingmuseum.android.test.helper.plugin")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            true
+        }
+    }
+
     override suspend fun getLocalPluginApkBytes(): ByteArray? = withContext(Dispatchers.IO) {
         // 1. Check development directories relative to working directory
         val pathsToCheck = listOf(

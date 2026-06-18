@@ -109,6 +109,8 @@ fun App() {
         var showPluginBanner by remember { mutableStateOf(false) }
         var bannerMessage by remember { mutableStateOf("") }
         var isInstallingPlugin by remember { mutableStateOf(false) }
+        var isEnablingPlugin by remember { mutableStateOf(false) }
+        var bannerActionType by remember { mutableStateOf(BannerActionType.INSTALL) }
         var isBannerDismissedThisSession by remember { mutableStateOf(false) }
         var localApkBytes by remember { mutableStateOf<ByteArray?>(null) }
         var localApkVersionInfo by remember { mutableStateOf<PluginVersionInfo?>(null) }
@@ -892,12 +894,21 @@ fun App() {
                         val installedVersionInfo = appAdb.getInstalledPluginVersionInfo(deviceSerial, ::appendCommand)
                         if (installedVersionInfo == null) {
                             bannerMessage = "检测到当前设备未安装辅助插件(ATHPlugin)，安装后可极大提升应用数据获取的效率与性能。"
-                            showPluginBanner = true
-                        } else if (installedVersionInfo.versionCode < targetLocalVersionInfo.versionCode) {
-                            bannerMessage = "检测到设备上已安装的辅助插件(ATHPlugin)版本过低(当前: ${installedVersionInfo.versionName}，最新: ${targetLocalVersionInfo.versionName})，建议更新。"
+                            bannerActionType = BannerActionType.INSTALL
                             showPluginBanner = true
                         } else {
-                            showPluginBanner = false
+                            val isPluginEnabled = appAdb.isPluginEnabled(deviceSerial, ::appendCommand)
+                            if (!isPluginEnabled) {
+                                bannerMessage = "检测到辅助插件 (ATHPlugin) 当前处于禁用状态。这可能会延长应用信息的获取时间，且会影响获取结果的完整性。建议立即启用。"
+                                bannerActionType = BannerActionType.ENABLE
+                                showPluginBanner = true
+                            } else if (installedVersionInfo.versionCode < targetLocalVersionInfo.versionCode) {
+                                bannerMessage = "检测到设备上已安装的辅助插件(ATHPlugin)版本过低(当前: ${installedVersionInfo.versionName}，最新: ${targetLocalVersionInfo.versionName})，建议更新。"
+                                bannerActionType = BannerActionType.UPDATE
+                                showPluginBanner = true
+                            } else {
+                                showPluginBanner = false
+                            }
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -975,26 +986,63 @@ fun App() {
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                 if (showPluginBanner && !isBannerDismissedThisSession) {
+                    val actionLabel = when (bannerActionType) {
+                        BannerActionType.INSTALL -> "立即安装"
+                        BannerActionType.UPDATE -> "立即更新"
+                        BannerActionType.ENABLE -> "立即启用"
+                    }
                     PluginCheckBanner(
                         message = bannerMessage,
-                        onInstall = {
+                        actionLabel = actionLabel,
+                        onAction = {
                             val serial = selectedReadyDevice?.serialNumber
-                            val bytes = localApkBytes
-                            if (serial != null && bytes != null && !isInstallingPlugin) {
-                                isInstallingPlugin = true
-                                scope.launch {
-                                    statusText = "正在设备 $serial 上安装辅助插件..."
-                                    appendCommand("状态: 开始在设备 $serial 上安装辅助插件...")
-                                    val success = appAdb.installPluginApk(serial, bytes, ::appendCommand)
-                                    if (success) {
-                                        statusText = "辅助插件安装成功"
-                                        appendCommand("状态: 设备 $serial 上的辅助插件安装成功")
-                                        showPluginBanner = false
-                                    } else {
-                                        statusText = "辅助插件安装失败，请检查连接"
-                                        appendCommand("错误: 设备 $serial 上的辅助插件安装失败")
+                            if (serial != null) {
+                                if (bannerActionType == BannerActionType.ENABLE) {
+                                    if (!isEnablingPlugin) {
+                                        isEnablingPlugin = true
+                                        scope.launch {
+                                            statusText = "正在启用辅助插件..."
+                                            appendCommand("状态: 开始在设备 $serial 上启用辅助插件...")
+                                            try {
+                                                appAdb.enableApplication(serial, "com.floatingmuseum.android.test.helper.plugin", ::appendCommand)
+                                                // 延迟 500ms，等待系统状态更新
+                                                kotlinx.coroutines.delay(500)
+                                                val isEnabled = appAdb.isPluginEnabled(serial, ::appendCommand)
+                                                if (isEnabled) {
+                                                    statusText = "辅助插件已启用"
+                                                    appendCommand("状态: 设备 $serial 上的辅助插件已启用成功")
+                                                } else {
+                                                    statusText = "自动启用失败，建议手动启用"
+                                                    appendCommand("错误: 设备 $serial 上的辅助插件启用命令执行完毕，但重新检测状态仍为禁用，请尝试在手机设置中手动启用。")
+                                                }
+                                            } catch (e: Exception) {
+                                                statusText = "自动启用失败，建议手动启用"
+                                                appendCommand("错误: 在设备 $serial 上启用辅助插件失败 - ${e.message}")
+                                            } finally {
+                                                isEnablingPlugin = false
+                                                showPluginBanner = false // 无论成功与否，横幅直接隐藏，避免常驻
+                                            }
+                                        }
                                     }
-                                    isInstallingPlugin = false
+                                } else {
+                                    val bytes = localApkBytes
+                                    if (bytes != null && !isInstallingPlugin) {
+                                        isInstallingPlugin = true
+                                        scope.launch {
+                                            statusText = "正在设备 $serial 上安装辅助插件..."
+                                            appendCommand("状态: 开始在设备 $serial 上安装辅助插件...")
+                                            val success = appAdb.installPluginApk(serial, bytes, ::appendCommand)
+                                            if (success) {
+                                                statusText = "辅助插件安装成功"
+                                                appendCommand("状态: 设备 $serial 上的辅助插件安装成功")
+                                                showPluginBanner = false
+                                            } else {
+                                                statusText = "辅助插件安装失败，请检查连接"
+                                                appendCommand("错误: 设备 $serial 上的辅助插件安装失败")
+                                            }
+                                            isInstallingPlugin = false
+                                        }
+                                    }
                                 }
                             }
                         },
@@ -1005,7 +1053,7 @@ fun App() {
                         onDismiss = {
                             isBannerDismissedThisSession = true
                         },
-                        isInstalling = isInstallingPlugin
+                        isProcessing = isInstallingPlugin || isEnablingPlugin
                     )
                 }
 
@@ -1634,10 +1682,11 @@ private fun CommandLogPanel(
 @Composable
 private fun PluginCheckBanner(
     message: String,
-    onInstall: () -> Unit,
+    actionLabel: String,
+    onAction: () -> Unit,
     onIgnore: () -> Unit,
     onDismiss: () -> Unit,
-    isInstalling: Boolean,
+    isProcessing: Boolean,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -1664,25 +1713,31 @@ private fun PluginCheckBanner(
             )
 
             Button(
-                onClick = onInstall,
-                enabled = !isInstalling,
+                onClick = onAction,
+                enabled = !isProcessing,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary
                 )
             ) {
-                Text(if (isInstalling) "安装中..." else "立即安装")
+                val processingLabel = when (actionLabel) {
+                    "立即安装" -> "安装中..."
+                    "立即更新" -> "更新中..."
+                    "立即启用" -> "启用中..."
+                    else -> "处理中..."
+                }
+                Text(if (isProcessing) processingLabel else actionLabel)
             }
 
             TextButton(
                 onClick = onIgnore,
-                enabled = !isInstalling
+                enabled = !isProcessing
             ) {
                 Text("不再提示")
             }
 
             TextButton(
                 onClick = onDismiss,
-                enabled = !isInstalling
+                enabled = !isProcessing
             ) {
                 Text(
                     text = "✕",
@@ -1692,4 +1747,10 @@ private fun PluginCheckBanner(
             }
         }
     }
+}
+
+private enum class BannerActionType {
+    INSTALL,
+    UPDATE,
+    ENABLE
 }
