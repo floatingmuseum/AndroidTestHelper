@@ -129,6 +129,8 @@ fun App() {
         var thirdPartyLoadedSerial by remember { mutableStateOf<String?>(null) }
         var thirdPartyAutoRefreshAttemptedSerial by remember { mutableStateOf<String?>(null) }
         var systemLoadedSerial by remember { mutableStateOf<String?>(null) }
+        var systemCacheCheckedSerial by remember { mutableStateOf<String?>(null) }
+        var systemAutoRefreshAttemptedSerial by remember { mutableStateOf<String?>(null) }
         var isLoadingThirdParty by remember { mutableStateOf(false) }
         var isLoadingSystem by remember { mutableStateOf(false) }
         var systemAppsCacheFormattedTime by remember { mutableStateOf<String?>(null) }
@@ -182,6 +184,8 @@ fun App() {
                     thirdPartyLoadedSerial = null
                     thirdPartyAutoRefreshAttemptedSerial = null
                     systemLoadedSerial = null
+                    systemCacheCheckedSerial = null
+                    systemAutoRefreshAttemptedSerial = null
                     systemAppsCacheFormattedTime = null
                     thirdPartyProgressCurrent = 0
                     thirdPartyProgressTotal = 0
@@ -452,6 +456,8 @@ fun App() {
                             thirdPartyAutoRefreshAttemptedSerial = null
                             systemApps = emptyList()
                             systemLoadedSerial = null
+                            systemCacheCheckedSerial = deviceSerial
+                            systemAutoRefreshAttemptedSerial = null
                             systemAppsCacheFormattedTime = null
                             applicationDetailPackageName = null
                             applicationDetailSections = emptyMap()
@@ -541,6 +547,7 @@ fun App() {
                     if (cached != null) {
                         systemAppsCacheFormattedTime = cached.cacheTimeFormatted
                     }
+                    systemCacheCheckedSerial = deviceSerial
                 } catch (error: Throwable) {
                     systemLoadedSerial = null
                     statusText = error.message ?: "读取系统应用失败"
@@ -571,6 +578,8 @@ fun App() {
                     systemApps = emptyList()
                     thirdPartyLoadedSerial = null
                     systemLoadedSerial = null
+                    systemCacheCheckedSerial = null
+                    systemAutoRefreshAttemptedSerial = null
                     systemAppsCacheFormattedTime = null
                     thirdPartyProgressCurrent = 0
                     thirdPartyProgressTotal = 0
@@ -945,12 +954,33 @@ fun App() {
                             systemAppsCacheFormattedTime = null
                             systemLoadedSerial = null
                         }
+                        systemCacheCheckedSerial = deviceSerial
                     }
                     if (thirdPartyLoadedSerial != deviceSerial) {
                         thirdPartyApps = emptyList()
                         thirdPartyLoadedSerial = null
                     }
                 }
+            }
+        }
+
+        LaunchedEffect(
+            selectedTestModule,
+            selectedReadyDevice?.serialNumber,
+            isRunning,
+            systemCacheCheckedSerial,
+            systemAutoRefreshAttemptedSerial,
+        ) {
+            val deviceSerial = selectedReadyDevice?.serialNumber
+            if (selectedTestModule == TestModule.App &&
+                deviceSerial != null &&
+                !isRunning &&
+                systemCacheCheckedSerial == deviceSerial &&
+                systemLoadedSerial != deviceSerial &&
+                systemAutoRefreshAttemptedSerial != deviceSerial
+            ) {
+                systemAutoRefreshAttemptedSerial = deviceSerial
+                loadSystemApps(deviceSerial)
             }
         }
 
@@ -1310,6 +1340,8 @@ fun App() {
                                     thirdPartyLoadedSerial = null
                                     thirdPartyAutoRefreshAttemptedSerial = null
                                     systemLoadedSerial = null
+                                    systemCacheCheckedSerial = null
+                                    systemAutoRefreshAttemptedSerial = null
                                     systemAppsCacheFormattedTime = null
                                     thirdPartyProgressCurrent = 0
                                     thirdPartyProgressTotal = 0
