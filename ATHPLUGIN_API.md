@@ -11,9 +11,10 @@
 
 ```bash
 adb -s <serial> shell pm path com.floatingmuseum.android.test.helper.plugin
+adb -s <serial> shell pm list packages -d com.floatingmuseum.android.test.helper.plugin
 ```
 
-当输出以 `package:` 开头时，桌面端认为 ATHPlugin 已安装。若插件未安装，或任一插件接口调用失败，桌面端会回退到标准 ADB 解析路径。
+当 `pm path` 输出以 `package:` 开头时，桌面端认为 ATHPlugin 已安装；当 `pm list packages -d` 未返回该包名时，桌面端认为 ATHPlugin 已启用且 Provider 可用。若插件未安装、插件处于禁用状态，或任一插件接口调用失败，桌面端会回退到标准 ADB 解析路径。
 
 ## Content Query 返回格式
 
@@ -93,6 +94,7 @@ adb -s <serial> shell content query --uri "content://com.floatingmuseum.android.
 
 - 应用列表加载完成后，桌面端会按 `appName.lowercase()`、`packageName` 排序。
 - 图标不随列表返回。桌面端会按需调用图标接口，并按 `packageName + versionCode/versionName` 本地缓存。
+- 若 ATHPlugin 已安装但处于禁用状态，桌面端不会调用该接口或图标接口，会直接走标准 ADB 模式。
 - 该接口失败时，桌面端自动回退标准 ADB 模式。
 
 ## 2. 查询应用详情
@@ -180,6 +182,7 @@ adb -s <serial> shell content query --uri "content://com.floatingmuseum.android.
 - 权限和组件分类支持搜索。
 - 组件分类会尝试从 `value` 中解析 `name=<value>`；若没有该属性，则使用 `label` 作为组件名。
 - `items` 为空时显示“该分类无可显示信息。”
+- 若 ATHPlugin 已安装但处于禁用状态，桌面端不会调用该接口，会直接走 `dumpsys package` 加 APK Manifest 解析。
 - 若插件调用失败，桌面端回退到 `dumpsys package` 加 APK Manifest 解析。
 
 ## 3. 读取应用图标
@@ -208,6 +211,7 @@ adb -s <serial> exec-out content read --uri "content://com.floatingmuseum.androi
 
 - 图标读取失败不影响应用列表显示。
 - 图标会按应用版本缓存；同包名版本变化后会重新读取。
+- 若 ATHPlugin 已安装但处于禁用状态，桌面端不会调用该接口，应用列表会直接走标准 ADB 模式下的 APK 图标解析。
 
 ## 非 ContentProvider 操作
 

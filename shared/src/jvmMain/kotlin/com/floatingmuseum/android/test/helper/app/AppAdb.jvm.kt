@@ -30,8 +30,8 @@ private class JvmAppAdb : AppAdb {
         logCommand: (String) -> Unit,
         onProgress: (current: Int, total: Int) -> Unit,
     ): List<InstalledAppInfo> = withContext(Dispatchers.IO) {
-        val hasPlugin = isPluginInstalled(deviceSerial, logCommand)
-        val apps = if (hasPlugin) {
+        val canUsePluginProvider = isPluginProviderAvailable(deviceSerial, logCommand)
+        val apps = if (canUsePluginProvider) {
             try {
                 loadInstalledAppsWithPlugin(deviceSerial, isSystem, logCommand, onProgress)
             } catch (e: Exception) {
@@ -58,6 +58,10 @@ private class JvmAppAdb : AppAdb {
         } catch (e: Exception) {
             false
         }
+    }
+
+    private suspend fun isPluginProviderAvailable(deviceSerial: String, logCommand: (String) -> Unit): Boolean {
+        return isPluginInstalled(deviceSerial, logCommand) && isPluginEnabled(deviceSerial, logCommand)
     }
 
     @kotlinx.serialization.Serializable
@@ -361,8 +365,8 @@ private class JvmAppAdb : AppAdb {
         section: ApplicationDetailSection,
         logCommand: (String) -> Unit,
     ): ApplicationDetailContent = withContext(Dispatchers.IO) {
-        val hasPlugin = isPluginInstalled(deviceSerial, logCommand)
-        if (hasPlugin) {
+        val canUsePluginProvider = isPluginProviderAvailable(deviceSerial, logCommand)
+        if (canUsePluginProvider) {
             try {
                 return@withContext loadApplicationDetailWithPlugin(
                     deviceSerial = deviceSerial,
