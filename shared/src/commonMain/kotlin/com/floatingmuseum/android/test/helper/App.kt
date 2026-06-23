@@ -1382,6 +1382,9 @@ fun App() {
 
                             CommandLogPanel(
                                 commandLog = commandLog,
+                                onClearCommandLog = {
+                                    commandLog = emptyList()
+                                },
                                 modifier = Modifier.weight(2f),
                             )
                         }
@@ -1653,6 +1656,7 @@ private fun DevicePanel(
 @Composable
 private fun CommandLogPanel(
     commandLog: List<String>,
+    onClearCommandLog: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
@@ -1667,11 +1671,23 @@ private fun CommandLogPanel(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = "命令记录",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "命令记录",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(
+                    onClick = onClearCommandLog,
+                    enabled = commandLog.isNotEmpty(),
+                ) {
+                    Text("清空")
+                }
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
