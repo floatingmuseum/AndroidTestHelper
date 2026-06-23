@@ -1,0 +1,88 @@
+package com.floatingmuseum.android.test.helper.app
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun PluginCheckBanner(
+    message: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+    onIgnore: () -> Unit,
+    onDismiss: () -> Unit,
+    isProcessing: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(8.dp),
+        tonalElevation = 2.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = "💡",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.weight(1f),
+            )
+
+            Button(
+                onClick = onAction,
+                enabled = !isProcessing,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                ),
+            ) {
+                val processingLabel = when (actionLabel) {
+                    "立即安装" -> "安装中..."
+                    "立即更新" -> "更新中..."
+                    "立即启用" -> "启用中..."
+                    else -> "处理中..."
+                }
+                Text(if (isProcessing) processingLabel else actionLabel)
+            }
+
+            TextButton(
+                onClick = onIgnore,
+                enabled = !isProcessing,
+            ) {
+                Text("不再提示")
+            }
+
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isProcessing,
+            ) {
+                Text(
+                    text = "✕",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
+    }
+}

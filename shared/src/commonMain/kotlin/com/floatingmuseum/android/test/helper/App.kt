@@ -1,33 +1,15 @@
 package com.floatingmuseum.android.test.helper
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,34 +18,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.TextButton
 import com.floatingmuseum.android.test.helper.adb.createAdbDeviceManager
-import com.floatingmuseum.android.test.helper.datafill.BytesInGiB
-import com.floatingmuseum.android.test.helper.datafill.FillControls
-import com.floatingmuseum.android.test.helper.datafill.FillProgress
-import com.floatingmuseum.android.test.helper.datafill.StorageInfo
-import com.floatingmuseum.android.test.helper.datafill.StoragePanel
-import com.floatingmuseum.android.test.helper.datafill.createDataFillAdb
-import com.floatingmuseum.android.test.helper.datafill.formatBytes
-import com.floatingmuseum.android.test.helper.datafill.parseGiBInput
+import com.floatingmuseum.android.test.helper.datafill.DataFillModuleContent
+import com.floatingmuseum.android.test.helper.datafill.rememberDataFillModuleController
 import com.floatingmuseum.android.test.helper.app.InstalledAppInfo
 import com.floatingmuseum.android.test.helper.app.ApplicationDetailContent
 import com.floatingmuseum.android.test.helper.app.ApplicationDetailSection
 import com.floatingmuseum.android.test.helper.app.PluginVersionInfo
 import com.floatingmuseum.android.test.helper.app.ApplicationTestPanel
+import com.floatingmuseum.android.test.helper.app.PluginCheckBanner
 import com.floatingmuseum.android.test.helper.app.createAppAdb
 import com.floatingmuseum.android.test.helper.app.pluginCheckIgnoreKey
 import com.floatingmuseum.android.test.helper.app.removeInstalledApp
@@ -72,23 +38,16 @@ import com.floatingmuseum.android.test.helper.device.DeviceQuickAction
 import com.floatingmuseum.android.test.helper.device.SystemProperty
 import com.floatingmuseum.android.test.helper.device.createDeviceAdb
 import com.floatingmuseum.android.test.helper.device.DeviceTestPanel
-import com.floatingmuseum.android.test.helper.devicelog.DeviceLogCaptureProgress
-import com.floatingmuseum.android.test.helper.devicelog.DeviceLogCaptureResult
-import com.floatingmuseum.android.test.helper.devicelog.DeviceLogCaptureEndState
 import com.floatingmuseum.android.test.helper.devicelog.DeviceLogPanel
-import com.floatingmuseum.android.test.helper.devicelog.createDeviceLogAdb
+import com.floatingmuseum.android.test.helper.devicelog.LogCaptureFloatingButton
+import com.floatingmuseum.android.test.helper.devicelog.rememberDeviceLogModuleController
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
-private enum class TestModule(val title: String) {
-    Device("设备"),
-    App("应用"),
-    DataFill("数据填充"),
-    Log("日志"),
+private enum class BannerActionType {
+    INSTALL,
+    UPDATE,
+    ENABLE
 }
 
 @Composable
@@ -96,10 +55,8 @@ private enum class TestModule(val title: String) {
 fun App() {
     MaterialTheme {
         val adbDeviceManager = remember { createAdbDeviceManager() }
-        val dataFillAdb = remember { createDataFillAdb() }
         val appAdb = remember { createAppAdb() }
         val deviceAdb = remember { createDeviceAdb() }
-        val deviceLogAdb = remember { createDeviceLogAdb() }
 
         val scope = rememberCoroutineScope()
         var devices by remember { mutableStateOf<List<AndroidDevice>>(emptyList()) }
@@ -113,13 +70,8 @@ fun App() {
         var isBannerDismissedThisSession by remember { mutableStateOf(false) }
         var localApkBytes by remember { mutableStateOf<ByteArray?>(null) }
         var localApkVersionInfo by remember { mutableStateOf<PluginVersionInfo?>(null) }
-        var storageInfo by remember { mutableStateOf<StorageInfo?>(null) }
-        var customFillValue by remember { mutableStateOf("") }
-        var remainingValue by remember { mutableStateOf("") }
         var statusText by remember { mutableStateOf("等待连接设备") }
         var isRunning by remember { mutableStateOf(false) }
-        var runningJob by remember { mutableStateOf<Job?>(null) }
-        var fillProgress by remember { mutableStateOf<FillProgress?>(null) }
         var commandLog by remember { mutableStateOf<List<String>>(emptyList()) }
         var bottomPanelHeightPx by remember { mutableStateOf<Float?>(null) }
         var selectedTestModule by remember { mutableStateOf(TestModule.Device) }
@@ -148,17 +100,32 @@ fun App() {
         var isLoadingDeviceProperties by remember { mutableStateOf(false) }
         var deviceSystemInfoLoadedSerial by remember { mutableStateOf<String?>(null) }
         var devicePropertiesLoadedSerial by remember { mutableStateOf<String?>(null) }
-        var deviceLogProgress by remember { mutableStateOf<DeviceLogCaptureProgress?>(null) }
-        var lastDeviceLogResult by remember { mutableStateOf<DeviceLogCaptureResult?>(null) }
-        var deviceLogJob by remember { mutableStateOf<Job?>(null) }
-        var deviceLogCapturingDeviceLabel by remember { mutableStateOf<String?>(null) }
         val selectedDevice = devices.firstOrNull { it.serialNumber == selectedDeviceSerial }
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
-        val isCapturingLogcat = deviceLogJob != null
 
         fun appendCommand(command: String) {
             commandLog = (commandLog + command).takeLast(200)
         }
+
+        val dataFillModule = rememberDataFillModuleController(
+            scope = scope,
+            getSelectedReadyDevice = {
+                devices.firstOrNull { it.serialNumber == selectedDeviceSerial }?.takeIf { it.isReady }
+            },
+            isRunning = { isRunning },
+            setRunning = { isRunning = it },
+            setStatusText = { statusText = it },
+            appendCommand = ::appendCommand,
+        )
+        val deviceLogModule = rememberDeviceLogModuleController(
+            scope = scope,
+            getSelectedReadyDevice = {
+                devices.firstOrNull { it.serialNumber == selectedDeviceSerial }?.takeIf { it.isReady }
+            },
+            setStatusText = { statusText = it },
+            appendCommand = ::appendCommand,
+        )
+        val isCapturingLogcat = deviceLogModule.isCapturing
 
         fun refreshDevices() {
             if (isRunning) return
@@ -176,8 +143,7 @@ fun App() {
                         else -> discoveredDevices.firstOrNull { it.isReady }?.serialNumber
                     }
                     selectedDeviceSerial = nextSelectedDeviceSerial
-                    storageInfo = null
-                    fillProgress = null
+                    dataFillModule.clearDeviceState()
                     thirdPartyApps = emptyList()
                     systemApps = emptyList()
                     thirdPartyLoadedSerial = null
@@ -199,11 +165,7 @@ fun App() {
                     devicePropertiesLoadedSerial = null
                     isLoadingDeviceSystemInfo = false
                     isLoadingDeviceProperties = false
-                    if (!isCapturingLogcat) {
-                        deviceLogProgress = null
-                        lastDeviceLogResult = null
-                        deviceLogCapturingDeviceLabel = null
-                    }
+                    deviceLogModule.clearIfIdle()
 
                     if (nextSelectedDeviceSerial == null) {
                         statusText = if (discoveredDevices.isEmpty()) {
@@ -215,7 +177,7 @@ fun App() {
                     } else if (selectedTestModule == TestModule.DataFill) {
                         statusText = "发现 ${discoveredDevices.size} 台设备，读取存储..."
                         try {
-                            storageInfo = dataFillAdb.loadStorageInfo(nextSelectedDeviceSerial, ::appendCommand)
+                            dataFillModule.loadStorageInfoForDeviceScan(nextSelectedDeviceSerial)
                             statusText = "发现 ${discoveredDevices.size} 台设备，已刷新存储"
                             appendCommand("状态: 设备已连接，存储已刷新")
                         } catch (error: Throwable) {
@@ -249,48 +211,6 @@ fun App() {
                     isRunning = false
                 }
             }
-        }
-
-        fun runAdbTask(name: String, block: suspend () -> StorageInfo) {
-            if (isRunning) return
-            val job = scope.launch {
-                isRunning = true
-                fillProgress = null
-                statusText = "$name..."
-                appendCommand("状态: 开始$name...")
-                try {
-                    storageInfo = block()
-                    statusText = "$name 完成"
-                    appendCommand("状态: $name 完成")
-                } catch (error: CancellationException) {
-                    fillProgress = null
-                    val deviceSerial = selectedReadyDevice?.serialNumber
-                    if (deviceSerial == null) {
-                        statusText = "任务已停止"
-                        appendCommand("状态: 任务已停止")
-                    } else {
-                        statusText = "任务已停止，刷新存储..."
-                        appendCommand("状态: 任务已停止，刷新存储...")
-                        try {
-                            storageInfo = withContext(NonCancellable) {
-                                dataFillAdb.loadStorageInfo(deviceSerial, ::appendCommand)
-                            }
-                            statusText = "任务已停止，已刷新存储"
-                            appendCommand("状态: 任务已停止，已刷新存储")
-                        } catch (refreshError: Throwable) {
-                            statusText = "任务已停止，刷新存储失败：${refreshError.message ?: "未知错误"}"
-                            appendCommand("错误: 刷新存储失败 - ${refreshError.message ?: "未知错误"}")
-                        }
-                    }
-                } catch (error: Throwable) {
-                    statusText = error.message ?: "任务失败"
-                    appendCommand("错误: $name 失败 - ${error.message ?: "未知错误"}")
-                } finally {
-                    isRunning = false
-                    runningJob = null
-                }
-            }
-            runningJob = job
         }
 
         fun loadDeviceSystemInfo(deviceSerial: String) {
@@ -650,82 +570,6 @@ fun App() {
                     loadingApplicationDetailSection = null
                     isRunning = false
                 }
-            }
-        }
-
-        fun refreshStorageForDevice(deviceSerial: String) {
-            runAdbTask("读取平板存储") {
-                dataFillAdb.loadStorageInfo(deviceSerial, ::appendCommand)
-            }
-        }
-
-        fun captureSelectedDeviceLogs() {
-            if (isCapturingLogcat) return
-            val device = selectedReadyDevice
-            if (device == null) {
-                statusText = "先选择状态为 device 的设备"
-                appendCommand("错误: 先选择状态为 device 的设备")
-                return
-            }
-
-            val job = scope.launch {
-                deviceLogProgress = null
-                lastDeviceLogResult = null
-                deviceLogCapturingDeviceLabel = "${device.model} · ${device.serialNumber}"
-                statusText = "正在抓取 Logcat..."
-                appendCommand("状态: 开始抓取设备 ${device.serialNumber} Logcat")
-                try {
-                    val result = deviceLogAdb.captureFullLogs(
-                        deviceSerial = device.serialNumber,
-                        deviceModel = device.model,
-                        logCommand = ::appendCommand,
-                        onProgress = { progress ->
-                            deviceLogProgress = progress
-                            statusText = "抓取 Logcat：${progress.currentSection} ${progress.completedSections}/${progress.totalSections}"
-                        },
-                    )
-                    deviceLogProgress = null
-                    lastDeviceLogResult = result
-                    when (result.endState) {
-                        DeviceLogCaptureEndState.COMPLETED -> {
-                            statusText = "Logcat 抓取完成：${result.filePath}"
-                            appendCommand("状态: Logcat 抓取完成 - ${result.filePath}")
-                        }
-                        DeviceLogCaptureEndState.STOPPED -> {
-                            statusText = "Logcat 已停止，日志已保存：${result.filePath}"
-                            appendCommand("状态: Logcat 已停止，日志已保存 - ${result.filePath}")
-                        }
-                        DeviceLogCaptureEndState.INTERRUPTED -> {
-                            statusText = "Logcat 意外中止，日志已保存：${result.filePath}"
-                            appendCommand("状态: Logcat 意外中止，日志已保存 - ${result.filePath}")
-                        }
-                    }
-                } catch (error: CancellationException) {
-                    deviceLogProgress = null
-                    deviceLogCapturingDeviceLabel = null
-                    statusText = "Logcat 抓取已停止"
-                    appendCommand("状态: Logcat 抓取已停止")
-                } catch (error: Throwable) {
-                    deviceLogProgress = null
-                    deviceLogCapturingDeviceLabel = null
-                    statusText = error.message ?: "Logcat 抓取失败"
-                    appendCommand("错误: Logcat 抓取失败 - ${error.message ?: "未知错误"}")
-                } finally {
-                    deviceLogJob = null
-                    deviceLogCapturingDeviceLabel = null
-                }
-            }
-            deviceLogJob = job
-        }
-
-        fun revealDeviceLogFile(filePath: String) {
-            val opened = revealFileInDirectory(filePath)
-            if (opened) {
-                statusText = "已打开日志所在目录"
-                appendCommand("状态: 已打开日志所在目录 - $filePath")
-            } else {
-                statusText = "无法打开日志所在目录"
-                appendCommand("错误: 无法打开日志所在目录 - $filePath")
             }
         }
 
@@ -1192,98 +1036,23 @@ fun App() {
                             }
 
                             TestModule.DataFill -> {
-                                Column(
+                                DataFillModuleContent(
+                                    controller = dataFillModule,
+                                    isRunning = isRunning,
+                                    hasReadyDevice = selectedReadyDevice != null,
                                     modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                                ) {
-                                    StoragePanel(
-                                        storageInfo = storageInfo,
-                                        isRunning = isRunning,
-                                        onRefresh = {
-                                            val deviceSerial = selectedReadyDevice?.serialNumber
-                                            if (deviceSerial == null) {
-                                                statusText = "先选择状态为 device 的设备"
-                                                appendCommand("错误: 先选择状态为 device 的设备")
-                                            } else {
-                                                refreshStorageForDevice(deviceSerial)
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-
-                                    FillControls(
-                                        customFillValue = customFillValue,
-                                        onCustomFillValueChange = { customFillValue = it },
-                                        remainingValue = remainingValue,
-                                        onRemainingValueChange = { remainingValue = it },
-                                        isRunning = isRunning,
-                                        hasReadyDevice = selectedReadyDevice != null,
-                                        fillProgress = fillProgress,
-                                        onStopFill = {
-                                            runningJob?.cancel()
-                                        },
-                                        onFillFixed = { sizeBytes ->
-                                            val deviceSerial = selectedReadyDevice?.serialNumber
-                                            if (deviceSerial != null) {
-                                                runAdbTask("填充 ${formatBytes(sizeBytes)}") {
-                                                    dataFillAdb.fillSize(deviceSerial, sizeBytes, ::appendCommand) { progress ->
-                                                        fillProgress = progress
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        onFillCustom = {
-                                            val deviceSerial = selectedReadyDevice?.serialNumber
-                                            val sizeBytes = parseGiBInput(customFillValue)
-                                            if (deviceSerial != null && sizeBytes != null) {
-                                                runAdbTask("填充 ${formatBytes(sizeBytes)}") {
-                                                    dataFillAdb.fillSize(deviceSerial, sizeBytes, ::appendCommand) { progress ->
-                                                        fillProgress = progress
-                                                    }
-                                                }
-                                            } else {
-                                                statusText = "请输入有效的填充大小"
-                                                appendCommand("错误: 请输入有效的填充大小")
-                                            }
-                                        },
-                                        onFillUntilRemaining = {
-                                            val deviceSerial = selectedReadyDevice?.serialNumber
-                                            val targetBytes = parseGiBInput(remainingValue)
-                                            if (deviceSerial != null && targetBytes != null) {
-                                                runAdbTask("填充到剩余 ${formatBytes(targetBytes)}") {
-                                                    dataFillAdb.fillUntilRemaining(
-                                                        deviceSerial = deviceSerial,
-                                                        targetAvailableBytes = targetBytes,
-                                                        logCommand = ::appendCommand,
-                                                        onStorageProgress = { storage ->
-                                                            storageInfo = storage
-                                                        },
-                                                        onFillProgress = { progress ->
-                                                            fillProgress = progress
-                                                        },
-                                                    )
-                                                }
-                                            } else {
-                                                statusText = "请输入有效的剩余空间"
-                                                appendCommand("错误: 请输入有效的剩余空间")
-                                            }
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                }
+                                )
                             }
 
                             TestModule.Log -> {
                                 DeviceLogPanel(
                                     selectedDevice = selectedDevice,
                                     isRunning = isCapturingLogcat,
-                                    progress = deviceLogProgress,
-                                    lastResult = lastDeviceLogResult,
-                                    onCaptureLogs = ::captureSelectedDeviceLogs,
-                                    onStopCapture = {
-                                        deviceLogAdb.stopCurrentCapture()
-                                    },
-                                    onRevealLogFile = ::revealDeviceLogFile,
+                                    progress = deviceLogModule.progress,
+                                    lastResult = deviceLogModule.lastResult,
+                                    onCaptureLogs = deviceLogModule::captureSelectedDeviceLogs,
+                                    onStopCapture = deviceLogModule::stopCapture,
+                                    onRevealLogFile = deviceLogModule::revealLogFile,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -1334,8 +1103,7 @@ fun App() {
                                 onRefresh = ::refreshDevices,
                                 onSelect = { device ->
                                     selectedDeviceSerial = device.serialNumber
-                                    storageInfo = null
-                                    fillProgress = null
+                                    dataFillModule.clearDeviceState()
                                     thirdPartyApps = emptyList()
                                     systemApps = emptyList()
                                     thirdPartyLoadedSerial = null
@@ -1356,15 +1124,11 @@ fun App() {
                                     systemProperties = emptyList()
                                     deviceSystemInfoLoadedSerial = null
                                     devicePropertiesLoadedSerial = null
-                                    if (!isCapturingLogcat) {
-                                        deviceLogProgress = null
-                                        lastDeviceLogResult = null
-                                        deviceLogCapturingDeviceLabel = null
-                                    }
+                                    deviceLogModule.clearIfIdle()
 
                                     if (device.isReady) {
                                         if (selectedTestModule == TestModule.DataFill) {
-                                            refreshStorageForDevice(device.serialNumber)
+                                            dataFillModule.refreshStorageForDevice(device.serialNumber)
                                         } else if (selectedTestModule == TestModule.Device) {
                                             loadDeviceSystemInfo(device.serialNumber)
                                             loadDeviceSystemProperties(device.serialNumber)
@@ -1394,8 +1158,8 @@ fun App() {
                 }
                 if (isCapturingLogcat) {
                     LogCaptureFloatingButton(
-                        deviceLabel = deviceLogCapturingDeviceLabel ?: "Logcat 正在抓取",
-                        onStop = { deviceLogAdb.stopCurrentCapture() },
+                        deviceLabel = deviceLogModule.capturingDeviceLabel ?: "Logcat 正在抓取",
+                        onStop = deviceLogModule::stopCapture,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(top = 88.dp, end = 40.dp),
@@ -1404,402 +1168,4 @@ fun App() {
             }
         }
     }
-}
-
-@Composable
-private fun LogCaptureFloatingButton(
-    deviceLabel: String,
-    onStop: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var dragOffset by remember { mutableStateOf(Offset.Zero) }
-
-    Surface(
-        modifier = modifier
-            .offset {
-                IntOffset(
-                    x = dragOffset.x.roundToInt(),
-                    y = dragOffset.y.roundToInt(),
-                )
-            }
-            .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    dragOffset += dragAmount
-                }
-            },
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        shape = RoundedCornerShape(8.dp),
-        tonalElevation = 6.dp,
-        shadowElevation = 6.dp,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = "Logcat 正在抓取",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = deviceLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                )
-            }
-            Button(
-                onClick = onStop,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError,
-                ),
-            ) {
-                Text("停止")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModuleSwitcher(
-    selectedModule: TestModule,
-    isRunning: Boolean,
-    onSelect: (TestModule) -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TestModule.entries.forEach { module ->
-                val selected = module == selectedModule
-                Button(
-                    onClick = { onSelect(module) },
-                    enabled = !isRunning || selected,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        contentColor = if (selected) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    ),
-                ) {
-                    Text(module.title)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-@OptIn(ExperimentalComposeUiApi::class)
-private fun SplitContent(
-    bottomPanelHeightPx: Float?,
-    onBottomPanelHeightPxChange: (Float) -> Unit,
-    topContent: @Composable () -> Unit,
-    bottomContent: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val density = LocalDensity.current
-        val handleHeight = 24.dp
-        val totalHeightPx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
-        val minBottomHeightPx = totalHeightPx * 0.18f
-        val maxBottomHeightPx = totalHeightPx * 0.65f
-        val bottomHeightPx = (bottomPanelHeightPx ?: totalHeightPx * 0.25f)
-            .coerceIn(minBottomHeightPx, maxBottomHeightPx)
-        val bottomHeight = with(density) { bottomHeightPx.toDp() }
-        val topHeight = maxHeight - bottomHeight - handleHeight
-        var isHandleHovered by remember { mutableStateOf(false) }
-        var isHandleDragging by remember { mutableStateOf(false) }
-        val dragState = rememberDraggableState { delta ->
-            val nextHeightPx = (bottomHeightPx - delta).coerceIn(minBottomHeightPx, maxBottomHeightPx)
-            onBottomPanelHeightPxChange(nextHeightPx)
-        }
-        val handleColor = if (isHandleHovered || isHandleDragging) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.outlineVariant
-        }
-        val handleBackground = if (isHandleHovered || isHandleDragging) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
-        } else {
-            MaterialTheme.colorScheme.surface
-        }
-
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(topHeight),
-            ) {
-                topContent()
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(handleHeight)
-                    .background(handleBackground)
-                    .onPointerEvent(PointerEventType.Enter) { isHandleHovered = true }
-                    .onPointerEvent(PointerEventType.Exit) { isHandleHovered = false }
-                    .verticalResizePointerIcon()
-                    .draggable(
-                        orientation = Orientation.Vertical,
-                        state = dragState,
-                        onDragStarted = { isHandleDragging = true },
-                        onDragStopped = { isHandleDragging = false },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(3.dp)
-                        .background(handleColor),
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(bottomHeight),
-            ) {
-                bottomContent()
-            }
-        }
-    }
-}
-
-@Composable
-private fun DevicePanel(
-    devices: List<AndroidDevice>,
-    selectedDeviceSerial: String?,
-    isRunning: Boolean,
-    onRefresh: () -> Unit,
-    onSelect: (AndroidDevice) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(modifier = modifier) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "连接设备",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Button(onClick = onRefresh, enabled = !isRunning) {
-                    Text("刷新设备")
-                }
-            }
-
-            if (devices.isEmpty()) {
-                Text("未发现设备。连接 USB 后刷新。")
-            } else {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    devices.forEach { device ->
-                        val isSelected = device.serialNumber == selectedDeviceSerial
-                        Button(
-                            onClick = { onSelect(device) },
-                            enabled = !isRunning,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSelected) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                },
-                                contentColor = if (isSelected) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            ),
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Text("SN: ${device.serialNumber}")
-                                Text("型号: ${device.model}")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CommandLogPanel(
-    commandLog: List<String>,
-    onClearCommandLog: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val scrollState = rememberScrollState()
-    LaunchedEffect(commandLog.size) {
-        scrollState.animateScrollTo(scrollState.maxValue)
-    }
-
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "命令记录",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                TextButton(
-                    onClick = onClearCommandLog,
-                    enabled = commandLog.isNotEmpty(),
-                ) {
-                    Text("清空")
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(12.dp)
-                    .verticalScroll(scrollState),
-            ) {
-                SelectionContainer {
-                    if (commandLog.isEmpty()) {
-                        Text("暂无命令")
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            commandLog.forEach { command ->
-                                val textColor = when {
-                                    command.startsWith("错误:") || command.startsWith("错误 ") || command.contains("失败") -> {
-                                        MaterialTheme.colorScheme.error
-                                    }
-                                    command.startsWith("状态:") || command.startsWith("状态 ") -> {
-                                        MaterialTheme.colorScheme.primary
-                                    }
-                                    else -> {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
-                                }
-                                Text(
-                                    text = "> $command",
-                                    fontFamily = FontFamily.Monospace,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = textColor,
-                                )
-                            }
-                            Spacer(Modifier.height(1.dp))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PluginCheckBanner(
-    message: String,
-    actionLabel: String,
-    onAction: () -> Unit,
-    onIgnore: () -> Unit,
-    onDismiss: () -> Unit,
-    isProcessing: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = RoundedCornerShape(8.dp),
-        tonalElevation = 2.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "💡",
-                style = MaterialTheme.typography.bodyLarge
-            )
-
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.weight(1f)
-            )
-
-            Button(
-                onClick = onAction,
-                enabled = !isProcessing,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                val processingLabel = when (actionLabel) {
-                    "立即安装" -> "安装中..."
-                    "立即更新" -> "更新中..."
-                    "立即启用" -> "启用中..."
-                    else -> "处理中..."
-                }
-                Text(if (isProcessing) processingLabel else actionLabel)
-            }
-
-            TextButton(
-                onClick = onIgnore,
-                enabled = !isProcessing
-            ) {
-                Text("不再提示")
-            }
-
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isProcessing
-            ) {
-                Text(
-                    text = "✕",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
-        }
-    }
-}
-
-private enum class BannerActionType {
-    INSTALL,
-    UPDATE,
-    ENABLE
 }
