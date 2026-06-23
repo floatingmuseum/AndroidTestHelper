@@ -1,5 +1,6 @@
 package com.floatingmuseum.android.test.helper.device
 
+import com.floatingmuseum.android.test.helper.AppRuntimePaths
 import com.floatingmuseum.android.test.helper.adb.AdbShell
 import java.io.File
 import java.time.LocalDateTime
@@ -8,7 +9,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
-import java.nio.file.Files
 import java.util.zip.ZipFile
 
 actual fun createDeviceAdb(): DeviceAdb = JvmDeviceAdb()
@@ -845,7 +845,7 @@ private suspend fun installXApk(
 ): ApkInstallResult {
     var tempDir: File? = null
     try {
-        tempDir = Files.createTempDirectory("xapk_install_").toFile()
+        tempDir = AppRuntimePaths.createTempDirectory("xapk_install_")
         
         // 1. 解压 XAPK
         unzip(xapkFile, tempDir)

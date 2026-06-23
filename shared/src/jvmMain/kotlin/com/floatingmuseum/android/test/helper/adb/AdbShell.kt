@@ -1,6 +1,7 @@
 package com.floatingmuseum.android.test.helper.adb
 
 import com.floatingmuseum.android.test.helper.AndroidDevice
+import com.floatingmuseum.android.test.helper.AppRuntimePaths
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -93,8 +94,11 @@ object AdbShell {
         }
         val adbBinary = if (osName.contains("win")) "adb.exe" else "adb"
         val userDir = File(System.getProperty("user.dir")).absoluteFile
+        val searchRoots = listOf(AppRuntimePaths.installDirectory, userDir).distinctBy { it.absolutePath }
 
-        generateSequence(userDir) { it.parentFile }.forEach { directory ->
+        searchRoots.asSequence().flatMap { root ->
+            generateSequence(root.absoluteFile) { it.parentFile }
+        }.distinctBy { it.absolutePath }.forEach { directory ->
             val candidate = directory.resolve("platform-tools")
                 .resolve(platformFolder)
                 .resolve("platform-tools")

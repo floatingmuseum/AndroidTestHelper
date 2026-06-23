@@ -1,5 +1,6 @@
 package com.floatingmuseum.android.test.helper.devicelog
 
+import com.floatingmuseum.android.test.helper.AppRuntimePaths
 import com.floatingmuseum.android.test.helper.adb.AdbShell
 import java.io.BufferedWriter
 import java.io.File
@@ -33,7 +34,7 @@ private class JvmDeviceLogAdb : DeviceLogAdb {
     ): DeviceLogCaptureResult {
         stopRequested = false
         val capturedAt = LocalDateTime.now()
-        val directory = File(System.getProperty("user.home"), "AndroidTestHelperLogs").absoluteFile
+        val directory = AppRuntimePaths.logsDirectory().absoluteFile
         if (!directory.exists() && !directory.mkdirs()) {
             throw IllegalStateException("无法创建日志保存目录：${directory.absolutePath}")
         }

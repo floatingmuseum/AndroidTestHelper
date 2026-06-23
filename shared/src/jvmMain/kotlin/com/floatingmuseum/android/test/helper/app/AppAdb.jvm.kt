@@ -1,5 +1,6 @@
 package com.floatingmuseum.android.test.helper.app
 
+import com.floatingmuseum.android.test.helper.AppRuntimePaths
 import com.floatingmuseum.android.test.helper.adb.AdbShell
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +20,6 @@ import java.nio.ByteOrder
 import java.security.MessageDigest
 import java.util.zip.ZipFile
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.io.path.createTempDirectory
 
 actual fun createAppAdb(): AppAdb = JvmAppAdb()
 
@@ -206,7 +206,7 @@ private class JvmAppAdb : AppAdb {
         val systemPackages = parsePackageNameList(systemOutput)
         val disabledPackages = parsePackageNameList(disabledOutput)
         val dumpsysPackages = parsePackageDumpsys(dumpsysOutput)
-        val tempDirectory = createTempDirectory(prefix = "AndroidTestHelperApps").toFile()
+        val tempDirectory = AppRuntimePaths.createTempDirectory(prefix = "AndroidTestHelperApps")
 
         try {
             val filteredPackagePaths = packagePaths.filter { packagePath ->
@@ -461,7 +461,7 @@ private class JvmAppAdb : AppAdb {
         val baseApkPath = parsePmPathOutput(pathOutput).firstOrNull { it.endsWith("/base.apk") }
             ?: parsePmPathOutput(pathOutput).firstOrNull()
             ?: return null
-        val tempDirectory = createTempDirectory(prefix = "AndroidTestHelperAppDetail").toFile()
+        val tempDirectory = AppRuntimePaths.createTempDirectory(prefix = "AndroidTestHelperAppDetail")
         val localApk = File(tempDirectory, "$packageName.apk")
         return try {
             AdbShell.executeAdb(
@@ -576,7 +576,7 @@ private class JvmAppAdb : AppAdb {
         }
 
         val baseDir = if (outputPath.isNullOrBlank()) {
-            File(System.getProperty("user.home"), "AndroidTestHelperApkExports")
+            AppRuntimePaths.installDirectory.resolve("AndroidTestHelperData/exports/apk")
         } else {
             File(outputPath)
         }
@@ -744,7 +744,7 @@ private class JvmAppAdb : AppAdb {
     override suspend fun getApkVersionInfo(
         apkBytes: ByteArray,
     ): PluginVersionInfo? = withContext(Dispatchers.IO) {
-        val tempDirectory = createTempDirectory(prefix = "ATHPluginVersionCheck").toFile()
+        val tempDirectory = AppRuntimePaths.createTempDirectory(prefix = "ATHPluginVersionCheck")
         val tempApk = File(tempDirectory, "temp_plugin.apk")
         try {
             tempApk.writeBytes(apkBytes)
@@ -769,7 +769,7 @@ private class JvmAppAdb : AppAdb {
         apkBytes: ByteArray,
         logCommand: (String) -> Unit,
     ): Boolean = withContext(Dispatchers.IO) {
-        val tempDirectory = createTempDirectory(prefix = "ATHPluginInstall").toFile()
+        val tempDirectory = AppRuntimePaths.createTempDirectory(prefix = "ATHPluginInstall")
         val tempApk = File(tempDirectory, "ATHPlugin.apk")
         try {
             tempApk.writeBytes(apkBytes)
@@ -800,7 +800,7 @@ private class JvmAppAdb : AppAdb {
     }
 
     override fun getIgnoredPluginCheckVersion(): String? {
-        val file = File(System.getProperty("user.home"), ".android_test_helper_cache/ignored_plugin_check_version.txt")
+        val file = File(applicationCacheDir(), "ignored_plugin_check_version.txt")
         return if (file.exists()) {
             try {
                 file.readText().trim()
@@ -813,7 +813,7 @@ private class JvmAppAdb : AppAdb {
     }
 
     override fun saveIgnoredPluginCheckVersion(version: String) {
-        val file = File(System.getProperty("user.home"), ".android_test_helper_cache/ignored_plugin_check_version.txt")
+        val file = File(applicationCacheDir(), "ignored_plugin_check_version.txt")
         try {
             file.parentFile?.mkdirs()
             file.writeText(version)
@@ -927,7 +927,7 @@ internal fun buildApplicationIconCacheFileName(
 }
 
 private fun applicationCacheDir(): File {
-    return File(System.getProperty("user.home"), ".android_test_helper_cache")
+    return AppRuntimePaths.cacheDirectory()
 }
 
 private fun applicationIconCacheDir(): File {
