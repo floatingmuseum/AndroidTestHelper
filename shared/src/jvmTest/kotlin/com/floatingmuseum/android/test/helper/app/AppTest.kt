@@ -1,8 +1,11 @@
 package com.floatingmuseum.android.test.helper.app
 
+import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 
 class AppTest {
     @Test
@@ -231,6 +234,104 @@ class AppTest {
                 versionCode = null,
             ),
         )
+    }
+
+    @Test
+    fun buildsPluginIgnoreKeyFromBundledApkVersion() {
+        val oldDesktopBoundKey = "1.0.0"
+        val pluginVersion = PluginVersionInfo(versionCode = 105, versionName = "1.0.5")
+
+        val ignoreKey = pluginVersion.pluginCheckIgnoreKey()
+
+        assertEquals("athplugin:105:1.0.5", ignoreKey)
+        kotlin.test.assertNotEquals(oldDesktopBoundKey, ignoreKey)
+    }
+
+    @Test
+    fun selectsLatestLocalPluginApkByParsedVersionCode() {
+        val old = LocalPluginApkCandidate(
+            name = "ATHPlugin_1.0.9.apk",
+            bytes = byteArrayOf(1),
+            versionInfo = PluginVersionInfo(versionCode = 109, versionName = "1.0.9"),
+        )
+        val latest = LocalPluginApkCandidate(
+            name = "ATHPlugin_1.0.5.apk",
+            bytes = byteArrayOf(2),
+            versionInfo = PluginVersionInfo(versionCode = 205, versionName = "1.0.5"),
+        )
+
+        assertEquals(
+            latest,
+            selectLatestLocalPluginApkCandidate(listOf(old, latest)),
+        )
+    }
+
+    @Test
+    fun selectsLatestLocalPluginApkByFileNameWhenMetadataIsMissing() {
+        val old = LocalPluginApkCandidate(
+            name = "ATHPlugin_1.0.9.apk",
+            bytes = byteArrayOf(1),
+            versionInfo = null,
+        )
+        val latest = LocalPluginApkCandidate(
+            name = "ATHPlugin_1.0.10.apk",
+            bytes = byteArrayOf(2),
+            versionInfo = null,
+        )
+
+        assertEquals(
+            latest,
+            selectLatestLocalPluginApkCandidate(listOf(old, latest)),
+        )
+    }
+
+    @Test
+    fun prefersVersionedLocalPluginApkOverNameOnlyCandidate() {
+        val nameOnly = LocalPluginApkCandidate(
+            name = "ATHPlugin_9.9.9.apk",
+            bytes = byteArrayOf(1),
+            versionInfo = null,
+        )
+        val parsed = LocalPluginApkCandidate(
+            name = "ATHPlugin_1.0.5.apk",
+            bytes = byteArrayOf(2),
+            versionInfo = PluginVersionInfo(versionCode = 105, versionName = "1.0.5"),
+        )
+
+        assertEquals(
+            parsed,
+            selectLatestLocalPluginApkCandidate(listOf(nameOnly, parsed)),
+        )
+    }
+
+    @Test
+    fun loadsBundledPluginApkVersionFromComposeResourcesWhenPresent() = kotlinx.coroutines.runBlocking {
+        val filesDirectory = File("shared/src/commonMain/composeResources/files")
+        val apkFiles = filesDirectory
+            .listFiles()
+            ?.filter { it.isFile && it.name.startsWith("ATHPlugin") && it.name.endsWith(".apk") }
+            ?: return@runBlocking
+        if (apkFiles.isEmpty()) return@runBlocking
+
+        val appAdb = createAppAdb()
+        val candidates = apkFiles.map { file ->
+            val fileBytes = file.readBytes()
+            LocalPluginApkCandidate(
+                name = file.name,
+                bytes = fileBytes,
+                versionInfo = appAdb.getApkVersionInfo(fileBytes),
+            )
+        }
+        candidates.firstOrNull { it.name == "ATHPlugin_1.0.5.apk" }?.let { candidate ->
+            assertEquals("1.0.5", assertNotNull(candidate.versionInfo).versionName)
+        }
+
+        val expected = assertNotNull(selectLatestLocalPluginApkCandidate(candidates))
+        val bytes = assertNotNull(appAdb.getLocalPluginApkBytes())
+        val versionInfo = assertNotNull(appAdb.getApkVersionInfo(bytes))
+
+        assertEquals(expected.versionInfo, versionInfo)
+        assertContentEquals(expected.bytes, bytes)
     }
 
     @Test

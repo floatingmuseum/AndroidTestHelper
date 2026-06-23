@@ -65,6 +65,7 @@ import com.floatingmuseum.android.test.helper.app.ApplicationDetailSection
 import com.floatingmuseum.android.test.helper.app.PluginVersionInfo
 import com.floatingmuseum.android.test.helper.app.ApplicationTestPanel
 import com.floatingmuseum.android.test.helper.app.createAppAdb
+import com.floatingmuseum.android.test.helper.app.pluginCheckIgnoreKey
 import com.floatingmuseum.android.test.helper.app.removeInstalledApp
 import com.floatingmuseum.android.test.helper.device.DeviceSystemInfo
 import com.floatingmuseum.android.test.helper.device.DeviceQuickAction
@@ -89,8 +90,6 @@ private enum class TestModule(val title: String) {
     DataFill("数据填充"),
     Log("日志"),
 }
-
-private const val APP_VERSION = "1.0.0"
 
 @Composable
 @Preview
@@ -876,13 +875,7 @@ fun App() {
         LaunchedEffect(selectedReadyDevice?.serialNumber) {
             val deviceSerial = selectedReadyDevice?.serialNumber
             if (deviceSerial != null) {
-                val ignoredVersion = appAdb.getIgnoredPluginCheckVersion()
-                if (ignoredVersion == APP_VERSION) {
-                    showPluginBanner = false
-                    return@LaunchedEffect
-                }
-
-                if (localApkBytes == null) {
+                if (localApkBytes == null || localApkVersionInfo == null) {
                     try {
                         val bytes = appAdb.getLocalPluginApkBytes()
                         if (bytes != null) {
@@ -899,6 +892,12 @@ fun App() {
 
                 val targetLocalVersionInfo = localApkVersionInfo
                 if (targetLocalVersionInfo != null) {
+                    val ignoredVersion = appAdb.getIgnoredPluginCheckVersion()
+                    if (ignoredVersion == targetLocalVersionInfo.pluginCheckIgnoreKey()) {
+                        showPluginBanner = false
+                        return@LaunchedEffect
+                    }
+
                     try {
                         val installedVersionInfo = appAdb.getInstalledPluginVersionInfo(deviceSerial, ::appendCommand)
                         if (installedVersionInfo == null) {
@@ -1077,7 +1076,9 @@ fun App() {
                             }
                         },
                         onIgnore = {
-                            appAdb.saveIgnoredPluginCheckVersion(APP_VERSION)
+                            localApkVersionInfo?.let { versionInfo ->
+                                appAdb.saveIgnoredPluginCheckVersion(versionInfo.pluginCheckIgnoreKey())
+                            }
                             showPluginBanner = false
                         },
                         onDismiss = {

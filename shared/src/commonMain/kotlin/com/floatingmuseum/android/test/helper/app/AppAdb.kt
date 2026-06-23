@@ -67,6 +67,10 @@ data class PluginVersionInfo(
     val versionName: String,
 )
 
+internal fun PluginVersionInfo.pluginCheckIgnoreKey(): String {
+    return "athplugin:$versionCode:${versionName.trim()}"
+}
+
 enum class ApplicationDetailSection(val title: String, val pluginKey: String) {
     BASIC("基础", "basic"),
     PERMISSIONS("权限", "permissions"),

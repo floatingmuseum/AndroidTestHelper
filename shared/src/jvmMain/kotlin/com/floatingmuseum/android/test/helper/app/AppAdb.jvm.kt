@@ -845,15 +845,14 @@ private class JvmAppAdb : AppAdb {
             "shared/src/commonMain/composeResources/files",
             "../shared/src/commonMain/composeResources/files"
         )
+        val devCandidates = mutableListOf<LocalPluginApkCandidate>()
         for (path in pathsToCheck) {
             val devDir = File(path)
             if (devDir.exists() && devDir.isDirectory) {
-                val apkFile = devDir.listFiles()?.firstOrNull { it.name.startsWith("ATHPlugin") && it.name.endsWith(".apk") }
-                if (apkFile != null) {
-                    return@withContext apkFile.readBytes()
-                }
+                devCandidates += readLocalPluginApkFileCandidates(devDir)
             }
         }
+        selectLatestLocalPluginApkCandidate(devCandidates)?.let { return@withContext it.bytes }
 
         // 2. Scan JVM classpath directories and JAR files (covers Gradle dev runs and packaged runs)
         val classpathApk = scanClasspathForPluginApk()
@@ -869,16 +868,14 @@ private class JvmAppAdb : AppAdb {
     private fun scanClasspathForPluginApk(): ByteArray? {
         val classpath = System.getProperty("java.class.path") ?: return null
         val paths = classpath.split(File.pathSeparator)
+        val candidates = mutableListOf<LocalPluginApkCandidate>()
         for (path in paths) {
             val file = File(path)
             if (!file.exists()) continue
             if (file.isDirectory) {
                 val targetDir = File(file, "composeResources/files")
                 if (targetDir.exists() && targetDir.isDirectory) {
-                    val apkFile = targetDir.listFiles()?.firstOrNull { it.name.startsWith("ATHPlugin") && it.name.endsWith(".apk") }
-                    if (apkFile != null) {
-                        return apkFile.readBytes()
-                    }
+                    candidates += readLocalPluginApkFileCandidates(targetDir)
                 }
             } else if (file.isFile && file.name.endsWith(".jar")) {
                 try {
@@ -888,9 +885,12 @@ private class JvmAppAdb : AppAdb {
                             val entry = entries.nextElement()
                             val name = entry.name
                             if (name.startsWith("composeResources/files/ATHPlugin") && name.endsWith(".apk")) {
-                                zip.getInputStream(entry).use { input ->
-                                    return input.readBytes()
-                                }
+                                val bytes = zip.getInputStream(entry).use { input -> input.readBytes() }
+                                candidates += LocalPluginApkCandidate(
+                                    name = File(name).name,
+                                    bytes = bytes,
+                                    versionInfo = parsePluginVersionInfo(bytes),
+                                )
                             }
                         }
                     }
@@ -899,7 +899,7 @@ private class JvmAppAdb : AppAdb {
                 }
             }
         }
-        return null
+        return selectLatestLocalPluginApkCandidate(candidates)?.bytes
     }
 
     private fun tryFallbackResource(classLoader: ClassLoader): ByteArray? {
@@ -909,6 +909,139 @@ private class JvmAppAdb : AppAdb {
             null
         }
     }
+}
+
+internal data class LocalPluginApkCandidate(
+    val name: String,
+    val bytes: ByteArray,
+    val versionInfo: PluginVersionInfo?,
+)
+
+internal fun selectLatestLocalPluginApkCandidate(
+    candidates: List<LocalPluginApkCandidate>,
+): LocalPluginApkCandidate? {
+    return candidates.maxWithOrNull(::compareLocalPluginApkCandidates)
+}
+
+private fun compareLocalPluginApkCandidates(
+    left: LocalPluginApkCandidate,
+    right: LocalPluginApkCandidate,
+): Int {
+    val leftVersion = left.versionInfo
+    val rightVersion = right.versionInfo
+    if (leftVersion != null && rightVersion != null) {
+        val codeCompare = leftVersion.versionCode.compareTo(rightVersion.versionCode)
+        if (codeCompare != 0) return codeCompare
+        val nameCompare = compareVersionTokens(leftVersion.versionName, rightVersion.versionName)
+        if (nameCompare != 0) return nameCompare
+    } else if (leftVersion != null) {
+        return 1
+    } else if (rightVersion != null) {
+        return -1
+    }
+
+    val fileVersionCompare = compareVersionTokens(
+        extractPluginVersionFromFileName(left.name),
+        extractPluginVersionFromFileName(right.name),
+    )
+    if (fileVersionCompare != 0) return fileVersionCompare
+    return left.name.compareTo(right.name, ignoreCase = true)
+}
+
+private fun readLocalPluginApkFileCandidates(directory: File): List<LocalPluginApkCandidate> {
+    return directory.listFiles()
+        ?.filter { it.isFile && isPluginApkName(it.name) }
+        ?.mapNotNull { file ->
+            try {
+                LocalPluginApkCandidate(
+                    name = file.name,
+                    bytes = file.readBytes(),
+                    versionInfo = parsePluginVersionInfo(file),
+                )
+            } catch (_: Exception) {
+                null
+            }
+        }
+        ?: emptyList()
+}
+
+private fun parsePluginVersionInfo(apkFile: File): PluginVersionInfo? {
+    return try {
+        val metadata = parseApkMetadata(apkFile, includeIcon = false)
+        val code = metadata.versionCode
+        val name = metadata.versionName
+        if (code != null && name != null) PluginVersionInfo(code, name) else null
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun parsePluginVersionInfo(apkBytes: ByteArray): PluginVersionInfo? {
+    val tempDirectory = AppRuntimePaths.createTempDirectory(prefix = "ATHPluginVersionCandidate")
+    val tempApk = File(tempDirectory, "candidate.apk")
+    return try {
+        tempApk.writeBytes(apkBytes)
+        parsePluginVersionInfo(tempApk)
+    } catch (_: Exception) {
+        null
+    } finally {
+        tempDirectory.deleteRecursively()
+    }
+}
+
+private fun isPluginApkName(name: String): Boolean {
+    return name.startsWith("ATHPlugin") && name.endsWith(".apk", ignoreCase = true)
+}
+
+private fun extractPluginVersionFromFileName(name: String): String? {
+    val baseName = name.substringBeforeLast(".")
+    val version = baseName
+        .removePrefix("ATHPlugin")
+        .trimStart('_', '-', ' ')
+        .takeIf { it.isNotBlank() }
+    return version
+}
+
+private fun compareVersionTokens(left: String?, right: String?): Int {
+    if (left.isNullOrBlank() && right.isNullOrBlank()) return 0
+    if (left.isNullOrBlank()) return -1
+    if (right.isNullOrBlank()) return 1
+
+    val leftTokens = tokenizeVersion(left)
+    val rightTokens = tokenizeVersion(right)
+    val maxSize = maxOf(leftTokens.size, rightTokens.size)
+    for (index in 0 until maxSize) {
+        val leftToken = leftTokens.getOrNull(index) ?: VersionToken.Number(0)
+        val rightToken = rightTokens.getOrNull(index) ?: VersionToken.Number(0)
+        val compare = leftToken.compareTo(rightToken)
+        if (compare != 0) return compare
+    }
+    return left.compareTo(right, ignoreCase = true)
+}
+
+private sealed class VersionToken : Comparable<VersionToken> {
+    data class Number(val value: Long) : VersionToken()
+    data class Text(val value: String) : VersionToken()
+
+    override fun compareTo(other: VersionToken): Int {
+        return when {
+            this is Number && other is Number -> value.compareTo(other.value)
+            this is Number && other is Text -> 1
+            this is Text && other is Number -> -1
+            this is Text && other is Text -> value.compareTo(other.value, ignoreCase = true)
+            else -> 0
+        }
+    }
+}
+
+private fun tokenizeVersion(version: String): List<VersionToken> {
+    return Regex("""\d+|[A-Za-z]+""")
+        .findAll(version)
+        .map { match ->
+            val token = match.value
+            token.toLongOrNull()?.let { VersionToken.Number(it) } ?: VersionToken.Text(token)
+        }
+        .toList()
 }
 
 internal fun buildApplicationIconCacheFileName(
