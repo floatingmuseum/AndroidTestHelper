@@ -129,6 +129,7 @@ private class JvmDeviceAdb : DeviceAdb {
             ""
         }
         val displayRefreshRate = parseDisplayRefreshRate(dumpsysDisplayOutput)
+        val romVersion = executeGetProp(deviceSerial, "ro.build.display.id", logCommand)
 
         return DeviceSystemInfo(
             brand = brand,
@@ -169,6 +170,7 @@ private class JvmDeviceAdb : DeviceAdb {
             displayCur = displayCur,
             displayApp = displayApp,
             displayRefreshRate = displayRefreshRate,
+            romVersion = romVersion,
         )
     }
 

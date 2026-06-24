@@ -42,6 +42,7 @@ data class DeviceSystemInfo(
     val displayCur: String = "未知",
     val displayApp: String = "未知",
     val displayRefreshRate: String = "未知",
+    val romVersion: String = "未知",
 )
 
 @Serializable

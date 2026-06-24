@@ -219,6 +219,7 @@ fun DeviceTestPanel(
                                             InfoRow("序列号 (SN)", selectedDevice.serialNumber)
                                             InfoRow("设备品牌", systemInfo.brand)
                                             InfoRow("设备型号", systemInfo.model)
+                                            InfoRow("ROM 版本", systemInfo.romVersion)
                                             InfoRow("Android 版本", "Android ${systemInfo.androidVersion}")
                                             InfoRow("SDK 版本", "API ${systemInfo.sdkVersion}")
                                             InfoRow("CPU 架构 (ABI)", systemInfo.cpuAbi)
