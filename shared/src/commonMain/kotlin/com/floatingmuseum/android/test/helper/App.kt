@@ -41,6 +41,8 @@ import com.floatingmuseum.android.test.helper.device.DeviceTestPanel
 import com.floatingmuseum.android.test.helper.devicelog.DeviceLogPanel
 import com.floatingmuseum.android.test.helper.devicelog.LogCaptureFloatingButton
 import com.floatingmuseum.android.test.helper.devicelog.rememberDeviceLogModuleController
+import com.floatingmuseum.android.test.helper.settings.SettingsModuleContent
+import com.floatingmuseum.android.test.helper.getCurrentTimeFormatted
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -54,6 +56,10 @@ private enum class BannerActionType {
 @Preview
 fun App() {
     MaterialTheme {
+        remember {
+            com.floatingmuseum.android.test.helper.settings.AppSettingsShared.init()
+        }
+
         val adbDeviceManager = remember { createAdbDeviceManager() }
         val appAdb = remember { createAppAdb() }
         val deviceAdb = remember { createDeviceAdb() }
@@ -104,7 +110,10 @@ fun App() {
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
 
         fun appendCommand(command: String) {
-            commandLog = (commandLog + command).takeLast(200)
+            val timePrefix = if (com.floatingmuseum.android.test.helper.settings.AppSettingsShared.currentSettings.showCommandTime) {
+                "[${getCurrentTimeFormatted()}] "
+            } else ""
+            commandLog = (commandLog + "$timePrefix$command").takeLast(200)
         }
 
         val dataFillModule = rememberDataFillModuleController(
@@ -1086,6 +1095,12 @@ fun App() {
                                     loadingApplicationDetailSection = loadingApplicationDetailSection,
                                     onLoadApplicationDetail = ::loadApplicationDetail,
                                     isRunning = isRunning,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+
+                            TestModule.Settings -> {
+                                SettingsModuleContent(
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }

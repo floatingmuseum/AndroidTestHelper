@@ -5,3 +5,8 @@ class JVMPlatform : Platform {
 }
 
 actual fun getPlatform(): Platform = JVMPlatform()
+
+actual fun getCurrentTimeFormatted(): String {
+    val formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")
+    return java.time.LocalTime.now().format(formatter)
+}

@@ -5,4 +5,5 @@ internal enum class TestModule(val title: String) {
     App("应用"),
     DataFill("数据填充"),
     Log("日志"),
+    Settings("设置"),
 }

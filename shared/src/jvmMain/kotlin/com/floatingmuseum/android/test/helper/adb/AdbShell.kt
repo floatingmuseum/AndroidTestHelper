@@ -25,6 +25,7 @@ object AdbShell {
         displayCommand: String,
         logCommand: (String) -> Unit,
     ): String {
+        val startTime = System.currentTimeMillis()
         logCommand(displayCommand)
         return withContext(Dispatchers.IO) {
             val process = ProcessBuilder(listOf(adbPath) + args)
@@ -42,6 +43,10 @@ object AdbShell {
                 if (exitCode != 0) {
                     throw AdbCommandException(displayCommand, exitCode, output)
                 }
+                if (com.floatingmuseum.android.test.helper.settings.AppSettingsShared.currentSettings.showCommandDuration) {
+                    val duration = System.currentTimeMillis() - startTime
+                    logCommand("状态: 命令耗时 ${duration}ms")
+                }
                 output
             } catch (error: CancellationException) {
                 process.destroyForcibly()
@@ -56,6 +61,7 @@ object AdbShell {
         displayCommand: String,
         logCommand: (String) -> Unit,
     ): ByteArray {
+        val startTime = System.currentTimeMillis()
         logCommand(displayCommand)
         return withContext(Dispatchers.IO) {
             val process = ProcessBuilder(listOf(adbPath) + args).start()
@@ -74,6 +80,10 @@ object AdbShell {
                 if (exitCode != 0) {
                     val errorMsg = errorReader.await()
                     throw AdbCommandException(displayCommand, exitCode, errorMsg)
+                }
+                if (com.floatingmuseum.android.test.helper.settings.AppSettingsShared.currentSettings.showCommandDuration) {
+                    val duration = System.currentTimeMillis() - startTime
+                    logCommand("状态: 命令耗时 ${duration}ms")
                 }
                 output
             } catch (error: CancellationException) {
