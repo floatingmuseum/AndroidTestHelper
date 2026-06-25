@@ -288,6 +288,7 @@ private fun FileTreeRow(
         onDelete = onDeleteRequest,
         onCreateFile = onCreateFileRequest,
         onCreateDirectory = onCreateDirectoryRequest,
+        onRightClick = onSelect,
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -406,6 +407,7 @@ private fun FileManagerEntryContextMenu(
     onDelete: () -> Unit,
     onCreateFile: () -> Unit,
     onCreateDirectory: () -> Unit,
+    onRightClick: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     var menuOffset by remember { mutableStateOf<IntOffset?>(null) }
@@ -417,6 +419,7 @@ private fun FileManagerEntryContextMenu(
                 val position = event.changes.firstOrNull()?.position ?: Offset.Zero
                 menuOffset = IntOffset(position.x.roundToInt(), position.y.roundToInt())
                 showCreateMenu = false
+                onRightClick()
             }
         },
     ) {
