@@ -19,6 +19,15 @@ expect suspend fun selectApkFiles(
 ): List<String>
 
 /**
+ * 弹出系统文件选择器，让用户一次选择一个或多个本地文件。
+ * 如果用户取消了选择，则返回空列表。
+ */
+expect suspend fun selectFiles(
+    dialogTitle: String,
+    approveButtonText: String,
+): List<String>
+
+/**
  * 将字节数据保存到本地指定目录下的文件中。
  */
 expect fun saveBytesToFile(directoryPath: String, fileName: String, bytes: ByteArray)

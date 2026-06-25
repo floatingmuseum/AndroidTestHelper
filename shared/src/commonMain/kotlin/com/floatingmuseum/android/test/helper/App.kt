@@ -41,6 +41,8 @@ import com.floatingmuseum.android.test.helper.device.DeviceTestPanel
 import com.floatingmuseum.android.test.helper.devicelog.DeviceLogPanel
 import com.floatingmuseum.android.test.helper.devicelog.LogCaptureFloatingButton
 import com.floatingmuseum.android.test.helper.devicelog.rememberDeviceLogModuleController
+import com.floatingmuseum.android.test.helper.filemanager.FileManagerModuleContent
+import com.floatingmuseum.android.test.helper.filemanager.rememberFileManagerModuleController
 import com.floatingmuseum.android.test.helper.settings.SettingsModuleContent
 import com.floatingmuseum.android.test.helper.getCurrentTimeFormatted
 import kotlinx.coroutines.CancellationException
@@ -126,6 +128,16 @@ fun App() {
             setStatusText = { statusText = it },
             appendCommand = ::appendCommand,
         )
+        val fileManagerModule = rememberFileManagerModuleController(
+            scope = scope,
+            getSelectedReadyDevice = {
+                devices.firstOrNull { it.serialNumber == selectedDeviceSerial }?.takeIf { it.isReady }
+            },
+            isRunning = { isRunning },
+            setRunning = { isRunning = it },
+            setStatusText = { statusText = it },
+            appendCommand = ::appendCommand,
+        )
         val deviceLogModule = rememberDeviceLogModuleController(
             scope = scope,
             getSelectedReadyDevice = {
@@ -153,6 +165,7 @@ fun App() {
                     }
                     selectedDeviceSerial = nextSelectedDeviceSerial
                     dataFillModule.clearDeviceState()
+                    fileManagerModule.clearDeviceState()
                     thirdPartyApps = emptyList()
                     systemApps = emptyList()
                     thirdPartyLoadedSerial = null
@@ -209,6 +222,16 @@ fun App() {
                     } else if (selectedTestModule == TestModule.Log) {
                         statusText = "发现 ${discoveredDevices.size} 台设备，准备抓取 Logcat"
                         appendCommand("状态: $statusText")
+                    } else if (selectedTestModule == TestModule.FileManager) {
+                        statusText = "发现 ${discoveredDevices.size} 台设备，读取文件..."
+                        try {
+                            fileManagerModule.loadRootForDeviceScan(nextSelectedDeviceSerial)
+                            statusText = "发现 ${discoveredDevices.size} 台设备，已读取文件"
+                            appendCommand("状态: 设备已连接，文件目录已刷新")
+                        } catch (error: Throwable) {
+                            statusText = error.message ?: "读取文件失败"
+                            appendCommand("错误: 读取文件失败 - ${error.message ?: "未知错误"}")
+                        }
                     } else {
                         statusText = "发现 ${discoveredDevices.size} 台设备，准备读取应用"
                         appendCommand("状态: $statusText")
@@ -812,6 +835,10 @@ fun App() {
                         thirdPartyApps = emptyList()
                         thirdPartyLoadedSerial = null
                     }
+                } else if (selectedTestModule == TestModule.FileManager) {
+                    if (fileManagerModule.loadedSerial != deviceSerial) {
+                        fileManagerModule.loadDirectory(deviceSerial, "/")
+                    }
                 }
             }
         }
@@ -1053,6 +1080,15 @@ fun App() {
                                 )
                             }
 
+                            TestModule.FileManager -> {
+                                FileManagerModuleContent(
+                                    controller = fileManagerModule,
+                                    selectedDevice = selectedDevice,
+                                    isRunning = isRunning,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+
                             TestModule.Log -> {
                                 DeviceLogPanel(
                                     selectedDevice = selectedDevice,
@@ -1119,6 +1155,7 @@ fun App() {
                                 onSelect = { device ->
                                     selectedDeviceSerial = device.serialNumber
                                     dataFillModule.clearDeviceState()
+                                    fileManagerModule.clearDeviceState()
                                     thirdPartyApps = emptyList()
                                     systemApps = emptyList()
                                     thirdPartyLoadedSerial = null
@@ -1144,6 +1181,8 @@ fun App() {
                                     if (device.isReady) {
                                         if (selectedTestModule == TestModule.DataFill) {
                                             dataFillModule.refreshStorageForDevice(device.serialNumber)
+                                        } else if (selectedTestModule == TestModule.FileManager) {
+                                            fileManagerModule.loadDirectory(device.serialNumber, "/")
                                         } else if (selectedTestModule == TestModule.Device) {
                                             loadDeviceSystemInfo(device.serialNumber)
                                             loadDeviceSystemProperties(device.serialNumber)

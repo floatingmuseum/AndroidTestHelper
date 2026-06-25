@@ -43,6 +43,14 @@ actual suspend fun selectApkFiles(
         ?: fallbackJFileChooserApkFiles(dialogTitle, approveButtonText)
 }
 
+actual suspend fun selectFiles(
+    dialogTitle: String,
+    approveButtonText: String,
+): List<String> = withContext(Dispatchers.Main) {
+    selectFilesWithNativeDialog(dialogTitle)
+        ?: fallbackJFileChooserFiles(dialogTitle, approveButtonText)
+}
+
 private fun selectApkFilesWithNativeDialog(
     dialogTitle: String,
 ): List<String>? {
@@ -53,6 +61,23 @@ private fun selectApkFilesWithNativeDialog(
             filenameFilter = java.io.FilenameFilter { _, name ->
                 name.endsWith(".apk", ignoreCase = true) || name.endsWith(".xapk", ignoreCase = true)
             }
+        }
+        dialog.isVisible = true
+        dialog.files
+            .map { it.absolutePath }
+            .filter { it.isNotBlank() }
+    } catch (e: Throwable) {
+        null
+    }
+}
+
+private fun selectFilesWithNativeDialog(
+    dialogTitle: String,
+): List<String>? {
+    return try {
+        val dialog = FileDialog(null as Frame?, dialogTitle, FileDialog.LOAD).apply {
+            isMultipleMode = true
+            directory = System.getProperty("user.home")
         }
         dialog.isVisible = true
         dialog.files
@@ -169,6 +194,32 @@ private fun fallbackJFileChooserApkFiles(
         this.dialogTitle = dialogTitle
         this.approveButtonText = approveButtonText
         fileFilter = FileNameExtensionFilter("Android APK/XAPK (*.apk, *.xapk)", "apk", "xapk")
+        currentDirectory = File(System.getProperty("user.home"))
+    }
+    val result = chooser.showDialog(null, approveButtonText)
+    return if (result == JFileChooser.APPROVE_OPTION) {
+        chooser.selectedFiles
+            .map { it.absolutePath }
+            .filter { it.isNotBlank() }
+    } else {
+        emptyList()
+    }
+}
+
+private fun fallbackJFileChooserFiles(
+    dialogTitle: String,
+    approveButtonText: String,
+): List<String> {
+    try {
+        UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName())
+    } catch (e: Throwable) {
+        // ignore
+    }
+    val chooser = JFileChooser().apply {
+        fileSelectionMode = JFileChooser.FILES_ONLY
+        isMultiSelectionEnabled = true
+        this.dialogTitle = dialogTitle
+        this.approveButtonText = approveButtonText
         currentDirectory = File(System.getProperty("user.home"))
     }
     val result = chooser.showDialog(null, approveButtonText)
