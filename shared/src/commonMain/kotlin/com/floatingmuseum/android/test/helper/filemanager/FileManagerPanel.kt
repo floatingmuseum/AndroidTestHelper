@@ -433,7 +433,7 @@ private fun FileManagerEntryContextMenu(
                     menuOffset = null
                     showCreateMenu = false
                 },
-                properties = PopupProperties(focusable = true),
+                properties = PopupProperties(focusable = false),
             ) {
                 Row(
                     verticalAlignment = Alignment.Top,
