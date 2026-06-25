@@ -18,11 +18,12 @@ object AppSettingsShared {
         private set
         
     fun init() {
-        currentSettings = repository.loadSettings()
+        currentSettings = repository.loadSettings().normalized()
     }
     
     fun updateSettings(newSettings: AppSettings) {
-        currentSettings = newSettings
-        repository.saveSettings(newSettings)
+        val normalizedSettings = newSettings.normalized()
+        currentSettings = normalizedSettings
+        repository.saveSettings(normalizedSettings)
     }
 }

@@ -12,9 +12,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-private val RootEntry = RemoteFileEntry(
-    name = "/",
-    path = "/",
+private fun rootEntry(rootPath: String) = RemoteFileEntry(
+    name = rootPath,
+    path = rootPath,
     type = RemoteFileType.Directory,
     sizeBytes = 0L,
     permissions = "-",
@@ -25,20 +25,23 @@ internal class FileManagerModuleController(
     private val fileManagerAdb: FileManagerAdb,
     private val scope: CoroutineScope,
     private val getSelectedReadyDevice: () -> AndroidDevice?,
+    private val getDefaultRootPath: () -> String,
     private val isRunning: () -> Boolean,
     private val setRunning: (Boolean) -> Unit,
     private val setStatusText: (String) -> Unit,
     private val appendCommand: (String) -> Unit,
 ) {
-    var currentPath by mutableStateOf("/")
+    var appliedRootPath by mutableStateOf(normalizedDefaultRootPath())
+        private set
+    var currentPath by mutableStateOf(appliedRootPath)
         private set
     var childrenByPath by mutableStateOf<Map<String, List<RemoteFileEntry>>>(emptyMap())
         private set
-    var expandedPaths by mutableStateOf(setOf("/"))
+    var expandedPaths by mutableStateOf(setOf(appliedRootPath))
         private set
     var loadedSerial by mutableStateOf<String?>(null)
         private set
-    var selectedEntryPath by mutableStateOf("/")
+    var selectedEntryPath by mutableStateOf(appliedRootPath)
         private set
     var loadingPath by mutableStateOf<String?>(null)
         private set
@@ -51,17 +54,35 @@ internal class FileManagerModuleController(
         get() = buildTreeRows()
 
     fun clearDeviceState() {
+        val rootPath = normalizedDefaultRootPath()
+        appliedRootPath = rootPath
         childrenByPath = emptyMap()
-        expandedPaths = setOf("/")
+        expandedPaths = setOf(rootPath)
         loadedSerial = null
-        selectedEntryPath = "/"
-        currentPath = "/"
+        selectedEntryPath = rootPath
+        currentPath = rootPath
         loadingPath = null
         isDragOver = false
         dragTargetPath = null
     }
 
+    fun applyDefaultRootPath(): Boolean {
+        val rootPath = normalizedDefaultRootPath()
+        if (rootPath == appliedRootPath) return false
+        appliedRootPath = rootPath
+        childrenByPath = emptyMap()
+        expandedPaths = setOf(rootPath)
+        loadedSerial = null
+        selectedEntryPath = rootPath
+        currentPath = rootPath
+        loadingPath = null
+        isDragOver = false
+        dragTargetPath = null
+        return true
+    }
+
     fun refreshSelectedDirectory() {
+        applyDefaultRootPath()
         val serial = getSelectedReadyDevice()?.serialNumber
         if (serial == null) {
             setStatusText("先选择状态为 device 的设备")
@@ -134,7 +155,7 @@ internal class FileManagerModuleController(
     }
 
     suspend fun loadRootForDeviceScan(deviceSerial: String) {
-        loadDirectoryNow(deviceSerial, "/")
+        loadDirectoryNow(deviceSerial, normalizedDefaultRootPath())
     }
 
     fun exportEntry(entry: RemoteFileEntry) {
@@ -258,15 +279,18 @@ internal class FileManagerModuleController(
                 }
             }
         }
-        append(RootEntry, 0)
+        append(rootEntry(appliedRootPath), 0)
         return rows
     }
+
+    private fun normalizedDefaultRootPath(): String = normalizeRemotePath(getDefaultRootPath())
 }
 
 @Composable
 internal fun rememberFileManagerModuleController(
     scope: CoroutineScope,
     getSelectedReadyDevice: () -> AndroidDevice?,
+    getDefaultRootPath: () -> String,
     isRunning: () -> Boolean,
     setRunning: (Boolean) -> Unit,
     setStatusText: (String) -> Unit,
@@ -278,6 +302,7 @@ internal fun rememberFileManagerModuleController(
             fileManagerAdb = fileManagerAdb,
             scope = scope,
             getSelectedReadyDevice = getSelectedReadyDevice,
+            getDefaultRootPath = getDefaultRootPath,
             isRunning = isRunning,
             setRunning = setRunning,
             setStatusText = setStatusText,

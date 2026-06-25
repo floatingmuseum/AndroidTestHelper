@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 
 enum class SettingCategory(val title: String) {
     General("通用"),
+    FileManager("文件管理"),
 }
 
 @Composable
@@ -90,6 +91,9 @@ fun SettingsModuleContent(
                 SettingCategory.General -> {
                     GeneralSettingsPanel(modifier = Modifier.fillMaxSize())
                 }
+                SettingCategory.FileManager -> {
+                    FileManagerSettingsPanel(modifier = Modifier.fillMaxSize())
+                }
             }
         }
     }
@@ -165,6 +169,83 @@ fun GeneralSettingsPanel(
                         AppSettingsShared.updateSettings(settings.copy(showCommandDuration = isChecked))
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun FileManagerSettingsPanel(
+    modifier: Modifier = Modifier,
+) {
+    val scrollState = rememberScrollState()
+    val settings = AppSettingsShared.currentSettings
+
+    Column(
+        modifier = modifier
+            .verticalScroll(scrollState)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "默认根目录",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = "文件管理模块进入、刷新设备和切换设备时，都会从该目录开始读取。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FILE_MANAGER_ROOT_PATH_OPTIONS.forEach { rootPath ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                AppSettingsShared.updateSettings(
+                                    settings.copy(fileManagerDefaultRootPath = rootPath)
+                                )
+                            },
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (settings.fileManagerDefaultRootPath == rootPath) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        contentColor = if (settings.fileManagerDefaultRootPath == rootPath) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            RadioButton(
+                                selected = settings.fileManagerDefaultRootPath == rootPath,
+                                onClick = {
+                                    AppSettingsShared.updateSettings(
+                                        settings.copy(fileManagerDefaultRootPath = rootPath)
+                                    )
+                                }
+                            )
+                            Text(
+                                text = rootPath,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
             }
         }
     }

@@ -43,6 +43,7 @@ import com.floatingmuseum.android.test.helper.devicelog.LogCaptureFloatingButton
 import com.floatingmuseum.android.test.helper.devicelog.rememberDeviceLogModuleController
 import com.floatingmuseum.android.test.helper.filemanager.FileManagerModuleContent
 import com.floatingmuseum.android.test.helper.filemanager.rememberFileManagerModuleController
+import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
 import com.floatingmuseum.android.test.helper.settings.SettingsModuleContent
 import com.floatingmuseum.android.test.helper.getCurrentTimeFormatted
 import kotlinx.coroutines.CancellationException
@@ -59,12 +60,13 @@ private enum class BannerActionType {
 fun App() {
     MaterialTheme {
         remember {
-            com.floatingmuseum.android.test.helper.settings.AppSettingsShared.init()
+            AppSettingsShared.init()
         }
 
         val adbDeviceManager = remember { createAdbDeviceManager() }
         val appAdb = remember { createAppAdb() }
         val deviceAdb = remember { createDeviceAdb() }
+        val appSettings = AppSettingsShared.currentSettings
 
         val scope = rememberCoroutineScope()
         var devices by remember { mutableStateOf<List<AndroidDevice>>(emptyList()) }
@@ -112,7 +114,7 @@ fun App() {
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
 
         fun appendCommand(command: String) {
-            val timePrefix = if (com.floatingmuseum.android.test.helper.settings.AppSettingsShared.currentSettings.showCommandTime) {
+            val timePrefix = if (appSettings.showCommandTime) {
                 "[${getCurrentTimeFormatted()}] "
             } else ""
             commandLog = (commandLog + "$timePrefix$command").takeLast(200)
@@ -133,6 +135,7 @@ fun App() {
             getSelectedReadyDevice = {
                 devices.firstOrNull { it.serialNumber == selectedDeviceSerial }?.takeIf { it.isReady }
             },
+            getDefaultRootPath = { AppSettingsShared.currentSettings.fileManagerDefaultRootPath },
             isRunning = { isRunning },
             setRunning = { isRunning = it },
             setStatusText = { statusText = it },
@@ -807,7 +810,11 @@ fun App() {
             refreshDevices()
         }
 
-        LaunchedEffect(selectedTestModule, selectedReadyDevice?.serialNumber) {
+        LaunchedEffect(
+            selectedTestModule,
+            selectedReadyDevice?.serialNumber,
+            appSettings.fileManagerDefaultRootPath,
+        ) {
             val deviceSerial = selectedReadyDevice?.serialNumber
             if (deviceSerial != null) {
                 if (selectedTestModule == TestModule.Device) {
@@ -836,8 +843,9 @@ fun App() {
                         thirdPartyLoadedSerial = null
                     }
                 } else if (selectedTestModule == TestModule.FileManager) {
+                    fileManagerModule.applyDefaultRootPath()
                     if (fileManagerModule.loadedSerial != deviceSerial) {
-                        fileManagerModule.loadDirectory(deviceSerial, "/")
+                        fileManagerModule.loadDirectory(deviceSerial, fileManagerModule.appliedRootPath)
                     }
                 }
             }
@@ -1182,7 +1190,10 @@ fun App() {
                                         if (selectedTestModule == TestModule.DataFill) {
                                             dataFillModule.refreshStorageForDevice(device.serialNumber)
                                         } else if (selectedTestModule == TestModule.FileManager) {
-                                            fileManagerModule.loadDirectory(device.serialNumber, "/")
+                                            fileManagerModule.loadDirectory(
+                                                deviceSerial = device.serialNumber,
+                                                remotePath = fileManagerModule.appliedRootPath,
+                                            )
                                         } else if (selectedTestModule == TestModule.Device) {
                                             loadDeviceSystemInfo(device.serialNumber)
                                             loadDeviceSystemProperties(device.serialNumber)
