@@ -10,10 +10,3 @@ expect fun Modifier.localFileDropTarget(
     onFilesDropped: (List<String>, String) -> Unit,
     onUnsupportedDrop: () -> Unit,
 ): Modifier
-
-@Composable
-expect fun FileManagerEntryContextMenu(
-    enabled: Boolean,
-    onExport: () -> Unit,
-    content: @Composable () -> Unit,
-)

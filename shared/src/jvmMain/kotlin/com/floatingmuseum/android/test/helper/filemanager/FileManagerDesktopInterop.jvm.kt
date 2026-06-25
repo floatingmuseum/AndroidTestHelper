@@ -1,7 +1,5 @@
 package com.floatingmuseum.android.test.helper.filemanager
 
-import androidx.compose.foundation.ContextMenuArea
-import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -61,26 +59,6 @@ actual fun Modifier.localFileDropTarget(
     return dragAndDropTarget(
         shouldStartDragAndDrop = { event -> event.localFilePaths().isNotEmpty() },
         target = target,
-    )
-}
-
-@Composable
-actual fun FileManagerEntryContextMenu(
-    enabled: Boolean,
-    onExport: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    ContextMenuArea(
-        items = {
-            listOf(
-                ContextMenuItem(
-                    label = "导出",
-                    enabled = enabled,
-                    onClick = onExport,
-                )
-            )
-        },
-        content = content,
     )
 }
 

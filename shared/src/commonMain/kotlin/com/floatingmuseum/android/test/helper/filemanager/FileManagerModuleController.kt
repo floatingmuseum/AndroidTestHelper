@@ -92,6 +92,17 @@ internal class FileManagerModuleController(
         loadDirectory(serial, currentPath, forceRefresh = true)
     }
 
+    fun refreshEntryDirectory(entry: RemoteFileEntry) {
+        val serial = getSelectedReadyDevice()?.serialNumber
+        if (serial == null) {
+            setStatusText("先选择状态为 device 的设备")
+            appendCommand("错误: 先选择状态为 device 的设备")
+            return
+        }
+        val targetPath = if (entry.isDirectory) entry.path else parentRemotePath(entry.path)
+        loadDirectory(serial, targetPath, forceRefresh = true)
+    }
+
     fun toggleEntry(entry: RemoteFileEntry) {
         selectedEntryPath = entry.path
         if (!entry.isExpandable) return
@@ -190,6 +201,112 @@ internal class FileManagerModuleController(
             } catch (error: Throwable) {
                 setStatusText(error.message ?: "导出失败")
                 appendCommand("错误: 导出失败 - ${error.message ?: "未知错误"}")
+            } finally {
+                setRunning(false)
+            }
+        }
+    }
+
+    fun deleteEntry(entry: RemoteFileEntry) {
+        val serial = getSelectedReadyDevice()?.serialNumber
+        if (serial == null) {
+            setStatusText("先选择状态为 device 的设备")
+            appendCommand("错误: 先选择状态为 device 的设备")
+            return
+        }
+        if (isRunning()) return
+
+        val normalizedPath = normalizeRemotePath(entry.path)
+        if (normalizedPath == appliedRootPath || normalizedPath == "/") {
+            setStatusText("不能删除当前文件管理根目录")
+            appendCommand("错误: 不能删除当前文件管理根目录 $normalizedPath")
+            return
+        }
+
+        scope.launch {
+            setRunning(true)
+            setStatusText("删除 ${entry.name}...")
+            appendCommand("状态: 删除设备 $serial 文件 ${entry.path}")
+            try {
+                fileManagerAdb.deletePath(serial, normalizedPath, appendCommand)
+                val parentPath = parentRemotePath(normalizedPath)
+                val refreshedChildren = fileManagerAdb.listDirectory(serial, parentPath, appendCommand)
+                val descendantPrefix = "$normalizedPath/"
+                childrenByPath = childrenByPath
+                    .filterKeys { path -> path != normalizedPath && !path.startsWith(descendantPrefix) }
+                    .plus(parentPath to refreshedChildren)
+                expandedPaths = expandedPaths
+                    .filterNot { path -> path == normalizedPath || path.startsWith(descendantPrefix) }
+                    .toSet() + parentPath
+                if (currentPath == normalizedPath || currentPath.startsWith(descendantPrefix)) {
+                    currentPath = parentPath
+                }
+                selectedEntryPath = parentPath
+                loadedSerial = serial
+                setStatusText("已删除 ${entry.name}")
+                appendCommand("状态: 已删除 ${entry.path}，并刷新 $parentPath")
+            } catch (error: CancellationException) {
+                setStatusText("删除已停止")
+                appendCommand("状态: 删除已停止")
+            } catch (error: Throwable) {
+                setStatusText(error.message ?: "删除失败")
+                appendCommand("错误: 删除失败 - ${error.message ?: "未知错误"}")
+            } finally {
+                setRunning(false)
+            }
+        }
+    }
+
+    fun createEntry(targetDirectory: RemoteFileEntry, name: String, type: RemoteCreateType) {
+        val serial = getSelectedReadyDevice()?.serialNumber
+        if (serial == null) {
+            setStatusText("先选择状态为 device 的设备")
+            appendCommand("错误: 先选择状态为 device 的设备")
+            return
+        }
+        if (isRunning()) return
+        if (!targetDirectory.isDirectory) {
+            setStatusText("只能在文件夹内创建")
+            appendCommand("错误: 只能在文件夹内创建")
+            return
+        }
+
+        val normalizedDirectory = normalizeRemotePath(targetDirectory.path)
+        val childName = try {
+            validateRemoteChildName(name)
+        } catch (error: IllegalArgumentException) {
+            setStatusText(error.message ?: "名称无效")
+            appendCommand("错误: 创建失败 - ${error.message ?: "名称无效"}")
+            return
+        }
+
+        scope.launch {
+            setRunning(true)
+            val createTypeText = if (type == RemoteCreateType.Directory) "文件夹" else "文件"
+            setStatusText("创建$createTypeText $childName...")
+            appendCommand("状态: 在设备 $serial:$normalizedDirectory 创建$createTypeText $childName")
+            try {
+                val createdPath = fileManagerAdb.createPath(
+                    deviceSerial = serial,
+                    remoteDirectoryPath = normalizedDirectory,
+                    name = childName,
+                    type = type,
+                    logCommand = appendCommand,
+                )
+                val refreshedChildren = fileManagerAdb.listDirectory(serial, normalizedDirectory, appendCommand)
+                childrenByPath = childrenByPath + (normalizedDirectory to refreshedChildren)
+                expandedPaths = expandedPaths + normalizedDirectory
+                currentPath = normalizedDirectory
+                selectedEntryPath = createdPath
+                loadedSerial = serial
+                setStatusText("已创建 $createdPath")
+                appendCommand("状态: 已创建 $createdPath，并刷新 $normalizedDirectory")
+            } catch (error: CancellationException) {
+                setStatusText("创建已停止")
+                appendCommand("状态: 创建已停止")
+            } catch (error: Throwable) {
+                setStatusText(error.message ?: "创建失败")
+                appendCommand("错误: 创建失败 - ${error.message ?: "未知错误"}")
             } finally {
                 setRunning(false)
             }
@@ -327,10 +444,12 @@ internal fun FileManagerModuleContent(
         dragTargetPath = controller.dragTargetPath,
         isRunning = isRunning,
         isDragOver = controller.isDragOver,
-        onRefresh = controller::refreshSelectedDirectory,
         onToggleEntry = controller::toggleEntry,
         onSelectEntry = controller::selectEntry,
+        onRefreshEntry = controller::refreshEntryDirectory,
         onExportEntry = controller::exportEntry,
+        onDeleteEntry = controller::deleteEntry,
+        onCreateEntry = controller::createEntry,
         onDroppedFiles = controller::uploadDroppedFiles,
         onDragStateChange = controller::updateDragOver,
         onUnsupportedDrop = controller::handleUnsupportedDrop,

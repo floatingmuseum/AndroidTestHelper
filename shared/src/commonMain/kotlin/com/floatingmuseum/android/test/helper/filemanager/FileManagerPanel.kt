@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,22 +14,53 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.floatingmuseum.android.test.helper.AndroidDevice
+import kotlin.math.roundToInt
+
+private data class PendingCreateEntry(
+    val targetDirectory: RemoteFileEntry,
+    val type: RemoteCreateType,
+)
 
 @Composable
 internal fun FileManagerPanel(
@@ -40,29 +72,25 @@ internal fun FileManagerPanel(
     dragTargetPath: String?,
     isRunning: Boolean,
     isDragOver: Boolean,
-    onRefresh: () -> Unit,
     onToggleEntry: (RemoteFileEntry) -> Unit,
     onSelectEntry: (RemoteFileEntry) -> Unit,
+    onRefreshEntry: (RemoteFileEntry) -> Unit,
     onExportEntry: (RemoteFileEntry) -> Unit,
+    onDeleteEntry: (RemoteFileEntry) -> Unit,
+    onCreateEntry: (RemoteFileEntry, String, RemoteCreateType) -> Unit,
     onDroppedFiles: (List<String>, String) -> Unit,
     onDragStateChange: (Boolean, String?) -> Unit,
     onUnsupportedDrop: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val hasReadyDevice = selectedDevice?.isReady == true
+    var pendingDeleteEntry by remember { mutableStateOf<RemoteFileEntry?>(null) }
+    var pendingCreateEntry by remember { mutableStateOf<PendingCreateEntry?>(null) }
 
     Column(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        FileManagerToolbar(
-            selectedDevice = selectedDevice,
-            isRunning = isRunning,
-            hasReadyDevice = hasReadyDevice,
-            onRefresh = onRefresh,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
         Card(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -81,20 +109,36 @@ internal fun FileManagerPanel(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = "设备文件",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "设备文件",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = selectedDevice?.let { "${it.model} · ${it.serialNumber}" } ?: "未选择设备",
+                            modifier = Modifier.weight(1f, fill = false),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Text(
                         text = if (isDragOver) {
                             dragTargetPath?.let { "松开后上传到 $it" } ?: "拖到目录行上松手才会上传"
                         } else {
-                            "右键导出；拖入本地文件到目录行即可上传"
+                            "右键刷新、导出、删除；拖入本地文件到目录行即可上传"
                         },
+                        modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
 
@@ -105,7 +149,7 @@ internal fun FileManagerPanel(
                         EmptyFileManagerState("先选择状态为 device 的设备。")
                     }
                     loadedSerial != selectedDevice.serialNumber -> {
-                        EmptyFileManagerState("尚未读取根目录。点击刷新。")
+                        EmptyFileManagerState("尚未读取根目录。扫描或切换设备后会自动读取。")
                     }
                     else -> {
                         LazyColumn(
@@ -124,7 +168,15 @@ internal fun FileManagerPanel(
                                     isRunning = isRunning,
                                     onToggle = { onToggleEntry(row.entry) },
                                     onSelect = { onSelectEntry(row.entry) },
+                                    onRefresh = { onRefreshEntry(row.entry) },
                                     onExport = { onExportEntry(row.entry) },
+                                    onDeleteRequest = { pendingDeleteEntry = row.entry },
+                                    onCreateFileRequest = {
+                                        pendingCreateEntry = PendingCreateEntry(row.entry, RemoteCreateType.File)
+                                    },
+                                    onCreateDirectoryRequest = {
+                                        pendingCreateEntry = PendingCreateEntry(row.entry, RemoteCreateType.Directory)
+                                    },
                                     onDropTargetHover = { targetPath ->
                                         onDragStateChange(targetPath != null, targetPath)
                                     },
@@ -144,43 +196,50 @@ internal fun FileManagerPanel(
             }
         }
     }
-}
 
-@Composable
-private fun FileManagerToolbar(
-    selectedDevice: AndroidDevice?,
-    isRunning: Boolean,
-    hasReadyDevice: Boolean,
-    onRefresh: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = modifier,
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "文件管理",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = selectedDevice?.let { "${it.model} · ${it.serialNumber}" } ?: "未选择设备",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Button(
-                onClick = onRefresh,
-                enabled = hasReadyDevice && !isRunning,
-            ) {
-                Text("刷新选中目录")
+    pendingDeleteEntry?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteEntry = null },
+            title = {
+                Text(
+                    text = "确认删除",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            },
+            text = {
+                Text(
+                    text = "是否要删除${if (entry.isDirectory) "文件夹" else "文件"} ${entry.name}？\n${entry.path}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteEntry(entry)
+                        pendingDeleteEntry = null
+                    },
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteEntry = null }) {
+                    Text("取消")
+                }
             }
-        }
+        )
+    }
+
+    pendingCreateEntry?.let { request ->
+        CreateEntryDialog(
+            request = request,
+            onConfirm = { name ->
+                onCreateEntry(request.targetDirectory, name, request.type)
+                pendingCreateEntry = null
+            },
+            onDismiss = { pendingCreateEntry = null },
+        )
     }
 }
 
@@ -209,7 +268,11 @@ private fun FileTreeRow(
     isRunning: Boolean,
     onToggle: () -> Unit,
     onSelect: () -> Unit,
+    onRefresh: () -> Unit,
     onExport: () -> Unit,
+    onDeleteRequest: () -> Unit,
+    onCreateFileRequest: () -> Unit,
+    onCreateDirectoryRequest: () -> Unit,
     onDropTargetHover: (String?) -> Unit,
     onDroppedFiles: (List<String>, String) -> Unit,
     onUnsupportedDrop: () -> Unit,
@@ -218,7 +281,13 @@ private fun FileTreeRow(
     val normalizedEntryPath = normalizeRemotePath(entry.path)
     FileManagerEntryContextMenu(
         enabled = !isRunning,
+        createEnabled = !isRunning && entry.isDirectory,
+        deleteEnabled = !isRunning && row.depth > 0,
+        onRefresh = onRefresh,
         onExport = onExport,
+        onDelete = onDeleteRequest,
+        onCreateFile = onCreateFileRequest,
+        onCreateDirectory = onCreateDirectoryRequest,
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -324,6 +393,243 @@ private fun FileTreeRow(
             }
         }
     }
+}
+
+@Composable
+@OptIn(ExperimentalComposeUiApi::class)
+private fun FileManagerEntryContextMenu(
+    enabled: Boolean,
+    createEnabled: Boolean,
+    deleteEnabled: Boolean,
+    onRefresh: () -> Unit,
+    onExport: () -> Unit,
+    onDelete: () -> Unit,
+    onCreateFile: () -> Unit,
+    onCreateDirectory: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    var menuOffset by remember { mutableStateOf<IntOffset?>(null) }
+    var showCreateMenu by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier.onPointerEvent(PointerEventType.Press) { event ->
+            if (enabled && event.buttons.isSecondaryPressed) {
+                val position = event.changes.firstOrNull()?.position ?: Offset.Zero
+                menuOffset = IntOffset(position.x.roundToInt(), position.y.roundToInt())
+                showCreateMenu = false
+            }
+        },
+    ) {
+        content()
+
+        val offset = menuOffset
+        if (offset != null) {
+            Popup(
+                popupPositionProvider = FileContextMenuPositionProvider(offset),
+                onDismissRequest = {
+                    menuOffset = null
+                    showCreateMenu = false
+                },
+                properties = PopupProperties(focusable = true),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    modifier = Modifier.onPointerEvent(PointerEventType.Exit) {
+                        showCreateMenu = false
+                    },
+                ) {
+                    FileContextMenuSurface {
+                        FileContextMenuItem(
+                            text = "刷新",
+                            enabled = enabled,
+                            onHover = { showCreateMenu = false },
+                            onClick = {
+                                menuOffset = null
+                                onRefresh()
+                            },
+                        )
+                        FileContextMenuItem(
+                            text = "创建  >",
+                            enabled = createEnabled,
+                            onHover = { showCreateMenu = createEnabled },
+                            onClick = { showCreateMenu = createEnabled },
+                        )
+                        FileContextMenuItem(
+                            text = "导出",
+                            enabled = enabled,
+                            onHover = { showCreateMenu = false },
+                            onClick = {
+                                menuOffset = null
+                                onExport()
+                            },
+                        )
+                        FileContextMenuItem(
+                            text = "删除",
+                            enabled = deleteEnabled,
+                            onHover = { showCreateMenu = false },
+                            onClick = {
+                                menuOffset = null
+                                onDelete()
+                            },
+                            danger = true,
+                        )
+                    }
+
+                    if (showCreateMenu && createEnabled) {
+                        FileContextMenuSurface {
+                            FileContextMenuItem(
+                                text = "文件",
+                                enabled = true,
+                                onClick = {
+                                    menuOffset = null
+                                    showCreateMenu = false
+                                    onCreateFile()
+                                },
+                            )
+                            FileContextMenuItem(
+                                text = "文件夹",
+                                enabled = true,
+                                onClick = {
+                                    menuOffset = null
+                                    showCreateMenu = false
+                                    onCreateDirectory()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FileContextMenuSurface(content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        tonalElevation = 4.dp,
+        shadowElevation = 6.dp,
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Column(
+            modifier = Modifier.widthIn(min = 132.dp).padding(vertical = 4.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalComposeUiApi::class)
+private fun FileContextMenuItem(
+    text: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    onHover: () -> Unit = {},
+    danger: Boolean = false,
+) {
+    Text(
+        text = text,
+        modifier = Modifier
+            .width(152.dp)
+            .height(34.dp)
+            .onPointerEvent(PointerEventType.Enter) {
+                if (enabled) onHover()
+            }
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        color = when {
+            !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            danger -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurface
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+private class FileContextMenuPositionProvider(
+    private val offset: IntOffset,
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val maxX = (windowSize.width - popupContentSize.width).coerceAtLeast(0)
+        val maxY = (windowSize.height - popupContentSize.height).coerceAtLeast(0)
+        return IntOffset(
+            x = (anchorBounds.left + offset.x).coerceIn(0, maxX),
+            y = (anchorBounds.top + offset.y).coerceIn(0, maxY),
+        )
+    }
+}
+
+@Composable
+private fun CreateEntryDialog(
+    request: PendingCreateEntry,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val defaultName = if (request.type == RemoteCreateType.Directory) "NewDir" else "NewFile.txt"
+    val title = if (request.type == RemoteCreateType.Directory) "创建文件夹" else "创建文件"
+    val label = if (request.type == RemoteCreateType.Directory) "文件夹名" else "文件名"
+    var nameValue by remember(request) {
+        mutableStateOf(
+            TextFieldValue(
+                text = defaultName,
+                selection = TextRange(0, defaultName.length),
+            )
+        )
+    }
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(request) {
+        focusRequester.requestFocus()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = title,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "目标目录：${request.targetDirectory.path}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                OutlinedTextField(
+                    value = nameValue,
+                    onValueChange = { nameValue = it },
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                    label = { Text(label) },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = nameValue.text.trim().isNotEmpty(),
+                onClick = { onConfirm(nameValue.text) },
+            ) {
+                Text("创建")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        },
+    )
 }
 
 @Composable

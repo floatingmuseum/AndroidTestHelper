@@ -7,6 +7,11 @@ enum class RemoteFileType {
     Other,
 }
 
+enum class RemoteCreateType {
+    File,
+    Directory,
+}
+
 data class RemoteFileEntry(
     val name: String,
     val path: String,
@@ -49,6 +54,20 @@ interface FileManagerAdb {
         remoteDirectoryPath: String,
         logCommand: (String) -> Unit,
     ): Int
+
+    suspend fun deletePath(
+        deviceSerial: String,
+        remotePath: String,
+        logCommand: (String) -> Unit,
+    )
+
+    suspend fun createPath(
+        deviceSerial: String,
+        remoteDirectoryPath: String,
+        name: String,
+        type: RemoteCreateType,
+        logCommand: (String) -> Unit,
+    ): String
 }
 
 expect fun createFileManagerAdb(): FileManagerAdb
@@ -120,6 +139,14 @@ fun childRemotePath(parent: String, childName: String): String {
     } else {
         "$normalizedParent/$childName"
     }
+}
+
+fun validateRemoteChildName(name: String): String {
+    val trimmedName = name.trim()
+    require(trimmedName.isNotEmpty()) { "名称不能为空" }
+    require(trimmedName != "." && trimmedName != "..") { "名称不能是 $trimmedName" }
+    require(!trimmedName.contains('/') && !trimmedName.contains('\\')) { "名称不能包含路径分隔符" }
+    return trimmedName
 }
 
 fun remoteFileName(path: String): String {

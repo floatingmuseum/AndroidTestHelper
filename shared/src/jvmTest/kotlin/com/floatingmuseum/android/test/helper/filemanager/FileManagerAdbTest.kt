@@ -3,6 +3,7 @@ package com.floatingmuseum.android.test.helper.filemanager
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -34,6 +35,16 @@ class FileManagerAdbTest {
         assertEquals("/", parentRemotePath("/sdcard"))
         assertEquals("/sdcard/file.txt", childRemotePath("/sdcard/", "file.txt"))
         assertEquals("file.txt", remoteFileName("/sdcard/file.txt"))
+    }
+
+    @Test
+    fun validateRemoteChildNameRejectsBlankParentAndNestedPaths() {
+        assertEquals("NewFile.txt", validateRemoteChildName(" NewFile.txt "))
+        assertFailsWith<IllegalArgumentException> { validateRemoteChildName("") }
+        assertFailsWith<IllegalArgumentException> { validateRemoteChildName(".") }
+        assertFailsWith<IllegalArgumentException> { validateRemoteChildName("..") }
+        assertFailsWith<IllegalArgumentException> { validateRemoteChildName("nested/file.txt") }
+        assertFailsWith<IllegalArgumentException> { validateRemoteChildName("nested\\file.txt") }
     }
 
     @Test

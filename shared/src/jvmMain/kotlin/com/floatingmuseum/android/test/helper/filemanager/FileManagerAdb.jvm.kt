@@ -66,6 +66,46 @@ private class JvmFileManagerAdb : FileManagerAdb {
         }
         return uploadedCount
     }
+
+    override suspend fun deletePath(
+        deviceSerial: String,
+        remotePath: String,
+        logCommand: (String) -> Unit,
+    ) {
+        val normalizedPath = normalizeRemotePath(remotePath)
+        require(normalizedPath != "/") { "不能删除设备根目录" }
+        AdbShell.executeAdb(
+            args = listOf("-s", deviceSerial, "shell", "rm", "-rf", shellQuote(normalizedPath)),
+            displayCommand = "adb -s $deviceSerial shell rm -rf ${shellQuote(normalizedPath)}",
+            logCommand = logCommand,
+        )
+    }
+
+    override suspend fun createPath(
+        deviceSerial: String,
+        remoteDirectoryPath: String,
+        name: String,
+        type: RemoteCreateType,
+        logCommand: (String) -> Unit,
+    ): String {
+        val normalizedDirectory = normalizeRemotePath(remoteDirectoryPath)
+        val childName = validateRemoteChildName(name)
+        val targetPath = childRemotePath(normalizedDirectory, childName)
+        val args = when (type) {
+            RemoteCreateType.File -> listOf("-s", deviceSerial, "shell", "touch", shellQuote(targetPath))
+            RemoteCreateType.Directory -> listOf("-s", deviceSerial, "shell", "mkdir", "-p", shellQuote(targetPath))
+        }
+        val displayCommand = when (type) {
+            RemoteCreateType.File -> "adb -s $deviceSerial shell touch ${shellQuote(targetPath)}"
+            RemoteCreateType.Directory -> "adb -s $deviceSerial shell mkdir -p ${shellQuote(targetPath)}"
+        }
+        AdbShell.executeAdb(
+            args = args,
+            displayCommand = displayCommand,
+            logCommand = logCommand,
+        )
+        return targetPath
+    }
 }
 
 internal fun remoteDirectoryListArgument(path: String): String {
