@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import com.floatingmuseum.android.test.helper.AndroidDevice
 import com.floatingmuseum.android.test.helper.selectDirectory
 import kotlinx.coroutines.CancellationException
@@ -313,6 +315,11 @@ internal class FileManagerModuleController(
         }
     }
 
+    fun copyEntryPath(path: String) {
+        setStatusText("已复制路径: $path")
+        appendCommand("状态: 已复制绝对路径 $path 到剪贴板")
+    }
+
     fun uploadDroppedFiles(filePaths: List<String>, targetDirectoryPath: String) {
         if (filePaths.isEmpty()) return
         if (isRunning()) {
@@ -435,6 +442,8 @@ internal fun FileManagerModuleContent(
     isRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    @Suppress("DEPRECATION")
+    val clipboardManager = LocalClipboardManager.current
     FileManagerPanel(
         selectedDevice = selectedDevice,
         currentPath = controller.currentPath,
@@ -450,6 +459,10 @@ internal fun FileManagerModuleContent(
         onExportEntry = controller::exportEntry,
         onDeleteEntry = controller::deleteEntry,
         onCreateEntry = controller::createEntry,
+        onCopyPath = { entry ->
+            clipboardManager.setText(AnnotatedString(entry.path))
+            controller.copyEntryPath(entry.path)
+        },
         onDroppedFiles = controller::uploadDroppedFiles,
         onDragStateChange = controller::updateDragOver,
         onUnsupportedDrop = controller::handleUnsupportedDrop,

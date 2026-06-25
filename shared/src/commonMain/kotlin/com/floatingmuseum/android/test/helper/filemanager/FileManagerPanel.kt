@@ -78,6 +78,7 @@ internal fun FileManagerPanel(
     onExportEntry: (RemoteFileEntry) -> Unit,
     onDeleteEntry: (RemoteFileEntry) -> Unit,
     onCreateEntry: (RemoteFileEntry, String, RemoteCreateType) -> Unit,
+    onCopyPath: (RemoteFileEntry) -> Unit,
     onDroppedFiles: (List<String>, String) -> Unit,
     onDragStateChange: (Boolean, String?) -> Unit,
     onUnsupportedDrop: () -> Unit,
@@ -177,6 +178,7 @@ internal fun FileManagerPanel(
                                     onCreateDirectoryRequest = {
                                         pendingCreateEntry = PendingCreateEntry(row.entry, RemoteCreateType.Directory)
                                     },
+                                    onCopyPath = { onCopyPath(row.entry) },
                                     onDropTargetHover = { targetPath ->
                                         onDragStateChange(targetPath != null, targetPath)
                                     },
@@ -273,6 +275,7 @@ private fun FileTreeRow(
     onDeleteRequest: () -> Unit,
     onCreateFileRequest: () -> Unit,
     onCreateDirectoryRequest: () -> Unit,
+    onCopyPath: () -> Unit,
     onDropTargetHover: (String?) -> Unit,
     onDroppedFiles: (List<String>, String) -> Unit,
     onUnsupportedDrop: () -> Unit,
@@ -288,6 +291,7 @@ private fun FileTreeRow(
         onDelete = onDeleteRequest,
         onCreateFile = onCreateFileRequest,
         onCreateDirectory = onCreateDirectoryRequest,
+        onCopyPath = onCopyPath,
         onRightClick = onSelect,
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -407,6 +411,7 @@ private fun FileManagerEntryContextMenu(
     onDelete: () -> Unit,
     onCreateFile: () -> Unit,
     onCreateDirectory: () -> Unit,
+    onCopyPath: () -> Unit,
     onRightClick: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
@@ -456,6 +461,15 @@ private fun FileManagerEntryContextMenu(
                             enabled = createEnabled,
                             onHover = { showCreateMenu = createEnabled },
                             onClick = { showCreateMenu = createEnabled },
+                        )
+                        FileContextMenuItem(
+                            text = "复制路径",
+                            enabled = enabled,
+                            onHover = { showCreateMenu = false },
+                            onClick = {
+                                menuOffset = null
+                                onCopyPath()
+                            },
                         )
                         FileContextMenuItem(
                             text = "导出",
