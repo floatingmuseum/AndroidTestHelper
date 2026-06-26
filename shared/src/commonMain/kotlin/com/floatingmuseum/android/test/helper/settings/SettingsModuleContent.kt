@@ -10,6 +10,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.floatingmuseum.android.test.helper.adb.AdbRuntimeInfo
+import com.floatingmuseum.android.test.helper.adb.checkAdbExecutable
+import com.floatingmuseum.android.test.helper.adb.loadAdbRuntimeInfo
+import com.floatingmuseum.android.test.helper.selectFiles
+import kotlinx.coroutines.launch
 
 enum class SettingCategory(val title: String) {
     General("通用"),
@@ -105,6 +110,15 @@ fun GeneralSettingsPanel(
 ) {
     val scrollState = rememberScrollState()
     val settings = AppSettingsShared.currentSettings
+    val coroutineScope = rememberCoroutineScope()
+    var adbRuntimeInfo by remember { mutableStateOf<AdbRuntimeInfo?>(null) }
+    var adbActionMessage by remember { mutableStateOf<String?>(null) }
+    var isCheckingAdb by remember { mutableStateOf(false) }
+
+    LaunchedEffect(settings.customAdbPath) {
+        adbRuntimeInfo = null
+        adbRuntimeInfo = loadAdbRuntimeInfo()
+    }
     
     Column(
         modifier = modifier
@@ -112,6 +126,97 @@ fun GeneralSettingsPanel(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "ADB 配置",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = "当前来源：${if (adbRuntimeInfo?.isCustom == true) "自定义" else "项目自带"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "路径：${adbRuntimeInfo?.path ?: "读取中..."}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "版本：${adbRuntimeInfo?.version ?: if (adbRuntimeInfo == null) "读取中..." else "无法读取"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (adbRuntimeInfo?.version == null && adbRuntimeInfo != null) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                adbRuntimeInfo?.errorMessage?.let { errorMessage ->
+                    Text(
+                        text = "错误：$errorMessage",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                adbActionMessage?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        enabled = !isCheckingAdb,
+                        onClick = {
+                            coroutineScope.launch {
+                                isCheckingAdb = true
+                                adbActionMessage = null
+                                try {
+                                    val selectedPath = selectFiles(
+                                        dialogTitle = "选择 adb 可执行文件",
+                                        approveButtonText = "使用",
+                                    ).firstOrNull()
+                                    if (selectedPath != null) {
+                                        val checkResult = checkAdbExecutable(selectedPath)
+                                        if (checkResult.isValid && checkResult.normalizedPath != null) {
+                                            AppSettingsShared.updateSettings(
+                                                settings.copy(customAdbPath = checkResult.normalizedPath)
+                                            )
+                                            adbActionMessage = "已切换到自定义 adb。"
+                                        } else {
+                                            adbActionMessage = "未切换：${checkResult.errorMessage ?: "无法读取 adb 版本"}"
+                                        }
+                                    }
+                                } finally {
+                                    isCheckingAdb = false
+                                }
+                            }
+                        }
+                    ) {
+                        Text(if (isCheckingAdb) "检测中" else "修改")
+                    }
+                    OutlinedButton(
+                        enabled = settings.customAdbPath != null && !isCheckingAdb,
+                        onClick = {
+                            AppSettingsShared.updateSettings(settings.copy(customAdbPath = null))
+                            adbActionMessage = "已恢复使用项目自带 adb。"
+                        }
+                    ) {
+                        Text("恢复默认")
+                    }
+                }
+            }
+        }
+
         // 1. 命令前显示执行时间
         Card(modifier = Modifier.fillMaxWidth()) {
             Row(

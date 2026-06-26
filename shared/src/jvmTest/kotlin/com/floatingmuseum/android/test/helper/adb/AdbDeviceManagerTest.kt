@@ -24,4 +24,18 @@ class AdbDeviceManagerTest {
         assertEquals("offline", devices[1].state)
         assertEquals(false, devices[1].isReady)
     }
+
+    @Test
+    fun parsesAdbVersionOutputForDisplay() {
+        val version = AdbShell.parseAdbVersion(
+            """
+            Android Debug Bridge version 1.0.41
+            Version 36.0.0-13206524
+            Installed as D:\workspace\platform-tools\adb.exe
+            Running on Windows 10.0.26100
+            """.trimIndent(),
+        )
+
+        assertEquals("Android Debug Bridge version 1.0.41 / Version 36.0.0-13206524", version)
+    }
 }

@@ -15,4 +15,18 @@ class AppSettingsTest {
 
         assertEquals("/sdcard", settings.fileManagerDefaultRootPath)
     }
+
+    @Test
+    fun customAdbPathRejectsBlankValues() {
+        val settings = AppSettings(customAdbPath = "   ").normalized()
+
+        assertEquals(null, settings.customAdbPath)
+    }
+
+    @Test
+    fun customAdbPathTrimsValue() {
+        val settings = AppSettings(customAdbPath = "  C:\\platform-tools\\adb.exe  ").normalized()
+
+        assertEquals("C:\\platform-tools\\adb.exe", settings.customAdbPath)
+    }
 }

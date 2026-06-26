@@ -2,6 +2,8 @@ package com.floatingmuseum.android.test.helper.adb
 
 import com.floatingmuseum.android.test.helper.AndroidDevice
 import com.floatingmuseum.android.test.helper.AppRuntimePaths
+import com.floatingmuseum.android.test.helper.settings.AppSettings
+import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -18,7 +20,8 @@ class AdbCommandException(
 ) : RuntimeException("ADB 命令失败，退出码 $exitCode\n$command\n$output")
 
 object AdbShell {
-    val adbPath: String by lazy { resolveAdbPath() }
+    val adbPath: String
+        get() = resolveAdbPath()
 
     suspend fun executeAdb(
         args: List<String>,
@@ -43,7 +46,7 @@ object AdbShell {
                 if (exitCode != 0) {
                     throw AdbCommandException(displayCommand, exitCode, output)
                 }
-                if (com.floatingmuseum.android.test.helper.settings.AppSettingsShared.currentSettings.showCommandDuration) {
+                if (AppSettingsShared.currentSettings.showCommandDuration) {
                     val duration = System.currentTimeMillis() - startTime
                     logCommand("状态: 命令耗时 ${duration}ms")
                 }
@@ -81,7 +84,7 @@ object AdbShell {
                     val errorMsg = errorReader.await()
                     throw AdbCommandException(displayCommand, exitCode, errorMsg)
                 }
-                if (com.floatingmuseum.android.test.helper.settings.AppSettingsShared.currentSettings.showCommandDuration) {
+                if (AppSettingsShared.currentSettings.showCommandDuration) {
                     val duration = System.currentTimeMillis() - startTime
                     logCommand("状态: 命令耗时 ${duration}ms")
                 }
@@ -95,7 +98,12 @@ object AdbShell {
         }
     }
 
-    private fun resolveAdbPath(): String {
+    internal fun resolveAdbPath(settings: AppSettings = AppSettingsShared.currentSettings): String {
+        settings.customAdbPath?.let { return File(it).absolutePath }
+        return resolveDefaultAdbPath()
+    }
+
+    internal fun resolveDefaultAdbPath(): String {
         val osName = System.getProperty("os.name").lowercase()
         val platformFolder = when {
             osName.contains("win") -> "platform-tools-latest-windows"
@@ -119,6 +127,38 @@ object AdbShell {
         }
 
         return adbBinary
+    }
+
+    internal suspend fun readAdbVersion(adbExecutablePath: String): Result<String> {
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val process = ProcessBuilder(adbExecutablePath, "version")
+                    .redirectErrorStream(true)
+                    .start()
+                val completed = process.waitFor(5L, TimeUnit.SECONDS)
+                if (!completed) {
+                    process.destroyForcibly()
+                    throw IllegalStateException("读取 adb 版本超时")
+                }
+                val output = process.inputStream.bufferedReader().readText()
+                val exitCode = process.exitValue()
+                if (exitCode != 0) {
+                    throw IllegalStateException(output.ifBlank { "adb version 退出码 $exitCode" })
+                }
+                parseAdbVersion(output).ifBlank {
+                    throw IllegalStateException("adb version 未返回版本信息")
+                }
+            }
+        }
+    }
+
+    internal fun parseAdbVersion(output: String): String {
+        return output
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .take(2)
+            .joinToString(" / ")
     }
 
     fun parseAdbDevices(output: String): List<AndroidDevice> {
@@ -145,6 +185,47 @@ object AdbShell {
             }
             .toList()
     }
+}
+
+actual suspend fun loadAdbRuntimeInfo(): AdbRuntimeInfo {
+    val settings = AppSettingsShared.currentSettings
+    val path = AdbShell.adbPath
+    val versionResult = AdbShell.readAdbVersion(path)
+    return AdbRuntimeInfo(
+        path = path,
+        version = versionResult.getOrNull(),
+        isCustom = settings.customAdbPath != null,
+        errorMessage = versionResult.exceptionOrNull()?.displayMessage(),
+    )
+}
+
+actual suspend fun checkAdbExecutable(path: String): AdbExecutableCheckResult {
+    val file = File(path).absoluteFile
+    if (!file.isFile) {
+        return AdbExecutableCheckResult(
+            isValid = false,
+            normalizedPath = file.absolutePath,
+            version = null,
+            errorMessage = "选择的路径不是可执行文件。",
+        )
+    }
+
+    val versionResult = AdbShell.readAdbVersion(file.absolutePath)
+    return AdbExecutableCheckResult(
+        isValid = versionResult.isSuccess,
+        normalizedPath = file.absolutePath,
+        version = versionResult.getOrNull(),
+        errorMessage = versionResult.exceptionOrNull()?.displayMessage(),
+    )
+}
+
+private fun Throwable.displayMessage(): String {
+    return message
+        ?.lineSequence()
+        ?.firstOrNull { it.isNotBlank() }
+        ?.trim()
+        ?: this::class.simpleName
+        ?: "未知错误"
 }
 
 class JvmAdbDeviceManager : AdbDeviceManager {
