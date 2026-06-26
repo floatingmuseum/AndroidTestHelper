@@ -21,6 +21,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -41,6 +42,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontFamily
@@ -54,12 +56,33 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import androidtesthelper.shared.generated.resources.Res
+import androidtesthelper.shared.generated.resources.ic_file_android
+import androidtesthelper.shared.generated.resources.ic_file_archive
+import androidtesthelper.shared.generated.resources.ic_file_audio_file
+import androidtesthelper.shared.generated.resources.ic_file_code
+import androidtesthelper.shared.generated.resources.ic_file_description
+import androidtesthelper.shared.generated.resources.ic_file_folder
+import androidtesthelper.shared.generated.resources.ic_file_image
+import androidtesthelper.shared.generated.resources.ic_file_link
+import androidtesthelper.shared.generated.resources.ic_file_movie
+import androidtesthelper.shared.generated.resources.ic_file_picture_as_pdf
+import androidtesthelper.shared.generated.resources.ic_file_table_chart
+import androidtesthelper.shared.generated.resources.ic_file_terminal
+import androidtesthelper.shared.generated.resources.ic_file_text_snippet
 import com.floatingmuseum.android.test.helper.AndroidDevice
 import kotlin.math.roundToInt
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
 
 private data class PendingCreateEntry(
     val targetDirectory: RemoteFileEntry,
     val type: RemoteCreateType,
+)
+
+private data class FileIconSpec(
+    val resource: DrawableResource,
+    val tint: Color,
 )
 
 @Composable
@@ -356,6 +379,7 @@ private fun FileTreeRow(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    RemoteFileIcon(entry)
                     Text(
                         text = entry.name,
                         modifier = Modifier.padding(start = 6.dp),
@@ -397,6 +421,55 @@ private fun FileTreeRow(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun RemoteFileIcon(entry: RemoteFileEntry) {
+    val icon = fileIconSpec(entry)
+    Icon(
+        painter = painterResource(icon.resource),
+        contentDescription = null,
+        modifier = Modifier.padding(start = 6.dp).width(18.dp).height(18.dp),
+        tint = icon.tint,
+    )
+}
+
+@Composable
+private fun fileIconSpec(entry: RemoteFileEntry): FileIconSpec {
+    val colors = MaterialTheme.colorScheme
+    if (entry.type == RemoteFileType.Link) {
+        return FileIconSpec(Res.drawable.ic_file_link, colors.tertiary)
+    }
+    if (entry.isDirectory) {
+        return FileIconSpec(Res.drawable.ic_file_folder, colors.primary)
+    }
+
+    val extension = entry.name.substringAfterLast('.', missingDelimiterValue = "").lowercase()
+    return when (extension) {
+        "apk", "aab" -> FileIconSpec(Res.drawable.ic_file_android, colors.primary)
+        "zip", "rar", "7z", "tar", "gz", "gzip", "bz2", "xz", "tgz" ->
+            FileIconSpec(Res.drawable.ic_file_archive, colors.secondary)
+        "pdf" -> FileIconSpec(Res.drawable.ic_file_picture_as_pdf, colors.error)
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "heif", "svg", "ico" ->
+            FileIconSpec(Res.drawable.ic_file_image, colors.tertiary)
+        "mp4", "mkv", "avi", "mov", "webm", "m4v", "3gp", "ts" ->
+            FileIconSpec(Res.drawable.ic_file_movie, colors.tertiary)
+        "mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "amr" ->
+            FileIconSpec(Res.drawable.ic_file_audio_file, colors.tertiary)
+        "csv", "tsv", "xls", "xlsx", "ods" ->
+            FileIconSpec(Res.drawable.ic_file_table_chart, colors.secondary)
+        "sh", "bash", "zsh", "fish", "bat", "cmd", "ps1" ->
+            FileIconSpec(Res.drawable.ic_file_terminal, colors.primary)
+        "kt", "kts", "java", "xml", "json", "yaml", "yml", "html", "htm", "css", "js", "ts",
+        "jsx", "tsx", "c", "cc", "cpp", "h", "hpp", "py", "rb", "go", "rs", "sql", "gradle",
+        "properties", "pro", "conf", "ini" ->
+            FileIconSpec(Res.drawable.ic_file_code, colors.primary)
+        "txt", "log", "md", "markdown", "rtf" ->
+            FileIconSpec(Res.drawable.ic_file_text_snippet, colors.onSurfaceVariant)
+        "doc", "docx", "ppt", "pptx", "odt", "odp", "epub" ->
+            FileIconSpec(Res.drawable.ic_file_description, colors.onSurfaceVariant)
+        else -> FileIconSpec(Res.drawable.ic_file_description, colors.onSurfaceVariant)
     }
 }
 
