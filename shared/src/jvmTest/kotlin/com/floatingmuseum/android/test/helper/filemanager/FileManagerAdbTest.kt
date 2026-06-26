@@ -75,6 +75,29 @@ class FileManagerAdbTest {
     }
 
     @Test
+    fun remoteDropTargetDirectoryPathUsesParentDirectoryForFiles() {
+        val directory = RemoteFileEntry("Download", "/sdcard/Download", RemoteFileType.Directory, 0, "drwx", "now")
+        val file = RemoteFileEntry("report.txt", "/sdcard/Download/report.txt", RemoteFileType.File, 8, "-rw-", "now")
+        val rootFile = RemoteFileEntry("init.rc", "/init.rc", RemoteFileType.File, 8, "-rw-", "now")
+        val link = RemoteFileEntry("linked-dir", "/sdcard/linked-dir", RemoteFileType.Link, 0, "lrwx", "now")
+
+        assertEquals("/sdcard/Download", remoteDropTargetDirectoryPath(directory))
+        assertEquals("/sdcard/Download", remoteDropTargetDirectoryPath(file))
+        assertEquals("/", remoteDropTargetDirectoryPath(rootFile))
+        assertEquals("/sdcard/linked-dir", remoteDropTargetDirectoryPath(link))
+    }
+
+    @Test
+    fun isRemotePathInDirectoryTreeMatchesVisibleDropSubtree() {
+        assertTrue(isRemotePathInDirectoryTree("/sdcard/Download", "/sdcard/Download"))
+        assertTrue(isRemotePathInDirectoryTree("/sdcard/Download/report.txt", "/sdcard/Download"))
+        assertTrue(isRemotePathInDirectoryTree("/sdcard/Download/ccs/file.txt", "/sdcard/Download"))
+        assertTrue(isRemotePathInDirectoryTree("/sdcard/Download", "/"))
+        assertFalse(isRemotePathInDirectoryTree("/sdcard/Downloads", "/sdcard/Download"))
+        assertFalse(isRemotePathInDirectoryTree("/sdcard/Pictures/report.txt", "/sdcard/Download"))
+    }
+
+    @Test
     fun parseLocalFileReferencesReadsFileUrisAndPlainPaths() {
         val localFile = File("build.gradle.kts").absoluteFile
 

@@ -343,7 +343,7 @@ internal class FileManagerModuleController(
     }
 
     fun handleUnsupportedDrop() {
-        setStatusText("请拖到目录行上松手，只有目录可以接收上传")
+        setStatusText("请拖到目录行或目录内文件行上松手")
         appendCommand("状态: 拖拽未命中可上传目录")
     }
 

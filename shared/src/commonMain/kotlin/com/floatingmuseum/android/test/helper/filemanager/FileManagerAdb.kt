@@ -132,6 +132,21 @@ fun parentRemotePath(path: String): String {
     return normalized.substringBeforeLast('/', missingDelimiterValue = "/").ifBlank { "/" }
 }
 
+fun remoteDropTargetDirectoryPath(entry: RemoteFileEntry): String {
+    return if (entry.isExpandable) {
+        normalizeRemotePath(entry.path)
+    } else {
+        parentRemotePath(entry.path)
+    }
+}
+
+fun isRemotePathInDirectoryTree(path: String, directoryPath: String): Boolean {
+    val normalizedPath = normalizeRemotePath(path)
+    val normalizedDirectory = normalizeRemotePath(directoryPath)
+    if (normalizedDirectory == "/") return true
+    return normalizedPath == normalizedDirectory || normalizedPath.startsWith("$normalizedDirectory/")
+}
+
 fun childRemotePath(parent: String, childName: String): String {
     val normalizedParent = normalizeRemotePath(parent)
     return if (normalizedParent == "/") {

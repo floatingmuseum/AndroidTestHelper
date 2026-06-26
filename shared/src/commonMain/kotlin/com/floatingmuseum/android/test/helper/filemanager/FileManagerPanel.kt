@@ -154,9 +154,9 @@ internal fun FileManagerPanel(
                     }
                     Text(
                         text = if (isDragOver) {
-                            dragTargetPath?.let { "松开后上传到 $it" } ?: "拖到目录行上松手才会上传"
+                            dragTargetPath?.let { "松开后上传到 $it" } ?: "拖到目录或文件行上松手即可上传"
                         } else {
-                            "右键刷新、导出、删除；拖入本地文件到目录行即可上传"
+                            "右键刷新、导出、删除；拖入本地文件到目录行或目录内文件行即可上传"
                         },
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall,
@@ -176,6 +176,11 @@ internal fun FileManagerPanel(
                         EmptyFileManagerState("尚未读取根目录。扫描或切换设备后会自动读取。")
                     }
                     else -> {
+                        val highlightedDropDirectory = if (isDragOver) {
+                            dragTargetPath?.let(::normalizeRemotePath)
+                        } else {
+                            null
+                        }
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.spacedBy(1.dp),
@@ -187,8 +192,9 @@ internal fun FileManagerPanel(
                                 FileTreeRow(
                                     row = row,
                                     selected = row.entry.path == selectedEntryPath,
-                                    dropTargeted = isDragOver &&
-                                        normalizeRemotePath(row.entry.path) == normalizeRemotePath(dragTargetPath ?: ""),
+                                    dropHighlighted = highlightedDropDirectory?.let { targetPath ->
+                                        isRemotePathInDirectoryTree(row.entry.path, targetPath)
+                                    } == true,
                                     isRunning = isRunning,
                                     onToggle = { onToggleEntry(row.entry) },
                                     onSelect = { onSelectEntry(row.entry) },
@@ -289,7 +295,7 @@ private fun FileManagerHeader() {
 private fun FileTreeRow(
     row: RemoteFileTreeRow,
     selected: Boolean,
-    dropTargeted: Boolean,
+    dropHighlighted: Boolean,
     isRunning: Boolean,
     onToggle: () -> Unit,
     onSelect: () -> Unit,
@@ -305,6 +311,8 @@ private fun FileTreeRow(
 ) {
     val entry = row.entry
     val normalizedEntryPath = normalizeRemotePath(entry.path)
+    val dropTargetPath = remoteDropTargetDirectoryPath(entry)
+    var dropTargeted by remember(normalizedEntryPath) { mutableStateOf(false) }
     FileManagerEntryContextMenu(
         enabled = !isRunning,
         createEnabled = !isRunning && entry.isDirectory,
@@ -322,12 +330,21 @@ private fun FileTreeRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
-                        if (entry.isExpandable && !isRunning) {
+                        if (!isRunning) {
                             Modifier.localFileDropTarget(
-                                remotePath = normalizedEntryPath,
-                                onHover = onDropTargetHover,
-                                onFilesDropped = onDroppedFiles,
-                                onUnsupportedDrop = onUnsupportedDrop,
+                                remotePath = dropTargetPath,
+                                onHover = { targetPath ->
+                                    dropTargeted = targetPath != null
+                                    onDropTargetHover(targetPath)
+                                },
+                                onFilesDropped = { paths, targetPath ->
+                                    dropTargeted = false
+                                    onDroppedFiles(paths, targetPath)
+                                },
+                                onUnsupportedDrop = {
+                                    dropTargeted = false
+                                    onUnsupportedDrop()
+                                },
                             )
                         } else {
                             Modifier
@@ -335,7 +352,7 @@ private fun FileTreeRow(
                     )
                     .background(
                         when {
-                            dropTargeted -> MaterialTheme.colorScheme.tertiaryContainer
+                            dropHighlighted -> MaterialTheme.colorScheme.errorContainer
                             selected -> MaterialTheme.colorScheme.primaryContainer
                             else -> MaterialTheme.colorScheme.surface
                         },
@@ -343,7 +360,7 @@ private fun FileTreeRow(
                     .border(
                         width = if (dropTargeted) 2.dp else 0.dp,
                         color = if (dropTargeted) {
-                            MaterialTheme.colorScheme.tertiary
+                            MaterialTheme.colorScheme.error
                         } else {
                             MaterialTheme.colorScheme.surface
                         },
@@ -732,7 +749,7 @@ private fun EmptyFileManagerState(text: String) {
             Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "目录左侧三角展开；选中目录后可上传文件到该目录。",
+                text = "目录左侧三角展开；拖到目录或目录内文件行即可上传。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
