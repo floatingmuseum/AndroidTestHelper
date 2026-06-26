@@ -34,6 +34,22 @@ data class RemoteFileTreeRow(
     val isLoading: Boolean,
 )
 
+data class FileUploadProgress(
+    val currentFileName: String,
+    val currentFileIndex: Int,
+    val totalFiles: Int,
+    val completedBytes: Long,
+    val totalBytes: Long,
+    val currentFileBytes: Long,
+    val currentFileTotalBytes: Long,
+) {
+    val ratio: Float
+        get() = if (totalBytes <= 0L) 0f else completedBytes.toFloat() / totalBytes.toFloat()
+
+    val currentFileRatio: Float
+        get() = if (currentFileTotalBytes <= 0L) 0f else currentFileBytes.toFloat() / currentFileTotalBytes.toFloat()
+}
+
 interface FileManagerAdb {
     suspend fun listDirectory(
         deviceSerial: String,
@@ -53,6 +69,7 @@ interface FileManagerAdb {
         localFilePaths: List<String>,
         remoteDirectoryPath: String,
         logCommand: (String) -> Unit,
+        onProgress: (FileUploadProgress) -> Unit,
     ): Int
 
     suspend fun deletePath(

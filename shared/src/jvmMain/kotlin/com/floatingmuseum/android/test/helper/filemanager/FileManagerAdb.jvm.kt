@@ -1,7 +1,17 @@
 package com.floatingmuseum.android.test.helper.filemanager
 
 import com.floatingmuseum.android.test.helper.adb.AdbShell
+import com.floatingmuseum.android.test.helper.adb.AdbCommandException
+import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 actual fun createFileManagerAdb(): FileManagerAdb = JvmFileManagerAdb()
 
@@ -43,27 +53,58 @@ private class JvmFileManagerAdb : FileManagerAdb {
         localFilePaths: List<String>,
         remoteDirectoryPath: String,
         logCommand: (String) -> Unit,
+        onProgress: (FileUploadProgress) -> Unit,
     ): Int {
         val normalizedDirectory = normalizeRemotePath(remoteDirectoryPath)
-        var uploadedCount = 0
-        localFilePaths
+        val localFiles = localFilePaths
             .map { File(it).absoluteFile }
             .filter { it.exists() }
-            .forEach { localFile ->
+        if (localFiles.isEmpty()) {
+            throw IllegalArgumentException("没有可上传的本地文件")
+        }
+        val totalBytes = localFiles.sumOf { uploadSourceSizeBytes(it) }
+        var completedBytes = 0L
+        var uploadedCount = 0
+        localFiles
+            .forEachIndexed { index, localFile ->
+                val sourceBytes = uploadSourceSizeBytes(localFile)
+                fun emitProgress(currentFileBytes: Long) {
+                    onProgress(
+                        FileUploadProgress(
+                            currentFileName = localFile.name,
+                            currentFileIndex = index + 1,
+                            totalFiles = localFiles.size,
+                            completedBytes = (completedBytes + currentFileBytes).coerceAtMost(totalBytes),
+                            totalBytes = totalBytes,
+                            currentFileBytes = currentFileBytes.coerceAtMost(sourceBytes),
+                            currentFileTotalBytes = sourceBytes,
+                        ),
+                    )
+                }
+
+                emitProgress(0L)
                 val remoteTargetPath = remoteUploadTargetPath(
                     remoteDirectoryPath = normalizedDirectory,
                     localFile = localFile,
                 )
-                AdbShell.executeAdb(
+                executeAdbPushWithProgress(
+                    deviceSerial = deviceSerial,
+                    remoteTargetPath = remoteTargetPath,
                     args = listOf("-s", deviceSerial, "push", localFile.absolutePath, remoteTargetPath),
                     displayCommand = "adb -s $deviceSerial push ${quoteDisplay(localFile.absolutePath)} ${quoteDisplay(remoteTargetPath)}",
                     logCommand = logCommand,
+                    onPercent = { percent ->
+                        val currentFileBytes = sourceBytes * percent.coerceIn(0, 100) / 100L
+                        emitProgress(currentFileBytes)
+                    },
+                    onRemoteSize = { remoteBytes ->
+                        emitProgress(remoteBytes)
+                    },
                 )
+                emitProgress(sourceBytes)
+                completedBytes = (completedBytes + sourceBytes).coerceAtMost(totalBytes)
                 uploadedCount += 1
             }
-        if (uploadedCount == 0) {
-            throw IllegalArgumentException("没有可上传的本地文件")
-        }
         return uploadedCount
     }
 
@@ -108,6 +149,120 @@ private class JvmFileManagerAdb : FileManagerAdb {
     }
 }
 
+internal fun parseAdbPushProgressPercent(outputChunk: String): Int? {
+    return Regex("""(?:^|\D)(\d{1,3})%""")
+        .findAll(outputChunk)
+        .mapNotNull { match -> match.groupValues[1].toIntOrNull() }
+        .filter { percent -> percent in 0..100 }
+        .lastOrNull()
+}
+
+private suspend fun executeAdbPushWithProgress(
+    deviceSerial: String,
+    remoteTargetPath: String?,
+    args: List<String>,
+    displayCommand: String,
+    logCommand: (String) -> Unit,
+    onPercent: (Int) -> Unit,
+    onRemoteSize: (Long) -> Unit,
+) {
+    val startTime = System.currentTimeMillis()
+    logCommand(displayCommand)
+    withContext(Dispatchers.IO) {
+        val process = ProcessBuilder(listOf(AdbShell.adbPath) + args)
+            .redirectErrorStream(true)
+            .start()
+        val remoteSizePoller = remoteTargetPath?.let { targetPath ->
+            async(Dispatchers.IO) {
+                var lastSize = -1L
+                while (process.isAlive) {
+                    currentCoroutineContext().ensureActive()
+                    remotePathSizeBytesOrNull(deviceSerial, targetPath)?.let { size ->
+                        if (size != lastSize) {
+                            lastSize = size
+                            onRemoteSize(size)
+                        }
+                    }
+                    delay(400L)
+                }
+            }
+        }
+        val output = StringBuilder()
+        val outputReader = async(Dispatchers.IO) {
+            val buffer = CharArray(512)
+            var parseWindow = ""
+            process.inputStream.bufferedReader().use { reader ->
+                while (true) {
+                    val count = reader.read(buffer)
+                    if (count < 0) break
+                    currentCoroutineContext().ensureActive()
+                    val chunk = String(buffer, 0, count)
+                    output.append(chunk)
+                    parseWindow = (parseWindow + chunk).takeLast(256)
+                    parseAdbPushProgressPercent(parseWindow)?.let(onPercent)
+                }
+            }
+        }
+        try {
+            while (!process.waitFor(100L, TimeUnit.MILLISECONDS)) {
+                currentCoroutineContext().ensureActive()
+            }
+            outputReader.await()
+            remoteSizePoller?.cancel()
+            val exitCode = process.exitValue()
+            if (exitCode != 0) {
+                throw AdbCommandException(displayCommand, exitCode, output.toString())
+            }
+            if (AppSettingsShared.currentSettings.showCommandDuration) {
+                val duration = System.currentTimeMillis() - startTime
+                logCommand("状态: 命令耗时 ${duration}ms")
+            }
+        } catch (error: CancellationException) {
+            process.destroyForcibly()
+            outputReader.cancel()
+            remoteSizePoller?.cancel()
+            throw error
+        }
+    }
+}
+
+private fun remotePathSizeBytesOrNull(
+    deviceSerial: String,
+    remotePath: String,
+): Long? {
+    val quotedPath = shellQuote(remotePath)
+    val command = "if [ -d $quotedPath ]; then " +
+        "find $quotedPath -type f -exec stat -c %s {} \\; 2>/dev/null | awk '{s+=\$1} END {print s+0}'; " +
+        "else stat -c %s $quotedPath 2>/dev/null || wc -c < $quotedPath 2>/dev/null; fi"
+    val process = ProcessBuilder(listOf(AdbShell.adbPath, "-s", deviceSerial, "shell", command))
+        .redirectErrorStream(true)
+        .start()
+    return try {
+        if (!process.waitFor(1L, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            null
+        } else {
+            process.inputStream.bufferedReader().readText()
+                .lineSequence()
+                .mapNotNull { line -> line.trim().split(Regex("\\s+")).firstOrNull()?.toLongOrNull() }
+                .firstOrNull()
+        }
+    } catch (_: Throwable) {
+        process.destroyForcibly()
+        null
+    }
+}
+
+private fun uploadSourceSizeBytes(file: File): Long {
+    return if (file.isDirectory) {
+        file.walkTopDown()
+            .filter { it.isFile }
+            .sumOf { it.length() }
+    } else {
+        file.length()
+    }
+}
+
 internal fun remoteDirectoryListArgument(path: String): String {
     val normalizedPath = normalizeRemotePath(path)
     return if (normalizedPath == "/") "/" else "$normalizedPath/"
@@ -119,7 +274,7 @@ internal fun remoteUploadTargetPath(
 ): String {
     val normalizedDirectory = normalizeRemotePath(remoteDirectoryPath)
     return if (localFile.isDirectory) {
-        remoteDirectoryListArgument(normalizedDirectory)
+        childRemotePath(normalizedDirectory, localFile.name)
     } else {
         childRemotePath(normalizedDirectory, localFile.name)
     }

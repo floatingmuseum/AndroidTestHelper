@@ -18,10 +18,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -102,6 +105,8 @@ internal fun FileManagerPanel(
     onDeleteEntry: (RemoteFileEntry) -> Unit,
     onCreateEntry: (RemoteFileEntry, String, RemoteCreateType) -> Unit,
     onCopyPath: (RemoteFileEntry) -> Unit,
+    uploadProgress: FileUploadProgress?,
+    onStopUpload: () -> Unit,
     onDroppedFiles: (List<String>, String) -> Unit,
     onDragStateChange: (Boolean, String?) -> Unit,
     onUnsupportedDrop: () -> Unit,
@@ -167,6 +172,14 @@ internal fun FileManagerPanel(
                 }
 
                 FileManagerHeader()
+
+                uploadProgress?.let { progress ->
+                    UploadProgressBar(
+                        progress = progress,
+                        isRunning = isRunning,
+                        onStopUpload = onStopUpload,
+                    )
+                }
 
                 when {
                     !hasReadyDevice -> {
@@ -271,6 +284,62 @@ internal fun FileManagerPanel(
             },
             onDismiss = { pendingCreateEntry = null },
         )
+    }
+}
+
+@Composable
+private fun UploadProgressBar(
+    progress: FileUploadProgress,
+    isRunning: Boolean,
+    onStopUpload: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LinearProgressIndicator(
+                    progress = { progress.ratio.coerceIn(0f, 1f) },
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = formatUploadPercent(progress.ratio),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = "上传 ${progress.currentFileIndex}/${progress.totalFiles} · ${progress.currentFileName} · " +
+                    "${formatUploadBytes(progress.completedBytes)} / ${formatUploadBytes(progress.totalBytes)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Button(
+            onClick = onStopUpload,
+            enabled = isRunning,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError,
+            ),
+        ) {
+            Text("中止")
+        }
     }
 }
 
@@ -755,4 +824,13 @@ private fun EmptyFileManagerState(text: String) {
             )
         }
     }
+}
+
+private fun formatUploadPercent(value: Float): String {
+    val percent = (value.coerceIn(0f, 1f) * 100).toInt()
+    return "$percent%"
+}
+
+private fun formatUploadBytes(bytes: Long): String {
+    return if (bytes <= 0L) "0 B" else formatRemoteFileSize(bytes)
 }

@@ -69,6 +69,31 @@ class FileManagerAdbTest {
     }
 
     @Test
+    fun remoteUploadTargetPathUsesDirectoryNameForDirectories() {
+        val localDirectory = kotlin.io.path.createTempDirectory("Movie Folder").toFile()
+        try {
+            assertEquals(
+                "/sdcard/Movies/${localDirectory.name}",
+                remoteUploadTargetPath("/sdcard/Movies", localDirectory),
+            )
+            assertEquals(
+                "/${localDirectory.name}",
+                remoteUploadTargetPath("/", localDirectory),
+            )
+        } finally {
+            localDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun parseAdbPushProgressPercentReadsLatestPercent() {
+        assertEquals(42, parseAdbPushProgressPercent("[ 42%] /sdcard/big.zip"))
+        assertEquals(100, parseAdbPushProgressPercent("[ 7%] /sdcard/big.zip\r[100%] /sdcard/big.zip"))
+        assertEquals(null, parseAdbPushProgressPercent("1 file pushed, 0 skipped."))
+        assertEquals(null, parseAdbPushProgressPercent("[101%] invalid"))
+    }
+
+    @Test
     fun remoteFileEntryMarksOnlyDirectoriesAsDirectories() {
         assertTrue(RemoteFileEntry("dir", "/dir", RemoteFileType.Directory, 0, "drwx", "now").isDirectory)
         assertFalse(RemoteFileEntry("link", "/link", RemoteFileType.Link, 0, "lrwx", "now").isDirectory)

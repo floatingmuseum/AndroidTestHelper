@@ -57,7 +57,7 @@ actual fun Modifier.localFileDropTarget(
         }
     }
     return dragAndDropTarget(
-        shouldStartDragAndDrop = { event -> event.localFilePaths().isNotEmpty() },
+        shouldStartDragAndDrop = { true },
         target = target,
     )
 }

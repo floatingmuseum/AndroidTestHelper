@@ -12,7 +12,10 @@ import com.floatingmuseum.android.test.helper.AndroidDevice
 import com.floatingmuseum.android.test.helper.selectDirectory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private fun rootEntry(rootPath: String) = RemoteFileEntry(
     name = rootPath,
@@ -51,11 +54,16 @@ internal class FileManagerModuleController(
         private set
     var dragTargetPath by mutableStateOf<String?>(null)
         private set
+    var uploadProgress by mutableStateOf<FileUploadProgress?>(null)
+        private set
+
+    private var uploadJob by mutableStateOf<Job?>(null)
 
     val treeRows: List<RemoteFileTreeRow>
         get() = buildTreeRows()
 
     fun clearDeviceState() {
+        uploadJob?.cancel()
         val rootPath = normalizedDefaultRootPath()
         appliedRootPath = rootPath
         childrenByPath = emptyMap()
@@ -66,11 +74,14 @@ internal class FileManagerModuleController(
         loadingPath = null
         isDragOver = false
         dragTargetPath = null
+        uploadProgress = null
+        uploadJob = null
     }
 
     fun applyDefaultRootPath(): Boolean {
         val rootPath = normalizedDefaultRootPath()
         if (rootPath == appliedRootPath) return false
+        uploadJob?.cancel()
         appliedRootPath = rootPath
         childrenByPath = emptyMap()
         expandedPaths = setOf(rootPath)
@@ -80,6 +91,8 @@ internal class FileManagerModuleController(
         loadingPath = null
         isDragOver = false
         dragTargetPath = null
+        uploadProgress = null
+        uploadJob = null
         return true
     }
 
@@ -327,14 +340,25 @@ internal class FileManagerModuleController(
             appendCommand("错误: 已有任务运行，暂不能上传")
             return
         }
-        scope.launch {
+        val job = scope.launch {
             setRunning(true)
+            uploadProgress = null
             try {
                 uploadFilesToDirectory(filePaths, targetDirectoryPath)
             } finally {
+                uploadProgress = null
+                uploadJob = null
                 setRunning(false)
             }
         }
+        uploadJob = job
+    }
+
+    fun stopUpload() {
+        if (uploadJob == null) return
+        setStatusText("正在中止上传...")
+        appendCommand("状态: 请求中止上传")
+        uploadJob?.cancel()
     }
 
     fun updateDragOver(value: Boolean, targetDirectoryPath: String?) {
@@ -368,7 +392,19 @@ internal class FileManagerModuleController(
         try {
             setStatusText("上传 ${filePaths.size} 个文件到 $normalizedTarget...")
             appendCommand("状态: 上传 ${filePaths.size} 个本地文件到设备 $serial:$normalizedTarget")
-            val count = fileManagerAdb.uploadFiles(serial, filePaths, normalizedTarget, appendCommand)
+            val count = fileManagerAdb.uploadFiles(
+                deviceSerial = serial,
+                localFilePaths = filePaths,
+                remoteDirectoryPath = normalizedTarget,
+                logCommand = appendCommand,
+                onProgress = { progress ->
+                    uploadProgress = progress
+                    setStatusText(
+                        "上传 ${progress.currentFileIndex}/${progress.totalFiles}: " +
+                            "${progress.currentFileName} ${formatFileManagerProgressPercent(progress.ratio)}",
+                    )
+                },
+            )
             val children = fileManagerAdb.listDirectory(serial, normalizedTarget, appendCommand)
             childrenByPath = childrenByPath + (normalizedTarget to children)
             expandedPaths = expandedPaths + normalizedTarget
@@ -378,8 +414,23 @@ internal class FileManagerModuleController(
             setStatusText("已上传 $count 个文件到 $normalizedTarget")
             appendCommand("状态: 已上传 $count 个文件到 $normalizedTarget，并刷新目录")
         } catch (error: CancellationException) {
-            setStatusText("上传已停止")
-            appendCommand("状态: 上传已停止")
+            setStatusText("上传已中止，刷新目录...")
+            appendCommand("状态: 上传已中止，刷新 $normalizedTarget")
+            try {
+                val children = withContext(NonCancellable) {
+                    fileManagerAdb.listDirectory(serial, normalizedTarget, appendCommand)
+                }
+                childrenByPath = childrenByPath + (normalizedTarget to children)
+                expandedPaths = expandedPaths + normalizedTarget
+                currentPath = normalizedTarget
+                selectedEntryPath = normalizedTarget
+                loadedSerial = serial
+                setStatusText("上传已中止，已刷新 $normalizedTarget")
+                appendCommand("状态: 上传已中止，已刷新 $normalizedTarget")
+            } catch (refreshError: Throwable) {
+                setStatusText("上传已中止，刷新失败：${refreshError.message ?: "未知错误"}")
+                appendCommand("错误: 上传中止后刷新失败 - ${refreshError.message ?: "未知错误"}")
+            }
         } catch (error: Throwable) {
             setStatusText(error.message ?: "上传失败")
             appendCommand("错误: 上传失败 - ${error.message ?: "未知错误"}")
@@ -463,9 +514,16 @@ internal fun FileManagerModuleContent(
             clipboardManager.setText(AnnotatedString(entry.path))
             controller.copyEntryPath(entry.path)
         },
+        uploadProgress = controller.uploadProgress,
+        onStopUpload = controller::stopUpload,
         onDroppedFiles = controller::uploadDroppedFiles,
         onDragStateChange = controller::updateDragOver,
         onUnsupportedDrop = controller::handleUnsupportedDrop,
         modifier = modifier,
     )
+}
+
+private fun formatFileManagerProgressPercent(value: Float): String {
+    val percent = (value.coerceIn(0f, 1f) * 100).toInt()
+    return "$percent%"
 }
