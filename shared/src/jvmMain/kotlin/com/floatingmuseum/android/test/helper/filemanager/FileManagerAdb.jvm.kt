@@ -2,6 +2,8 @@ package com.floatingmuseum.android.test.helper.filemanager
 
 import com.floatingmuseum.android.test.helper.adb.AdbShell
 import com.floatingmuseum.android.test.helper.adb.AdbCommandException
+import com.floatingmuseum.android.test.helper.localization.commandStatus
+import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +62,7 @@ private class JvmFileManagerAdb : FileManagerAdb {
             .map { File(it).absoluteFile }
             .filter { it.exists() }
         if (localFiles.isEmpty()) {
-            throw IllegalArgumentException("没有可上传的本地文件")
+            throw IllegalArgumentException(localized("auto.no_local_files_available_to_upload.cf8e2dbb"))
         }
         val totalBytes = localFiles.sumOf { uploadSourceSizeBytes(it) }
         var completedBytes = 0L
@@ -114,7 +116,7 @@ private class JvmFileManagerAdb : FileManagerAdb {
         logCommand: (String) -> Unit,
     ) {
         val normalizedPath = normalizeRemotePath(remotePath)
-        require(normalizedPath != "/") { "不能删除设备根目录" }
+        require(normalizedPath != "/") { localized("auto.cannot_delete_the_device_root_directory.ac7c0675") }
         AdbShell.executeAdb(
             args = listOf("-s", deviceSerial, "shell", "rm", "-rf", shellQuote(normalizedPath)),
             displayCommand = "adb -s $deviceSerial shell rm -rf ${shellQuote(normalizedPath)}",
@@ -215,7 +217,7 @@ private suspend fun executeAdbPushWithProgress(
             }
             if (AppSettingsShared.currentSettings.showCommandDuration) {
                 val duration = System.currentTimeMillis() - startTime
-                logCommand("状态: 命令耗时 ${duration}ms")
+                logCommand(commandStatus(localized("auto.command_duration_0_ms.59b9b474", duration)))
             }
         } catch (error: CancellationException) {
             process.destroyForcibly()

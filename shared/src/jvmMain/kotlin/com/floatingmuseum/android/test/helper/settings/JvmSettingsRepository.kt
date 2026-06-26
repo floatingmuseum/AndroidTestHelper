@@ -4,6 +4,7 @@ import com.floatingmuseum.android.test.helper.AppRuntimePaths
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import java.io.File
+import java.util.Locale
 
 class JvmSettingsRepository : SettingsRepository {
     private val settingsFile: File
@@ -36,3 +37,11 @@ class JvmSettingsRepository : SettingsRepository {
 }
 
 actual fun createSettingsRepository(): SettingsRepository = JvmSettingsRepository()
+
+actual fun systemDefaultAppLanguage(): AppLanguage {
+    return if (Locale.getDefault().language.equals("zh", ignoreCase = true)) {
+        AppLanguage.SimplifiedChinese
+    } else {
+        AppLanguage.English
+    }
+}

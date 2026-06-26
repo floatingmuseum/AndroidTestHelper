@@ -2,6 +2,9 @@ package com.floatingmuseum.android.test.helper.devicelog
 
 import com.floatingmuseum.android.test.helper.AppRuntimePaths
 import com.floatingmuseum.android.test.helper.adb.AdbShell
+import com.floatingmuseum.android.test.helper.localization.commandStatus
+import com.floatingmuseum.android.test.helper.localization.localized
+import com.floatingmuseum.android.test.helper.localization.unknownError
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileOutputStream
@@ -36,10 +39,10 @@ private class JvmDeviceLogAdb : DeviceLogAdb {
         val capturedAt = LocalDateTime.now()
         val directory = AppRuntimePaths.logsDirectory().absoluteFile
         if (!directory.exists() && !directory.mkdirs()) {
-            throw IllegalStateException("无法创建日志保存目录：${directory.absolutePath}")
+            throw IllegalStateException(localized("auto.unable_to_create_log_output_directory_0.a8520227", directory.absolutePath))
         }
         if (!directory.isDirectory) {
-            throw IllegalStateException("日志保存路径不是目录：${directory.absolutePath}")
+            throw IllegalStateException(localized("auto.log_output_path_is_not_a_directory_0.926786fb", directory.absolutePath))
         }
 
         val fileName = buildDeviceLogFileName(deviceModel, deviceSerial, capturedAt)
@@ -134,15 +137,16 @@ private class JvmDeviceLogAdb : DeviceLogAdb {
                     if (exitCode != 0) {
                         writer.appendLine()
                         if (stopRequested) {
-                            writer.appendLine("[用户停止采集，logcat 进程退出码: $exitCode]")
+                            val message = localized("auto.user_stopped_capture_logcat_exited_with_code_0.0d4a96f8", exitCode)
+                            writer.appendLine("[$message]")
                             outcome = LogSectionOutcome(
                                 endState = DeviceLogCaptureEndState.STOPPED,
-                                message = "用户停止采集，logcat 进程退出码: $exitCode",
+                                message = message,
                             )
                         } else {
-                            val message = "Logcat 意外中止，可能是设备断开连接，logcat 进程退出码: $exitCode"
+                            val message = localized("auto.logcat_stopped_unexpectedly_possibly_because_the_dev.d9b1baa5", exitCode)
                             writer.appendLine("[$message]")
-                            sectionFailureMessage = "状态: $message"
+                            sectionFailureMessage = commandStatus(message)
                             outcome = LogSectionOutcome(
                                 endState = DeviceLogCaptureEndState.INTERRUPTED,
                                 message = message,
@@ -153,22 +157,23 @@ private class JvmDeviceLogAdb : DeviceLogAdb {
                     process.destroyForcibly()
                     outputReader.cancel()
                     writer.appendLine()
-                    writer.appendLine("[采集已停止]")
+                    writer.appendLine("[${localized("auto.capture_stopped.4833feb5")}]")
                     throw error
                 } catch (error: Throwable) {
                     process.destroyForcibly()
                     outputReader.cancel()
                     writer.appendLine()
                     if (stopRequested) {
-                        writer.appendLine("[用户停止采集]")
+                        val message = localized("auto.user_stopped_capture.67a4fd80")
+                        writer.appendLine("[$message]")
                         outcome = LogSectionOutcome(
                             endState = DeviceLogCaptureEndState.STOPPED,
-                            message = "用户停止采集",
+                            message = message,
                         )
                     } else {
-                        val message = "Logcat 意外中止：${error.message ?: "未知错误"}"
+                        val message = localized("auto.logcat_stopped_unexpectedly.2184fdb9") + ": ${error.message ?: unknownError()}"
                         writer.appendLine("[$message]")
-                        sectionFailureMessage = "状态: $message"
+                        sectionFailureMessage = commandStatus(message)
                         outcome = LogSectionOutcome(
                             endState = DeviceLogCaptureEndState.INTERRUPTED,
                             message = message,
@@ -210,7 +215,7 @@ private fun buildLogSections(deviceSerial: String): List<LogSection> {
 
     return listOf(
         adb(
-            "logcat 全缓冲区",
+            localized("auto.logcat_all_buffers.d7023d5b"),
             "shell",
             "logcat",
             "-b",

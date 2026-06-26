@@ -1,6 +1,7 @@
 package com.floatingmuseum.android.test.helper.datafill
 
 import com.floatingmuseum.android.test.helper.adb.AdbShell
+import com.floatingmuseum.android.test.helper.localization.localized
 import kotlin.math.min
 
 private const val FillDirectory = "/sdcard/AndroidTestHelperFill"
@@ -134,7 +135,7 @@ internal fun parseDfStorageInfo(output: String): StorageInfo {
         .drop(1)
         .firstOrNull { it.split(Regex("\\s+")).lastOrNull() == "/data" }
         ?: rows.drop(1).firstOrNull()
-        ?: throw IllegalArgumentException("无法解析存储信息：$output")
+        ?: throw IllegalArgumentException(localized("datafill.error.parse_storage_info", output))
 
     val columns = dataRow.split(Regex("\\s+"))
     val totalKiB = columns.getOrNull(1)?.toLongOrNull()
@@ -142,7 +143,7 @@ internal fun parseDfStorageInfo(output: String): StorageInfo {
     val availableKiB = columns.getOrNull(3)?.toLongOrNull()
 
     if (totalKiB == null || usedKiB == null || availableKiB == null) {
-        throw IllegalArgumentException("无法解析存储信息：$output")
+        throw IllegalArgumentException(localized("datafill.error.parse_storage_info", output))
     }
 
     return StorageInfo(

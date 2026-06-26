@@ -55,6 +55,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.floatingmuseum.android.test.helper.AndroidDevice
+import com.floatingmuseum.android.test.helper.localization.localized
+import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 
 private val SearchMatchBackground = Color(0xFFFFFF00)
 private val SearchMatchContent = Color(0xFF111111)
@@ -84,6 +86,7 @@ fun ApplicationTestPanel(
     isRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     var isThirdPartyExpanded by remember { mutableStateOf(true) }
     var isSystemExpanded by remember { mutableStateOf(true) }
     var appSearchQuery by remember { mutableStateOf("") }
@@ -121,7 +124,7 @@ fun ApplicationTestPanel(
 
             when {
                 selectedDevice == null -> {
-                    Text("先选择状态为 device 的设备。")
+                    Text(strings.t("auto.select_a_device_in_device_state_first.4a4eaa6d"))
                 }
 
                 selectedApp != null -> {
@@ -150,7 +153,7 @@ fun ApplicationTestPanel(
                             span = { GridItemSpan(maxLineSpan) },
                         ) {
                             ApplicationSectionHeader(
-                                title = "第三方应用",
+                                title = strings.t("auto.third_party_apps.68c500c0"),
                                 count = if (thirdPartyApps.isNotEmpty()) filteredThirdPartyApps.size else null,
                                 isLoading = isLoadingThirdParty,
                                 isExpanded = isThirdPartyExpanded,
@@ -176,14 +179,14 @@ fun ApplicationTestPanel(
                                                 modifier = Modifier.width(200.dp)
                                             )
                                             Text(
-                                                text = "获取中: $thirdPartyProgressCurrent / $thirdPartyProgressTotal (${(progress * 100).toInt()}%)",
+                                                text = strings.t("auto.loading_0_1_2.0b53d329", thirdPartyProgressCurrent, thirdPartyProgressTotal, (progress * 100).toInt()),
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         } else {
                                             LinearProgressIndicator(modifier = Modifier.width(200.dp))
                                             Text(
-                                                text = "正在初始化应用列表...",
+                                                text = strings.t("auto.initializing_app_list.de60b730"),
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -196,7 +199,7 @@ fun ApplicationTestPanel(
                                     span = { GridItemSpan(maxLineSpan) }
                                 ) {
                                     Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                        Text("无数据。请点击刷新获取第三方应用列表。", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                        Text(strings.t("auto.no_data_refresh_to_load_third_party_apps.373fa94c"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
                             } else if (filteredThirdPartyApps.isEmpty()) {
@@ -205,7 +208,7 @@ fun ApplicationTestPanel(
                                     span = { GridItemSpan(maxLineSpan) }
                                 ) {
                                     Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                        Text("没有匹配的第三方应用。", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                        Text(strings.t("auto.no_matching_third_party_apps.d7a62a0b"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
                             } else {
@@ -227,7 +230,7 @@ fun ApplicationTestPanel(
                             span = { GridItemSpan(maxLineSpan) },
                         ) {
                             ApplicationSectionHeader(
-                                title = "系统应用",
+                                title = strings.t("auto.system_apps.dd1c4990"),
                                 count = if (systemApps.isNotEmpty()) filteredSystemApps.size else null,
                                 isLoading = isLoadingSystem,
                                 isExpanded = isSystemExpanded,
@@ -254,14 +257,14 @@ fun ApplicationTestPanel(
                                                 modifier = Modifier.width(200.dp)
                                             )
                                             Text(
-                                                text = "获取中: $systemProgressCurrent / $systemProgressTotal (${(progress * 100).toInt()}%)",
+                                                text = strings.t("auto.loading_0_1_2.0b53d329", systemProgressCurrent, systemProgressTotal, (progress * 100).toInt()),
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         } else {
                                             LinearProgressIndicator(modifier = Modifier.width(200.dp))
                                             Text(
-                                                text = "正在初始化应用列表...",
+                                                text = strings.t("auto.initializing_app_list.de60b730"),
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -274,7 +277,7 @@ fun ApplicationTestPanel(
                                     span = { GridItemSpan(maxLineSpan) }
                                 ) {
                                     Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                        Text("无数据。请点击刷新获取系统应用并生成本地缓存。", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                        Text(strings.t("auto.no_data_refresh_to_load_system_apps_and_create_a_loc.7f797a07"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
                             } else if (filteredSystemApps.isEmpty()) {
@@ -283,7 +286,7 @@ fun ApplicationTestPanel(
                                     span = { GridItemSpan(maxLineSpan) }
                                 ) {
                                     Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                        Text("没有匹配的系统应用。", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                        Text(strings.t("auto.no_matching_system_apps.11aa888d"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
                             } else {
@@ -318,6 +321,7 @@ private fun ApplicationListHeader(
     isRunning: Boolean,
     onClearCache: () -> Unit,
 ) {
+    val strings = rememberAppStrings()
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -333,7 +337,7 @@ private fun ApplicationListHeader(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "应用",
+                    text = strings.t("auto.apps.dfc620ce"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -341,7 +345,7 @@ private fun ApplicationListHeader(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     singleLine = true,
-                    label = { Text("搜索应用名或包名") },
+                    label = { Text(strings.t("auto.search_app_name_or_package.a9f7a1a0")) },
                     modifier = Modifier.weight(1f),
                 )
                 Button(
@@ -351,7 +355,7 @@ private fun ApplicationListHeader(
                     modifier = Modifier.height(40.dp),
                 ) {
                     Text(
-                        text = "清空缓存",
+                        text = strings.t("auto.clear_cache.ceb1a0aa"),
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
@@ -379,25 +383,25 @@ private fun applicationListDescription(
     isSearching: Boolean,
 ): String {
     if (thirdPartyApps.isEmpty() && systemApps.isEmpty()) {
-        return "请手动刷新获取应用列表。系统应用获取后将自动缓存至本地。"
+        return localized("auto.refresh_manually_to_load_the_app_list_system_apps_ar.7778d345")
     }
 
     val parts = mutableListOf<String>()
     if (thirdPartyApps.isNotEmpty()) {
         parts.add(
             if (isSearching) {
-                "第三方 ${filteredThirdPartyApps.size} / ${thirdPartyApps.size} 个"
+                localized("auto.third_party_0_1.92780af2", filteredThirdPartyApps.size, thirdPartyApps.size)
             } else {
-                "第三方 ${thirdPartyApps.size} 个"
+                localized("auto.third_party_0.15f88291", thirdPartyApps.size)
             }
         )
     }
     if (systemApps.isNotEmpty()) {
         parts.add(
             if (isSearching) {
-                "系统 ${filteredSystemApps.size} / ${systemApps.size} 个"
+                localized("auto.system_0_1.33782d8c", filteredSystemApps.size, systemApps.size)
             } else {
-                "系统 ${systemApps.size} 个"
+                localized("auto.system_0.c1e13074", systemApps.size)
             }
         )
     }
@@ -407,7 +411,7 @@ private fun applicationListDescription(
         thirdPartyApps + systemApps
     }
     val totalDisabled = visibleApps.count { !it.isEnabled }
-    parts.add("禁用 $totalDisabled 个")
+    parts.add(localized("auto.disabled_0.351c6b7f", totalDisabled))
     return parts.joinToString(" · ")
 }
 
@@ -421,6 +425,7 @@ private fun ApplicationSectionHeader(
     onRefresh: () -> Unit,
     onToggle: () -> Unit,
 ) {
+    val strings = rememberAppStrings()
     Surface(
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.primary,
@@ -444,14 +449,14 @@ private fun ApplicationSectionHeader(
                 )
                 if (cacheTime != null) {
                     Text(
-                        text = "· 缓存时间: $cacheTime",
+                        text = strings.t("auto.cached_0.152a832e", cacheTime),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
-                    text = if (isExpanded) "收起" else "展开",
+                    text = if (isExpanded) strings.t("auto.collapse.6966cd2e") else strings.t("auto.expand.7c01c464"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -466,7 +471,7 @@ private fun ApplicationSectionHeader(
                 modifier = Modifier.height(32.dp)
             ) {
                 Text(
-                    text = if (isLoading) "读取中..." else "刷新",
+                    text = if (isLoading) strings.t("auto.loading.7d20d2dc") else strings.t("auto.refresh.d44e61bb"),
                     style = MaterialTheme.typography.labelMedium
                 )
             }
@@ -552,6 +557,7 @@ private fun ApplicationDetailPanel(
     isRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     var showDangerousActionConfirmDialog by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<String?>(null) }
     var selectedDetailSection by remember(app.packageName) { mutableStateOf(ApplicationDetailSection.BASIC) }
@@ -600,7 +606,7 @@ private fun ApplicationDetailPanel(
                         modifier = Modifier
                             .size(56.dp)
                             .clickable(enabled = !isRunning && app.iconBytes != null) {
-                                onAction("保存图标")
+                                onAction(ApplicationAction.SAVE_ICON)
                             },
                     )
                     SelectionContainer {
@@ -631,7 +637,7 @@ private fun ApplicationDetailPanel(
                         }
                     }
                     Button(onClick = onBack) {
-                        Text("返回")
+                        Text(strings.t("auto.back.40f454f4"))
                     }
                 }
             }
@@ -656,9 +662,15 @@ private fun ApplicationDetailPanel(
             )
         }
         ApplicationActionGroup(
-            actions = listOf("启动应用", "结束应用", "清除数据", "停用应用", "启用应用", "导出APK", "卸载应用"),
+            actions = ApplicationAction.visibleActions,
             onAction = { action ->
-                if (action == "卸载应用" || app.isSystem && (action == "结束应用" || action == "清除数据" || action == "停用应用")) {
+                if (action == ApplicationAction.UNINSTALL ||
+                    app.isSystem && (
+                        action == ApplicationAction.STOP ||
+                            action == ApplicationAction.CLEAR_DATA ||
+                            action == ApplicationAction.DISABLE
+                        )
+                ) {
                     pendingAction = action
                     showDangerousActionConfirmDialog = true
                 } else {
@@ -678,17 +690,17 @@ private fun ApplicationDetailPanel(
             },
             title = {
                 Text(
-                    text = "确认${pendingAction ?: "危险操作"}",
+                    text = strings.t("auto.confirm_0.4914b71c", pendingAction?.let(::applicationActionLabel) ?: strings.t("app.action.dangerous")),
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
                 )
             },
             text = {
                 Text(
-                    text = if (pendingAction == "卸载应用") {
-                        "将从当前设备卸载 ${app.packageName}。系统应用会执行用户 0 卸载，可能影响设备功能。"
+                    text = if (pendingAction == ApplicationAction.UNINSTALL) {
+                        strings.t("auto.this_will_uninstall_0_from_the_current_device_system.923dcd39", app.packageName)
                     } else {
-                        "此操作可能对设备造成严重影响，请在知晓风险的情况下操作。"
+                        strings.t("auto.this_action_may_seriously_affect_the_device_proceed_.17b1cc77")
                     },
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -705,8 +717,8 @@ private fun ApplicationDetailPanel(
                     }
                 ) {
                     Text(
-                        text = "确认",
-                        color = if (pendingAction == "卸载应用") {
+                        text = strings.t("auto.confirm.a22a2e1d"),
+                        color = if (pendingAction == ApplicationAction.UNINSTALL) {
                             MaterialTheme.colorScheme.error
                         } else {
                             MaterialTheme.colorScheme.primary
@@ -721,7 +733,7 @@ private fun ApplicationDetailPanel(
                         pendingAction = null
                     }
                 ) {
-                    Text("取消")
+                    Text(strings.t("auto.cancel.7c242c64"))
                 }
             }
         )
@@ -737,6 +749,7 @@ private fun ApplicationDetailInfoPanel(
     onSelectSection: (ApplicationDetailSection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     var detailSearchQuery by remember(selectedSection) { mutableStateOf("") }
     val isSearchableSection = selectedSection.isSearchableDetailSection()
     val isComponentSection = selectedSection.isApplicationComponentSection()
@@ -784,7 +797,7 @@ private fun ApplicationDetailInfoPanel(
                         horizontalArrangement = Arrangement.Center,
                     ) {
                         Text(
-                            text = section.title,
+                            text = section.displayTitle(),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelected) {
@@ -844,7 +857,7 @@ private fun ApplicationDetailInfoPanel(
                         ) {
                             CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                             Text(
-                                text = "正在获取${selectedSection.title}信息...",
+                                text = strings.t("auto.loading_0_info.86fe8dd7", selectedSection.displayTitle()),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -853,9 +866,9 @@ private fun ApplicationDetailInfoPanel(
                     content == null -> {
                         Text(
                             text = if (isRunning) {
-                                "等待当前任务完成后获取信息。"
+                                strings.t("auto.waiting_for_the_current_task_to_finish.5582c753")
                             } else {
-                                "暂无数据，请点击上方选项卡获取。"
+                                strings.t("auto.no_data_click_a_tab_above_to_load.417043c0")
                             },
                             modifier = Modifier.align(Alignment.Center),
                             style = MaterialTheme.typography.bodyMedium,
@@ -864,7 +877,7 @@ private fun ApplicationDetailInfoPanel(
                     }
                     content.items.isEmpty() -> {
                         Text(
-                            text = "该分类无可显示信息。",
+                            text = strings.t("auto.no_displayable_info_in_this_section.b5c65874"),
                             modifier = Modifier.align(Alignment.Center),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -878,7 +891,8 @@ private fun ApplicationDetailInfoPanel(
                             detailSearchQuery.isBlank() ||
                                 item.searchableName.contains(detailSearchQuery.trim(), ignoreCase = true)
                         }
-                        val isPlaceholderItem = content.items.size == 1 && content.items.first().label == "状态"
+                        val isPlaceholderItem = content.items.size == 1 &&
+                            (content.items.first().label == "状态" || content.items.first().label.equals("Status", ignoreCase = true))
                         val totalComponentCount = if (isPlaceholderItem) 0 else displayItems.size
                         Column(
                             modifier = Modifier
@@ -891,15 +905,15 @@ private fun ApplicationDetailInfoPanel(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    text = "来源: ${content.source.title}",
+                                text = strings.t("auto.source_0.f80adb74", content.source.displayTitle()),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 if (isComponentSection) {
                                     val countText = if (detailSearchQuery.isBlank()) {
-                                        "共 $totalComponentCount 个${selectedSection.title}"
+                                        strings.t("auto.0_1_total.e8cab256", totalComponentCount, selectedSection.displayTitle())
                                     } else {
-                                        "匹配 ${filteredItems.size} / $totalComponentCount 个${selectedSection.title}"
+                                        strings.t("auto.matched_0_1_2.eb6aeb27", filteredItems.size, totalComponentCount, selectedSection.displayTitle())
                                     }
                                     Text(
                                         text = countText,
@@ -915,9 +929,9 @@ private fun ApplicationDetailInfoPanel(
                                     label = {
                                         Text(
                                             if (selectedSection == ApplicationDetailSection.PERMISSIONS) {
-                                                "搜索权限名"
+                                                strings.t("auto.search_permission_name.ddf17663")
                                             } else {
-                                                "搜索 name"
+                                                strings.t("auto.search_name.14bab336")
                                             }
                                         )
                                     },
@@ -927,7 +941,7 @@ private fun ApplicationDetailInfoPanel(
                             }
                             if (filteredItems.isEmpty()) {
                                 Text(
-                                    text = "没有匹配的信息。",
+                                    text = strings.t("auto.no_matching_info.a768f18f"),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 24.dp),
@@ -965,7 +979,7 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
             val title = parsedName ?: label
             DisplayApplicationDetailItem(
                 title = title,
-                body = removeDetailAttribute(value, "name").ifBlank { "已声明" },
+                body = removeDetailAttribute(value, "name").ifBlank { localized("auto.declared.0f1a04af") },
                 searchableName = title,
             )
         }
@@ -973,7 +987,11 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
             val parsedName = extractDetailAttribute(value, "name")
             val (title, body) = if (parsedName != null) {
                 val remaining = removeDetailAttribute(value, "name").ifBlank {
-                    if (label.startsWith("权限")) "已声明" else label
+                    if (label.startsWith("权限") || label.equals("Permission", ignoreCase = true)) {
+                        localized("auto.declared.0f1a04af")
+                    } else {
+                        label
+                    }
                 }
                 Pair(parsedName, remaining)
             } else {
@@ -986,14 +1004,30 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
                     val parts = value.split(delimiter)
                     val name = parts.first().trim()
                     val remaining = parts.drop(1).joinToString(" · ").trim()
-                    Pair(name, remaining.ifBlank { if (label.startsWith("权限")) "已声明" else label })
+                    Pair(
+                        name,
+                        remaining.ifBlank {
+                            if (label.startsWith("权限") || label.equals("Permission", ignoreCase = true)) {
+                                localized("auto.declared.0f1a04af")
+                            } else {
+                                label
+                            }
+                        }
+                    )
                 } else if (value.contains(": ")) {
                     val parts = value.split(": ", limit = 2)
                     val name = parts[0].trim()
                     val remaining = parts[1].trim()
                     Pair(name, remaining)
                 } else {
-                    Pair(value.trim(), if (label.startsWith("权限")) "已声明" else label)
+                    Pair(
+                        value.trim(),
+                        if (label.startsWith("权限") || label.equals("Permission", ignoreCase = true)) {
+                            localized("auto.declared.0f1a04af")
+                        } else {
+                            label
+                        }
+                    )
                 }
             }
             DisplayApplicationDetailItem(
@@ -1106,7 +1140,7 @@ private fun ApplicationActionGroup(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     rowActions.forEach { action ->
-                        val isDangerAction = action == "卸载应用"
+                        val isDangerAction = action == ApplicationAction.UNINSTALL
                         Button(
                             onClick = { onAction(action) },
                             enabled = !isRunning,
@@ -1122,7 +1156,7 @@ private fun ApplicationActionGroup(
                             },
                         ) {
                             Text(
-                                text = action,
+                                text = applicationActionLabel(action),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )

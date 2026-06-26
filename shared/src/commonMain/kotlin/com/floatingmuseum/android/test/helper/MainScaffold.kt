@@ -38,6 +38,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.floatingmuseum.android.test.helper.localization.isErrorCommandLog
+import com.floatingmuseum.android.test.helper.localization.isStatusCommandLog
+import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 
 @Composable
 internal fun ModuleSwitcher(
@@ -45,6 +48,7 @@ internal fun ModuleSwitcher(
     isRunning: Boolean,
     onSelect: (TestModule) -> Unit,
 ) {
+    val strings = rememberAppStrings()
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -69,7 +73,7 @@ internal fun ModuleSwitcher(
                         },
                     ),
                 ) {
-                    Text(module.title)
+                    Text(module.title(strings))
                 }
             }
         }
@@ -165,6 +169,7 @@ internal fun DevicePanel(
     onSelect: (AndroidDevice) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     Card(modifier = modifier) {
         Column(
             modifier = Modifier
@@ -178,17 +183,17 @@ internal fun DevicePanel(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "连接设备",
+                    text = strings.t("auto.connected_devices.940d2f7e"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Button(onClick = onRefresh, enabled = !isRunning) {
-                    Text("刷新设备")
+                    Text(strings.t("auto.refresh.924834a3"))
                 }
             }
 
             if (devices.isEmpty()) {
-                Text("未发现设备。连接 USB 后刷新。")
+                Text(strings.t("auto.no_devices_found_connect_usb_and_refresh.e1d05c7c"))
             } else {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -218,7 +223,7 @@ internal fun DevicePanel(
                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 Text("SN: ${device.serialNumber}")
-                                Text("型号: ${device.model}")
+                                Text("${strings.t("auto.model.40c5ec06")}: ${device.model}")
                             }
                         }
                     }
@@ -234,6 +239,7 @@ internal fun CommandLogPanel(
     onClearCommandLog: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     val scrollState = rememberScrollState()
     LaunchedEffect(commandLog.size) {
         scrollState.animateScrollTo(scrollState.maxValue)
@@ -251,7 +257,7 @@ internal fun CommandLogPanel(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "命令记录",
+                    text = strings.t("auto.command_log.fcf54fbf"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -260,7 +266,7 @@ internal fun CommandLogPanel(
                     onClick = onClearCommandLog,
                     enabled = commandLog.isNotEmpty(),
                 ) {
-                    Text("清空")
+                    Text(strings.t("auto.clear.d6250e3f"))
                 }
             }
             Box(
@@ -272,15 +278,15 @@ internal fun CommandLogPanel(
             ) {
                 SelectionContainer {
                     if (commandLog.isEmpty()) {
-                        Text("暂无命令")
+                        Text(strings.t("auto.no_commands.95169f8a"))
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             commandLog.forEach { command ->
                                 val textColor = when {
-                                    command.startsWith("错误:") || command.startsWith("错误 ") || command.contains("失败") -> {
+                                    isErrorCommandLog(command) -> {
                                         MaterialTheme.colorScheme.error
                                     }
-                                    command.startsWith("状态:") || command.startsWith("状态 ") -> {
+                                    isStatusCommandLog(command) -> {
                                         MaterialTheme.colorScheme.primary
                                     }
                                     else -> {

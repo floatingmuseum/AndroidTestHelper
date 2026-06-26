@@ -10,6 +10,26 @@ class AppSettingsTest {
     }
 
     @Test
+    fun languageDefaultsToSystemLanguageMode() {
+        assertEquals(null, AppSettings().language)
+    }
+
+    @Test
+    fun effectiveLanguageUsesSystemLanguageWithoutOverride() {
+        val settings = AppSettings(language = null)
+
+        assertEquals(AppLanguage.English, settings.effectiveLanguage(AppLanguage.English))
+        assertEquals(AppLanguage.SimplifiedChinese, settings.effectiveLanguage(AppLanguage.SimplifiedChinese))
+    }
+
+    @Test
+    fun effectiveLanguageUsesManualOverride() {
+        val settings = AppSettings(language = AppLanguage.SimplifiedChinese)
+
+        assertEquals(AppLanguage.SimplifiedChinese, settings.effectiveLanguage(AppLanguage.English))
+    }
+
+    @Test
     fun fileManagerDefaultRootPathRejectsUnsupportedValues() {
         val settings = AppSettings(fileManagerDefaultRootPath = "/data").normalized()
 

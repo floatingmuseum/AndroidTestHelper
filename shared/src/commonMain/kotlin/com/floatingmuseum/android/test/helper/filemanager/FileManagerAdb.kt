@@ -1,5 +1,7 @@
 package com.floatingmuseum.android.test.helper.filemanager
 
+import com.floatingmuseum.android.test.helper.localization.localized
+
 enum class RemoteFileType {
     Directory,
     File,
@@ -175,9 +177,11 @@ fun childRemotePath(parent: String, childName: String): String {
 
 fun validateRemoteChildName(name: String): String {
     val trimmedName = name.trim()
-    require(trimmedName.isNotEmpty()) { "名称不能为空" }
-    require(trimmedName != "." && trimmedName != "..") { "名称不能是 $trimmedName" }
-    require(!trimmedName.contains('/') && !trimmedName.contains('\\')) { "名称不能包含路径分隔符" }
+    require(trimmedName.isNotEmpty()) { localized("auto.name_cannot_be_empty.8c49562d") }
+    require(trimmedName != "." && trimmedName != "..") { localized("auto.name_cannot_be_0.15d91244", trimmedName) }
+    require(!trimmedName.contains('/') && !trimmedName.contains('\\')) {
+        localized("auto.name_cannot_contain_path_separators.0cf53937")
+    }
     return trimmedName
 }
 

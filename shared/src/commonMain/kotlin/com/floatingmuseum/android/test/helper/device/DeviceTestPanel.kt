@@ -41,6 +41,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.floatingmuseum.android.test.helper.AndroidDevice
+import com.floatingmuseum.android.test.helper.localization.localized
+import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 
 private enum class InfoSection {
     BASIC,
@@ -69,6 +71,7 @@ fun DeviceTestPanel(
     onScreenDensityControl: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     var searchQuery by remember { mutableStateOf("") }
     var selectedSection by remember { mutableStateOf(InfoSection.BASIC) }
 
@@ -90,7 +93,7 @@ fun DeviceTestPanel(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "请先在底部选择一个状态为 device 的已连接设备。",
+                    text = strings.t("auto.select_a_connected_device_in_device_state_from_the_b.cc929da4"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -100,7 +103,6 @@ fun DeviceTestPanel(
                 modifier = Modifier.fillMaxSize().padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 左侧：获取设备信息（标签切换页）
                 Column(
                     modifier = Modifier
                         .weight(1.2f)
@@ -108,12 +110,11 @@ fun DeviceTestPanel(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        text = "设备系统信息",
+                        text = strings.t("auto.device_system_info.d1a713da"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
 
-                    // 横向排列的信息类别选项
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -122,11 +123,11 @@ fun DeviceTestPanel(
                         InfoSection.values().forEach { section ->
                             val isSelected = selectedSection == section
                             val title = when (section) {
-                                InfoSection.BASIC -> "基础信息"
-                                InfoSection.HARDWARE -> "硬件资源"
-                                InfoSection.SCREEN -> "屏幕信息"
-                                InfoSection.BATTERY -> "电池信息"
-                                InfoSection.PROPERTIES -> "系统属性"
+                                InfoSection.BASIC -> strings.t("auto.basic.0c39f352")
+                                InfoSection.HARDWARE -> strings.t("auto.hardware.d0b7f811")
+                                InfoSection.SCREEN -> strings.t("auto.display.d27e495a")
+                                InfoSection.BATTERY -> strings.t("auto.battery.d9ec8cf9")
+                                InfoSection.PROPERTIES -> strings.t("auto.properties.73ceec76")
                             }
                             
                             val isSecProperties = section == InfoSection.PROPERTIES
@@ -188,7 +189,6 @@ fun DeviceTestPanel(
                         }
                     }
 
-                    // 信息展示卡片（占满左半边剩下的空间）
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -216,14 +216,14 @@ fun DeviceTestPanel(
                                                 .verticalScroll(rememberScrollState()),
                                             verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
-                                            InfoRow("序列号 (SN)", selectedDevice.serialNumber)
-                                            InfoRow("设备品牌", systemInfo.brand)
-                                            InfoRow("设备型号", systemInfo.model)
-                                            InfoRow("ROM 版本", systemInfo.romVersion)
-                                            InfoRow("Android 版本", "Android ${systemInfo.androidVersion}")
-                                            InfoRow("SDK 版本", "API ${systemInfo.sdkVersion}")
-                                            InfoRow("CPU 架构 (ABI)", systemInfo.cpuAbi)
-                                            InfoRow("IP 地址", systemInfo.ipAddress)
+                                            InfoRow(strings.t("auto.serial_number_sn.40aab042"), selectedDevice.serialNumber)
+                                            InfoRow(strings.t("auto.brand.6f078946"), systemInfo.brand)
+                                            InfoRow(strings.t("auto.model.075ee47c"), systemInfo.model)
+                                            InfoRow(strings.t("auto.rom_version.8ad66e7b"), systemInfo.romVersion)
+                                            InfoRow(strings.t("auto.android_version.f996a9e2"), "Android ${systemInfo.androidVersion}")
+                                            InfoRow(strings.t("auto.sdk_version.de747d51"), "API ${systemInfo.sdkVersion}")
+                                            InfoRow(strings.t("auto.cpu_abi.83639c12"), systemInfo.cpuAbi)
+                                            InfoRow(strings.t("auto.ip_address.d7440b41"), systemInfo.ipAddress)
                                         }
                                     } else {
                                         Box(
@@ -231,7 +231,7 @@ fun DeviceTestPanel(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = "暂无数据，请点击上方选项卡刷新获取",
+                                                text = strings.t("auto.no_data_click_the_tab_above_to_refresh.66509312"),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
@@ -257,17 +257,17 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = "CPU 信息 (/proc/cpuinfo)",
+                                                        text = strings.t("auto.cpu_info_proc_cpuinfo.94d19a44"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow("CPU 架构 (ABI)", systemInfo.cpuAbi)
-                                                    InfoRow("处理器", systemInfo.cpuProcessor)
-                                                    InfoRow("硬件平台", systemInfo.cpuHardware)
-                                                    InfoRow("CPU 架构版本", systemInfo.cpuArchitecture)
-                                                    InfoRow("核心数", systemInfo.cpuCoreCount)
-                                                    InfoTextBlock("特性", systemInfo.cpuFeatures)
+                                                    InfoRow(strings.t("auto.cpu_abi.83639c12"), systemInfo.cpuAbi)
+                                                    InfoRow(strings.t("auto.processor.6e51e73d"), systemInfo.cpuProcessor)
+                                                    InfoRow(strings.t("auto.hardware.72c25591"), systemInfo.cpuHardware)
+                                                    InfoRow(strings.t("auto.cpu_architecture.ef8462da"), systemInfo.cpuArchitecture)
+                                                    InfoRow(strings.t("auto.core_count.2d95c453"), systemInfo.cpuCoreCount)
+                                                    InfoTextBlock(strings.t("auto.features.2f092021"), systemInfo.cpuFeatures)
                                                 }
                                             }
 
@@ -282,18 +282,18 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = "内存信息 (/proc/meminfo)",
+                                                        text = strings.t("auto.memory_info_proc_meminfo.019a0fab"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow("总内存 (MemTotal)", systemInfo.memoryTotal)
-                                                    InfoRow("可用内存 (MemAvailable)", systemInfo.memoryAvailable)
-                                                    InfoRow("空闲内存 (MemFree)", systemInfo.memoryFree)
-                                                    InfoRow("缓冲区 (Buffers)", systemInfo.memoryBuffers)
-                                                    InfoRow("页缓存 (Cached)", systemInfo.memoryCached)
-                                                    InfoRow("Swap 总量", systemInfo.memorySwapTotal)
-                                                    InfoRow("Swap 空闲", systemInfo.memorySwapFree)
+                                                    InfoRow(strings.t("auto.total_memory_memtotal.ffda36cd"), systemInfo.memoryTotal)
+                                                    InfoRow(strings.t("auto.available_memory_memavailable.6802331e"), systemInfo.memoryAvailable)
+                                                    InfoRow(strings.t("auto.free_memory_memfree.50518212"), systemInfo.memoryFree)
+                                                    InfoRow(strings.t("auto.buffers.d8615be7"), systemInfo.memoryBuffers)
+                                                    InfoRow(strings.t("auto.page_cache_cached.68cc0b6f"), systemInfo.memoryCached)
+                                                    InfoRow(strings.t("auto.swap_total.eee9203a"), systemInfo.memorySwapTotal)
+                                                    InfoRow(strings.t("auto.swap_free.043d2880"), systemInfo.memorySwapFree)
                                                 }
                                             }
                                         }
@@ -303,7 +303,7 @@ fun DeviceTestPanel(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = "暂无数据，请点击上方选项卡刷新获取",
+                                                text = strings.t("auto.no_data_click_the_tab_above_to_refresh.66509312"),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
@@ -329,14 +329,14 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = "屏幕基本参数",
+                                                        text = strings.t("auto.display_basics.34f61660"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow("屏幕分辨率", systemInfo.screenSize)
-                                                    InfoRow("屏幕密度 (Density)", systemInfo.screenDensity)
-                                                    InfoRow("屏幕刷新率", systemInfo.displayRefreshRate)
+                                                    InfoRow(strings.t("auto.resolution.9ac821bf"), systemInfo.screenSize)
+                                                    InfoRow(strings.t("auto.density.ed216e02"), systemInfo.screenDensity)
+                                                    InfoRow(strings.t("auto.refresh_rate.19cef23c"), systemInfo.displayRefreshRate)
                                                 }
                                             }
 
@@ -351,15 +351,15 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = "显示屏详细配置 (dumpsys)",
+                                                        text = strings.t("auto.display_details_dumpsys.0cd4784c"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow("显示屏 ID (mDisplayId)", systemInfo.displayId)
-                                                    InfoRow("物理初始配置 (init)", systemInfo.displayInit)
-                                                    InfoRow("当前显示配置 (cur)", systemInfo.displayCur)
-                                                    InfoRow("应用可用区域 (app)", systemInfo.displayApp)
+                                                    InfoRow(strings.t("auto.display_id_mdisplayid.e644ddad"), systemInfo.displayId)
+                                                    InfoRow(strings.t("auto.initial_config_init.363a60c0"), systemInfo.displayInit)
+                                                    InfoRow(strings.t("auto.current_config_cur.fc1723b4"), systemInfo.displayCur)
+                                                    InfoRow(strings.t("auto.app_bounds_app.ba35a79a"), systemInfo.displayApp)
                                                 }
                                             }
 
@@ -375,7 +375,7 @@ fun DeviceTestPanel(
                                                         verticalArrangement = Arrangement.spacedBy(12.dp)
                                                     ) {
                                                         Text(
-                                                            text = "屏幕模拟与调试 (仅测试使用)",
+                                                            text = strings.t("auto.display_simulation_and_debug_testing_only.870fad5f"),
                                                             style = MaterialTheme.typography.titleSmall,
                                                             fontWeight = FontWeight.Bold,
                                                             color = MaterialTheme.colorScheme.error
@@ -388,7 +388,7 @@ fun DeviceTestPanel(
                                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                                 verticalAlignment = Alignment.CenterVertically
                                                             ) {
-                                                                Text("设置分辨率 (例如 1080x1920)", style = MaterialTheme.typography.bodyMedium)
+                                                                Text(strings.t("auto.set_resolution_for_example_1080x1920.18f9e905"), style = MaterialTheme.typography.bodyMedium)
                                                                 Row(
                                                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                                     verticalAlignment = Alignment.CenterVertically
@@ -398,7 +398,7 @@ fun DeviceTestPanel(
                                                                         onValueChange = { mockSizeText = it },
                                                                         modifier = Modifier.width(150.dp),
                                                                         singleLine = true,
-                                                                        placeholder = { Text("宽x高") }
+                                                                        placeholder = { Text(strings.t("auto.wxh.54a58df4")) }
                                                                     )
                                                                     Button(
                                                                         onClick = {
@@ -409,7 +409,7 @@ fun DeviceTestPanel(
                                                                         enabled = !isRunning && mockSizeText.isNotEmpty(),
                                                                         modifier = Modifier.height(36.dp)
                                                                     ) {
-                                                                        Text("修改")
+                                                                        Text(strings.t("auto.change.8df5aec0"))
                                                                     }
                                                                 }
                                                             }
@@ -419,7 +419,7 @@ fun DeviceTestPanel(
                                                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                                                 modifier = Modifier.fillMaxWidth().height(40.dp)
                                                             ) {
-                                                                Text("重置屏幕分辨率 (Reset)")
+                                                                Text(strings.t("auto.reset_resolution.4c2e59c1"))
                                                             }
                                                         }
 
@@ -431,7 +431,7 @@ fun DeviceTestPanel(
                                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                                 verticalAlignment = Alignment.CenterVertically
                                                             ) {
-                                                                Text("设置屏幕密度 (例如 480)", style = MaterialTheme.typography.bodyMedium)
+                                                                Text(strings.t("auto.set_density_for_example_480.b4f52d08"), style = MaterialTheme.typography.bodyMedium)
                                                                 Row(
                                                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                                     verticalAlignment = Alignment.CenterVertically
@@ -452,7 +452,7 @@ fun DeviceTestPanel(
                                                                         enabled = !isRunning && mockDensityText.isNotEmpty(),
                                                                         modifier = Modifier.height(36.dp)
                                                                     ) {
-                                                                        Text("修改")
+                                                                        Text(strings.t("auto.change.8df5aec0"))
                                                                     }
                                                                 }
                                                             }
@@ -462,7 +462,7 @@ fun DeviceTestPanel(
                                                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                                                 modifier = Modifier.fillMaxWidth().height(40.dp)
                                                             ) {
-                                                                Text("重置屏幕密度 (Reset)")
+                                                                Text(strings.t("auto.reset_density.19e95dc1"))
                                                             }
                                                         }
                                                     }
@@ -475,7 +475,7 @@ fun DeviceTestPanel(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = "暂无数据，请点击上方选项卡刷新获取",
+                                                text = strings.t("auto.no_data_click_the_tab_above_to_refresh.66509312"),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
@@ -490,7 +490,6 @@ fun DeviceTestPanel(
                                                 .verticalScroll(rememberScrollState()),
                                             verticalArrangement = Arrangement.spacedBy(16.dp)
                                         ) {
-                                            // 电池基本状况
                                             Card(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 colors = CardDefaults.cardColors(
@@ -502,22 +501,21 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = "电池基本状况",
+                                                        text = strings.t("auto.battery_basics.e38715b8"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow("电池电量", systemInfo.batteryLevel?.let { "$it%" } ?: "未知")
-                                                    InfoRow("电池状态", systemInfo.batteryStatus)
-                                                    InfoRow("电池健康度", systemInfo.batteryHealth)
-                                                    InfoRow("电池温度", systemInfo.batteryTemp)
-                                                    InfoRow("电池电压", systemInfo.batteryVoltage)
-                                                    InfoRow("电池在位", systemInfo.batteryPresent)
-                                                    InfoRow("电池技术", systemInfo.batteryTechnology)
+                                                    InfoRow(strings.t("auto.battery_level.b0f37339"), systemInfo.batteryLevel?.let { "$it%" } ?: localized("auto.unknown.54dfee5a"))
+                                                    InfoRow(strings.t("auto.battery_status.d609a438"), systemInfo.batteryStatus)
+                                                    InfoRow(strings.t("auto.battery_health.8191d436"), systemInfo.batteryHealth)
+                                                    InfoRow(strings.t("auto.battery_temperature.0c6d3606"), systemInfo.batteryTemp)
+                                                    InfoRow(strings.t("auto.battery_voltage.4bc0ea51"), systemInfo.batteryVoltage)
+                                                    InfoRow(strings.t("auto.battery_present.a1891aa6"), systemInfo.batteryPresent)
+                                                    InfoRow(strings.t("auto.battery_technology.2c6e4682"), systemInfo.batteryTechnology)
                                                 }
                                             }
 
-                                            // 供电与充电参数
                                             Card(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 colors = CardDefaults.cardColors(
@@ -529,21 +527,20 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = "供电与充电参数",
+                                                        text = strings.t("auto.power_and_charging.160c9e6c"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow("AC 交流电供电", systemInfo.batteryACPowered)
-                                                    InfoRow("USB 接口供电", systemInfo.batteryUSBPowered)
-                                                    InfoRow("无线充电供电", systemInfo.batteryWirelessPowered)
-                                                    InfoRow("最大充电电流", systemInfo.batteryMaxChargingCurrent)
-                                                    InfoRow("最大充电电压", systemInfo.batteryMaxChargingVoltage)
-                                                    InfoRow("当前电量计数", systemInfo.batteryChargeCounter)
+                                                    InfoRow(strings.t("auto.ac_powered.d9bd01e2"), systemInfo.batteryACPowered)
+                                                    InfoRow(strings.t("auto.usb_powered.5c1aacb2"), systemInfo.batteryUSBPowered)
+                                                    InfoRow(strings.t("auto.wireless_powered.0df00564"), systemInfo.batteryWirelessPowered)
+                                                    InfoRow(strings.t("auto.max_charging_current.68c1dbea"), systemInfo.batteryMaxChargingCurrent)
+                                                    InfoRow(strings.t("auto.max_charging_voltage.d1c313fc"), systemInfo.batteryMaxChargingVoltage)
+                                                    InfoRow(strings.t("auto.charge_counter.059e5794"), systemInfo.batteryChargeCounter)
                                                 }
                                             }
 
-                                            // 模拟调试控制卡片
                                             if (onBatteryControl != null) {
                                                 Card(
                                                     modifier = Modifier.fillMaxWidth(),
@@ -556,36 +553,34 @@ fun DeviceTestPanel(
                                                         verticalArrangement = Arrangement.spacedBy(12.dp)
                                                     ) {
                                                         Text(
-                                                            text = "电池模拟调试 (仅测试使用)",
+                                                            text = strings.t("auto.battery_simulation_debug_testing_only.7d1d178b"),
                                                             style = MaterialTheme.typography.titleSmall,
                                                             fontWeight = FontWeight.Bold,
                                                             color = MaterialTheme.colorScheme.error
                                                         )
 
-                                                        // 模拟拔掉充电器
                                                         Row(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             horizontalArrangement = Arrangement.SpaceBetween,
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            Text("模拟拔掉充电器", style = MaterialTheme.typography.bodyMedium)
+                                                            Text(strings.t("auto.simulate_unplug_charger.dcd73478"), style = MaterialTheme.typography.bodyMedium)
                                                             Button(
                                                                 onClick = { onBatteryControl(listOf("unplug")) },
                                                                 enabled = !isRunning,
                                                                 modifier = Modifier.height(36.dp)
                                                             ) {
-                                                                Text("模拟拔除")
+                                                                Text(strings.t("auto.unplug.9446fbf6"))
                                                             }
                                                         }
 
-                                                        // 模拟设置电量百分比
                                                         var mockLevelText by remember { mutableStateOf("") }
                                                         Row(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             horizontalArrangement = Arrangement.SpaceBetween,
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            Text("模拟设置电量 (%)", style = MaterialTheme.typography.bodyMedium)
+                                                            Text(strings.t("auto.simulate_battery_level.d7b0d914"), style = MaterialTheme.typography.bodyMedium)
                                                             Row(
                                                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                                 verticalAlignment = Alignment.CenterVertically
@@ -607,19 +602,18 @@ fun DeviceTestPanel(
                                                                     enabled = !isRunning && mockLevelText.isNotEmpty(),
                                                                     modifier = Modifier.height(36.dp)
                                                                 ) {
-                                                                    Text("设置")
+                                                                    Text(strings.t("auto.set.e5416817"))
                                                                 }
                                                             }
                                                         }
 
-                                                        // 模拟设置温度
                                                         var mockTempText by remember { mutableStateOf("") }
                                                         Row(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             horizontalArrangement = Arrangement.SpaceBetween,
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            Text("模拟设置温度 (°C)", style = MaterialTheme.typography.bodyMedium)
+                                                            Text(strings.t("auto.simulate_temperature_c.2ab4fc6e"), style = MaterialTheme.typography.bodyMedium)
                                                             Row(
                                                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                                 verticalAlignment = Alignment.CenterVertically
@@ -629,7 +623,7 @@ fun DeviceTestPanel(
                                                                     onValueChange = { mockTempText = it },
                                                                     modifier = Modifier.width(100.dp),
                                                                     singleLine = true,
-                                                                    placeholder = { Text("例如 32") }
+                                                                    placeholder = { Text(strings.t("auto.example_32.0d7fd982")) }
                                                                 )
                                                                 Button(
                                                                     onClick = {
@@ -642,18 +636,17 @@ fun DeviceTestPanel(
                                                                     enabled = !isRunning && mockTempText.isNotEmpty(),
                                                                     modifier = Modifier.height(36.dp)
                                                                 ) {
-                                                                    Text("设置")
+                                                                    Text(strings.t("auto.set.e5416817"))
                                                                 }
                                                             }
                                                         }
 
-                                                        // 模拟设置状态
                                                         Row(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             horizontalArrangement = Arrangement.SpaceBetween,
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            Text("模拟设置充电状态", style = MaterialTheme.typography.bodyMedium)
+                                                            Text(strings.t("auto.simulate_charging_status.4e59822f"), style = MaterialTheme.typography.bodyMedium)
                                                             Row(
                                                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                                 verticalAlignment = Alignment.CenterVertically
@@ -664,7 +657,7 @@ fun DeviceTestPanel(
                                                                     modifier = Modifier.height(32.dp),
                                                                     contentPadding = ButtonDefaults.ContentPadding
                                                                 ) {
-                                                                    Text("充电", style = MaterialTheme.typography.labelMedium)
+                                                                    Text(strings.t("auto.charging.ba3a87b7"), style = MaterialTheme.typography.labelMedium)
                                                                 }
                                                                 Button(
                                                                     onClick = { onBatteryControl(listOf("set", "status", "3")) },
@@ -672,7 +665,7 @@ fun DeviceTestPanel(
                                                                     modifier = Modifier.height(32.dp),
                                                                     contentPadding = ButtonDefaults.ContentPadding
                                                                 ) {
-                                                                    Text("放电", style = MaterialTheme.typography.labelMedium)
+                                                                    Text(strings.t("auto.discharging.5ffc49ce"), style = MaterialTheme.typography.labelMedium)
                                                                 }
                                                                 Button(
                                                                     onClick = { onBatteryControl(listOf("set", "status", "5")) },
@@ -680,21 +673,20 @@ fun DeviceTestPanel(
                                                                     modifier = Modifier.height(32.dp),
                                                                     contentPadding = ButtonDefaults.ContentPadding
                                                                 ) {
-                                                                    Text("充满", style = MaterialTheme.typography.labelMedium)
+                                                                    Text(strings.t("auto.full.d0c02083"), style = MaterialTheme.typography.labelMedium)
                                                                 }
                                                             }
                                                         }
 
                                                         Spacer(modifier = Modifier.height(8.dp))
 
-                                                        // 恢复真实状态
                                                         Button(
                                                             onClick = { onBatteryControl(listOf("reset")) },
                                                             enabled = !isRunning,
                                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                                             modifier = Modifier.fillMaxWidth().height(40.dp)
                                                         ) {
-                                                            Text("恢复电池真实状态 (Reset)")
+                                                            Text(strings.t("auto.reset_battery_state.445e086a"))
                                                         }
                                                     }
                                                 }
@@ -706,7 +698,7 @@ fun DeviceTestPanel(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = "暂无数据，请点击上方选项卡刷新获取",
+                                                text = strings.t("auto.no_data_click_the_tab_above_to_refresh.66509312"),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
@@ -721,7 +713,7 @@ fun DeviceTestPanel(
                                         OutlinedTextField(
                                             value = searchQuery,
                                             onValueChange = { searchQuery = it },
-                                            label = { Text("搜索属性 (例如: ro.product)...") },
+                                            label = { Text(strings.t("auto.search_properties_for_example_ro_product.cedb8dec")) },
                                             modifier = Modifier.fillMaxWidth(),
                                             singleLine = true
                                         )
@@ -733,14 +725,14 @@ fun DeviceTestPanel(
                                         ) {
                                             if (systemProperties.isEmpty()) {
                                                 Text(
-                                                    text = "无属性数据，请点击上方选项卡重新拉取。",
+                                                    text = strings.t("auto.no_property_data_click_the_tab_above_to_reload.4ce8ae8f"),
                                                     modifier = Modifier.align(Alignment.Center),
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             } else if (filteredProperties.isEmpty()) {
                                                 Text(
-                                                    text = "没有找到匹配的属性值。",
+                                                    text = strings.t("auto.no_matching_property_values.c9f81559"),
                                                     modifier = Modifier.align(Alignment.Center),
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -799,7 +791,6 @@ fun DeviceTestPanel(
                     }
                 }
 
-                // 右侧：快捷操作区
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -808,28 +799,28 @@ fun DeviceTestPanel(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "设备快捷操作",
+                        text = strings.t("auto.device_shortcuts.879e2961"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
 
                     val shortcutActions = listOf(
-                        DeviceShortcutAction("关机", true) { onQuickAction(DeviceQuickAction.SHUTDOWN) },
-                        DeviceShortcutAction("重启", true, onReboot),
-                        DeviceShortcutAction("重启至Recovery", true) { onQuickAction(DeviceQuickAction.REBOOT_RECOVERY) },
-                        DeviceShortcutAction("重启至FastBoot", true) { onQuickAction(DeviceQuickAction.REBOOT_FASTBOOT) },
-                        DeviceShortcutAction("查看当前界面", false) { onQuickAction(DeviceQuickAction.CURRENT_ACTIVITY) },
-                        DeviceShortcutAction("截屏", false, onTakeScreenshot),
-                        DeviceShortcutAction("APK安装", false, onInstallApplications),
-                        DeviceShortcutAction("电源键", false) { onQuickAction(DeviceQuickAction.POWER) },
-                        DeviceShortcutAction("菜单键", false) { onQuickAction(DeviceQuickAction.MENU) },
-                        DeviceShortcutAction("HOME键", false) { onQuickAction(DeviceQuickAction.HOME) },
-                        DeviceShortcutAction("返回键", false) { onQuickAction(DeviceQuickAction.BACK) },
-                        DeviceShortcutAction("音量加", false) { onQuickAction(DeviceQuickAction.VOLUME_UP) },
-                        DeviceShortcutAction("音量减", false) { onQuickAction(DeviceQuickAction.VOLUME_DOWN) },
-                        DeviceShortcutAction("静音", false) { onQuickAction(DeviceQuickAction.MUTE) },
-                        DeviceShortcutAction("亮屏", false) { onQuickAction(DeviceQuickAction.WAKE) },
-                        DeviceShortcutAction("熄屏", false) { onQuickAction(DeviceQuickAction.SLEEP) },
+                        DeviceShortcutAction(DeviceQuickAction.SHUTDOWN.displayLabel(), true) { onQuickAction(DeviceQuickAction.SHUTDOWN) },
+                        DeviceShortcutAction(strings.t("auto.reboot.dface16c"), true, onReboot),
+                        DeviceShortcutAction(DeviceQuickAction.REBOOT_RECOVERY.displayLabel(), true) { onQuickAction(DeviceQuickAction.REBOOT_RECOVERY) },
+                        DeviceShortcutAction(DeviceQuickAction.REBOOT_FASTBOOT.displayLabel(), true) { onQuickAction(DeviceQuickAction.REBOOT_FASTBOOT) },
+                        DeviceShortcutAction(DeviceQuickAction.CURRENT_ACTIVITY.displayLabel(), false) { onQuickAction(DeviceQuickAction.CURRENT_ACTIVITY) },
+                        DeviceShortcutAction(strings.t("auto.screenshot.970a0cf1"), false, onTakeScreenshot),
+                        DeviceShortcutAction(strings.t("auto.install_apk.769a503b"), false, onInstallApplications),
+                        DeviceShortcutAction(DeviceQuickAction.POWER.displayLabel(), false) { onQuickAction(DeviceQuickAction.POWER) },
+                        DeviceShortcutAction(DeviceQuickAction.MENU.displayLabel(), false) { onQuickAction(DeviceQuickAction.MENU) },
+                        DeviceShortcutAction(DeviceQuickAction.HOME.displayLabel(), false) { onQuickAction(DeviceQuickAction.HOME) },
+                        DeviceShortcutAction(DeviceQuickAction.BACK.displayLabel(), false) { onQuickAction(DeviceQuickAction.BACK) },
+                        DeviceShortcutAction(DeviceQuickAction.VOLUME_UP.displayLabel(), false) { onQuickAction(DeviceQuickAction.VOLUME_UP) },
+                        DeviceShortcutAction(DeviceQuickAction.VOLUME_DOWN.displayLabel(), false) { onQuickAction(DeviceQuickAction.VOLUME_DOWN) },
+                        DeviceShortcutAction(DeviceQuickAction.MUTE.displayLabel(), false) { onQuickAction(DeviceQuickAction.MUTE) },
+                        DeviceShortcutAction(DeviceQuickAction.WAKE.displayLabel(), false) { onQuickAction(DeviceQuickAction.WAKE) },
+                        DeviceShortcutAction(DeviceQuickAction.SLEEP.displayLabel(), false) { onQuickAction(DeviceQuickAction.SLEEP) },
                     )
 
                     Column(
@@ -911,6 +902,7 @@ private fun DeviceShortcutButton(
 
 @Composable
 private fun InfoRow(label: String, value: String) {
+    val displayValue = localizedDeviceInfoValue(value)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -925,7 +917,7 @@ private fun InfoRow(label: String, value: String) {
         Spacer(modifier = Modifier.width(16.dp))
         SelectionContainer {
             Text(
-                text = value,
+                text = displayValue,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
@@ -937,6 +929,7 @@ private fun InfoRow(label: String, value: String) {
 
 @Composable
 private fun InfoTextBlock(label: String, value: String) {
+    val displayValue = localizedDeviceInfoValue(value)
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -949,7 +942,7 @@ private fun InfoTextBlock(label: String, value: String) {
         )
         SelectionContainer {
             Text(
-                text = value,
+                text = displayValue,
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(
@@ -968,4 +961,31 @@ private fun InfoTextBlock(label: String, value: String) {
             )
         }
     }
+}
+
+private fun localizedDeviceInfoValue(value: String): String {
+    val exact = when (value) {
+        "未知" -> localized("auto.unknown.54dfee5a")
+        "未知型号" -> localized("auto.unknown_model.5dd7a8ba")
+        "是" -> localized("auto.yes.7b0a458c")
+        "否" -> localized("auto.no.787e69b1")
+        "充电中" -> localized("auto.charging.e9731331")
+        "放电中" -> localized("auto.discharging.05a399cd")
+        "未充电" -> localized("auto.not_charging.f5b3b4ef")
+        "已充满" -> localized("auto.full.2fe76bfb")
+        "良好" -> localized("auto.good.792f7d68")
+        "过热" -> localized("auto.overheated.a38f47c3")
+        "损坏" -> localized("auto.damaged.76620589")
+        "过压" -> localized("auto.over_voltage.8f51bb17")
+        "未知故障" -> localized("auto.unknown_failure.0fe42e25")
+        "过冷" -> localized("auto.cold.becb7a06")
+        else -> null
+    }
+    if (exact != null) return exact
+
+    return value
+        .replace("未知型号", localized("auto.unknown_model.5dd7a8ba"))
+        .replace("未知故障", localized("auto.unknown_failure.0fe42e25"))
+        .replace("未知", localized("auto.unknown.54dfee5a"))
+        .replace("物理:", localized("auto.physical.ae8ea9ac"))
 }

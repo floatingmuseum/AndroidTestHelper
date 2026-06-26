@@ -1,10 +1,21 @@
 package com.floatingmuseum.android.test.helper
 
-internal enum class TestModule(val title: String) {
-    Device("设备"),
-    App("应用"),
-    DataFill("数据填充"),
-    FileManager("文件管理"),
-    Log("日志"),
-    Settings("设置"),
+import com.floatingmuseum.android.test.helper.localization.AppStrings
+
+internal enum class TestModule {
+    Device,
+    App,
+    DataFill,
+    FileManager,
+    Log,
+    Settings,
+}
+
+internal fun TestModule.title(strings: AppStrings): String = when (this) {
+    TestModule.Device -> strings.t("auto.device.fb0336cd")
+    TestModule.App -> strings.t("auto.apps.dfc620ce")
+    TestModule.DataFill -> strings.t("auto.data_fill.c232aadd")
+    TestModule.FileManager -> strings.t("auto.files.220e07f7")
+    TestModule.Log -> strings.t("auto.logs.ff42c1f9")
+    TestModule.Settings -> strings.t("auto.settings.3c65c5f8")
 }

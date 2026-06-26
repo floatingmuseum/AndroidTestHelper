@@ -1,5 +1,6 @@
 package com.floatingmuseum.android.test.helper.app
 
+import com.floatingmuseum.android.test.helper.localization.localized
 import kotlinx.serialization.Serializable
 
 data class ApkExportResult(
@@ -71,19 +72,56 @@ internal fun PluginVersionInfo.pluginCheckIgnoreKey(): String {
     return "athplugin:$versionCode:${versionName.trim()}"
 }
 
-enum class ApplicationDetailSection(val title: String, val pluginKey: String) {
-    BASIC("基础", "basic"),
-    PERMISSIONS("权限", "permissions"),
-    ACTIVITIES("Activity", "activities"),
-    SERVICES("Service", "services"),
-    BROADCAST_RECEIVERS("BroadcastReceiver", "receivers"),
-    CONTENT_PROVIDERS("ContentProvider", "providers"),
-    SIGNATURES("签名", "signatures"),
+enum class ApplicationDetailSection(val pluginKey: String) {
+    BASIC("basic"),
+    PERMISSIONS("permissions"),
+    ACTIVITIES("activities"),
+    SERVICES("services"),
+    BROADCAST_RECEIVERS("receivers"),
+    CONTENT_PROVIDERS("providers"),
+    SIGNATURES("signatures"),
+}
+
+fun ApplicationDetailSection.displayTitle(): String = when (this) {
+    ApplicationDetailSection.BASIC -> localized("auto.basic.7d4cfb3b")
+    ApplicationDetailSection.PERMISSIONS -> localized("auto.permissions.bb6110a3")
+    ApplicationDetailSection.ACTIVITIES -> "Activity"
+    ApplicationDetailSection.SERVICES -> "Service"
+    ApplicationDetailSection.BROADCAST_RECEIVERS -> "BroadcastReceiver"
+    ApplicationDetailSection.CONTENT_PROVIDERS -> "ContentProvider"
+    ApplicationDetailSection.SIGNATURES -> localized("auto.signatures.261a371b")
 }
 
 enum class ApplicationDetailSource(val title: String) {
     ATH_PLUGIN("ATHPlugin"),
     ADB("ADB"),
+}
+
+fun ApplicationDetailSource.displayTitle(): String = title
+
+object ApplicationAction {
+    const val LAUNCH = "launch"
+    const val STOP = "stop"
+    const val CLEAR_DATA = "clearData"
+    const val DISABLE = "disable"
+    const val ENABLE = "enable"
+    const val EXPORT_APK = "exportApk"
+    const val UNINSTALL = "uninstall"
+    const val SAVE_ICON = "saveIcon"
+
+    val visibleActions = listOf(LAUNCH, STOP, CLEAR_DATA, DISABLE, ENABLE, EXPORT_APK, UNINSTALL)
+}
+
+fun applicationActionLabel(action: String): String = when (action) {
+    ApplicationAction.LAUNCH -> localized("auto.launch.bad3e4bd")
+    ApplicationAction.STOP -> localized("auto.force_stop.f127341b")
+    ApplicationAction.CLEAR_DATA -> localized("auto.clear_data.95417e20")
+    ApplicationAction.DISABLE -> localized("auto.disable.07a14f3a")
+    ApplicationAction.ENABLE -> localized("auto.enable.89d12335")
+    ApplicationAction.EXPORT_APK -> localized("auto.export_apk.3f84060c")
+    ApplicationAction.UNINSTALL -> localized("auto.uninstall.c0bce4cd")
+    ApplicationAction.SAVE_ICON -> localized("auto.save_icon.9bb9af23")
+    else -> localized("auto.unknown_app_action.c607f53c")
 }
 
 @Serializable

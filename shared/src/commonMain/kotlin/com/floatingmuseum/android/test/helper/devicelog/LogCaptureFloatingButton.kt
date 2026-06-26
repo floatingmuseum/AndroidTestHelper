@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 import kotlin.math.roundToInt
 
 @Composable
@@ -33,6 +34,7 @@ fun LogCaptureFloatingButton(
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
 
     Surface(
@@ -62,7 +64,7 @@ fun LogCaptureFloatingButton(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    text = "Logcat 正在抓取",
+                    text = strings.t("auto.capturing_logcat.fbada554"),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -79,7 +81,7 @@ fun LogCaptureFloatingButton(
                     contentColor = MaterialTheme.colorScheme.onError,
                 ),
             ) {
-                Text("停止")
+                Text(strings.t("auto.stop.83cc81af"))
             }
         }
     }

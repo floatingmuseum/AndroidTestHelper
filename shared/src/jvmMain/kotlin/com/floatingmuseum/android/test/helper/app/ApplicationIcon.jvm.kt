@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.floatingmuseum.android.test.helper.localization.localized
 import org.jetbrains.skia.Image as SkiaImage
 
 @Composable
@@ -46,7 +47,7 @@ actual fun ApplicationIcon(
     } else {
         Image(
             bitmap = bitmap,
-            contentDescription = "$packageName 图标",
+            contentDescription = localized("auto.0_icon.d6227172", packageName),
             modifier = modifier
                 .size(42.dp)
                 .clip(RoundedCornerShape(8.dp)),

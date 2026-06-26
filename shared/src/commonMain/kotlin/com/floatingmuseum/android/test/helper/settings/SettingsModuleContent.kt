@@ -13,18 +13,20 @@ import androidx.compose.ui.unit.dp
 import com.floatingmuseum.android.test.helper.adb.AdbRuntimeInfo
 import com.floatingmuseum.android.test.helper.adb.checkAdbExecutable
 import com.floatingmuseum.android.test.helper.adb.loadAdbRuntimeInfo
+import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 import com.floatingmuseum.android.test.helper.selectFiles
 import kotlinx.coroutines.launch
 
-enum class SettingCategory(val title: String) {
-    General("通用"),
-    FileManager("文件管理"),
+enum class SettingCategory {
+    General,
+    FileManager,
 }
 
 @Composable
 fun SettingsModuleContent(
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     var selectedCategory by remember { mutableStateOf(SettingCategory.General) }
     
     Row(
@@ -32,7 +34,6 @@ fun SettingsModuleContent(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // 左边栏：细分选项
         Card(
             modifier = Modifier
                 .width(180.dp)
@@ -77,7 +78,10 @@ fun SettingsModuleContent(
                             contentAlignment = Alignment.CenterStart
                         ) {
                             Text(
-                                text = category.title,
+                                text = when (category) {
+                                    SettingCategory.General -> strings.t("auto.general.1823af98")
+                                    SettingCategory.FileManager -> strings.t("auto.file_manager.b61a05b1")
+                                },
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
@@ -86,7 +90,6 @@ fun SettingsModuleContent(
             }
         }
         
-        // 右边栏：具体设置项
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -108,6 +111,7 @@ fun SettingsModuleContent(
 fun GeneralSettingsPanel(
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     val scrollState = rememberScrollState()
     val settings = AppSettingsShared.currentSettings
     val coroutineScope = rememberCoroutineScope()
@@ -134,21 +138,31 @@ fun GeneralSettingsPanel(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "ADB 配置",
+                    text = strings.t("auto.adb_configuration.6658200c"),
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = "当前来源：${if (adbRuntimeInfo?.isCustom == true) "自定义" else "项目自带"}",
+                    text = "${strings.t("auto.current_source.ebf3885d")}: " +
+                        if (adbRuntimeInfo?.isCustom == true) {
+                            strings.t("auto.custom.69796b08")
+                        } else {
+                            strings.t("auto.bundled.b55b9572")
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "路径：${adbRuntimeInfo?.path ?: "读取中..."}",
+                    text = "${strings.t("auto.path.f433503b")}: ${adbRuntimeInfo?.path ?: strings.t("auto.loading.7d20d2dc")}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "版本：${adbRuntimeInfo?.version ?: if (adbRuntimeInfo == null) "读取中..." else "无法读取"}",
+                    text = "${strings.t("auto.version.8bd064a3")}: " +
+                        (adbRuntimeInfo?.version ?: if (adbRuntimeInfo == null) {
+                            strings.t("auto.loading.7d20d2dc")
+                        } else {
+                            strings.t("auto.unavailable.4dc00079")
+                        }),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (adbRuntimeInfo?.version == null && adbRuntimeInfo != null) {
                         MaterialTheme.colorScheme.error
@@ -158,7 +172,7 @@ fun GeneralSettingsPanel(
                 )
                 adbRuntimeInfo?.errorMessage?.let { errorMessage ->
                     Text(
-                        text = "错误：$errorMessage",
+                        text = "${strings.t("auto.error.5966c2d3")}: $errorMessage",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -182,8 +196,8 @@ fun GeneralSettingsPanel(
                                 adbActionMessage = null
                                 try {
                                     val selectedPath = selectFiles(
-                                        dialogTitle = "选择 adb 可执行文件",
-                                        approveButtonText = "使用",
+                                        dialogTitle = strings.t("auto.select_adb_executable.b74e2c6e"),
+                                        approveButtonText = strings.t("auto.use.7770795d"),
                                     ).firstOrNull()
                                     if (selectedPath != null) {
                                         val checkResult = checkAdbExecutable(selectedPath)
@@ -191,9 +205,10 @@ fun GeneralSettingsPanel(
                                             AppSettingsShared.updateSettings(
                                                 settings.copy(customAdbPath = checkResult.normalizedPath)
                                             )
-                                            adbActionMessage = "已切换到自定义 adb。"
+                                            adbActionMessage = strings.t("auto.switched_to_custom_adb.6466a20b")
                                         } else {
-                                            adbActionMessage = "未切换：${checkResult.errorMessage ?: "无法读取 adb 版本"}"
+                                            adbActionMessage = strings.t("auto.not_switched.63fb8e6d") +
+                                                ": ${checkResult.errorMessage ?: strings.t("auto.unable_to_read_adb_version.287fb046")}"
                                         }
                                     }
                                 } finally {
@@ -202,22 +217,79 @@ fun GeneralSettingsPanel(
                             }
                         }
                     ) {
-                        Text(if (isCheckingAdb) "检测中" else "修改")
+                        Text(if (isCheckingAdb) strings.t("auto.checking.f7a3748f") else strings.t("auto.change.8df5aec0"))
                     }
                     OutlinedButton(
                         enabled = settings.customAdbPath != null && !isCheckingAdb,
                         onClick = {
                             AppSettingsShared.updateSettings(settings.copy(customAdbPath = null))
-                            adbActionMessage = "已恢复使用项目自带 adb。"
+                            adbActionMessage = strings.t("auto.restored_bundled_adb.f4ad0ea9")
                         }
                     ) {
-                        Text("恢复默认")
+                        Text(strings.t("auto.restore_default.38a935c9"))
                     }
                 }
             }
         }
 
-        // 1. 命令前显示执行时间
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = strings.t("auto.language.48dea00b"),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = strings.t("auto.before_manual_switching_the_app_follows_the_system_l.3baa80ed"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                APP_LANGUAGE_OPTIONS.forEach { language ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                AppSettingsShared.updateSettings(settings.copy(language = language))
+                            },
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (AppSettingsShared.currentLanguage == language) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        contentColor = if (AppSettingsShared.currentLanguage == language) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            RadioButton(
+                                selected = AppSettingsShared.currentLanguage == language,
+                                onClick = {
+                                    AppSettingsShared.updateSettings(settings.copy(language = language))
+                                }
+                            )
+                            Text(
+                                text = strings.languageDisplayName(language),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         Card(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
@@ -228,12 +300,12 @@ fun GeneralSettingsPanel(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "在命令前显示执行时间",
+                        text = strings.t("auto.show_command_timestamp.8e0e5ebd"),
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "开启后，命令记录中输出的命令前面会带有时间前缀（格式如：23:34:34）。",
+                        text = strings.t("auto.when_enabled_command_log_entries_include_a_time_pref.47b8a52f"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -247,7 +319,6 @@ fun GeneralSettingsPanel(
             }
         }
         
-        // 2. 显示命令执行耗时时长
         Card(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
@@ -258,12 +329,12 @@ fun GeneralSettingsPanel(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "显示命令执行耗时时长",
+                        text = strings.t("auto.show_command_duration.8b060224"),
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "开启后，每条 ADB 命令执行完成后，都会额外显示该命令执行所花费的时间。",
+                        text = strings.t("auto.when_enabled_each_completed_adb_command_logs_the_tim.937c1e6a"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -283,6 +354,7 @@ fun GeneralSettingsPanel(
 fun FileManagerSettingsPanel(
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     val scrollState = rememberScrollState()
     val settings = AppSettingsShared.currentSettings
 
@@ -300,11 +372,11 @@ fun FileManagerSettingsPanel(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "默认根目录",
+                    text = strings.t("auto.default_root_directory.b817d958"),
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = "文件管理模块进入、刷新设备和切换设备时，都会从该目录开始读取。",
+                    text = strings.t("auto.the_file_manager_starts_from_this_directory_when_ent.75400650"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

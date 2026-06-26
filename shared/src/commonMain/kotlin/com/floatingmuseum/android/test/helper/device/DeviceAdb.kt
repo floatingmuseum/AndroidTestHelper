@@ -1,5 +1,6 @@
 package com.floatingmuseum.android.test.helper.device
 
+import com.floatingmuseum.android.test.helper.localization.localized
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -63,20 +64,36 @@ data class ApkInstallResult(
     val message: String,
 )
 
-enum class DeviceQuickAction(val label: String) {
-    SHUTDOWN("关机"),
-    POWER("电源键"),
-    MENU("菜单键"),
-    HOME("HOME键"),
-    BACK("返回键"),
-    VOLUME_UP("音量加"),
-    VOLUME_DOWN("音量减"),
-    MUTE("静音"),
-    WAKE("亮屏"),
-    SLEEP("熄屏"),
-    REBOOT_RECOVERY("重启至Recovery"),
-    REBOOT_FASTBOOT("重启至FastBoot"),
-    CURRENT_ACTIVITY("查看当前界面"),
+enum class DeviceQuickAction {
+    SHUTDOWN,
+    POWER,
+    MENU,
+    HOME,
+    BACK,
+    VOLUME_UP,
+    VOLUME_DOWN,
+    MUTE,
+    WAKE,
+    SLEEP,
+    REBOOT_RECOVERY,
+    REBOOT_FASTBOOT,
+    CURRENT_ACTIVITY,
+}
+
+fun DeviceQuickAction.displayLabel(): String = when (this) {
+    DeviceQuickAction.SHUTDOWN -> localized("auto.shut_down.8a5ae346")
+    DeviceQuickAction.POWER -> localized("auto.power.64fb184f")
+    DeviceQuickAction.MENU -> localized("auto.menu.0ea06926")
+    DeviceQuickAction.HOME -> localized("auto.home.c90ee457")
+    DeviceQuickAction.BACK -> localized("auto.back.8c6f017e")
+    DeviceQuickAction.VOLUME_UP -> localized("auto.volume_up.541bb141")
+    DeviceQuickAction.VOLUME_DOWN -> localized("auto.volume_down.76d2f8ad")
+    DeviceQuickAction.MUTE -> localized("auto.mute.7f10e234")
+    DeviceQuickAction.WAKE -> localized("auto.wake.23581b44")
+    DeviceQuickAction.SLEEP -> localized("auto.sleep.e74552c5")
+    DeviceQuickAction.REBOOT_RECOVERY -> localized("auto.reboot_to_recovery.c6f901c2")
+    DeviceQuickAction.REBOOT_FASTBOOT -> localized("auto.reboot_to_fastboot.3dc369b5")
+    DeviceQuickAction.CURRENT_ACTIVITY -> localized("auto.current_activity.37ce7c5c")
 }
 
 interface DeviceAdb {

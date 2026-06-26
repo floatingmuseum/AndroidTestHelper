@@ -2,6 +2,9 @@ package com.floatingmuseum.android.test.helper.device
 
 import com.floatingmuseum.android.test.helper.AppRuntimePaths
 import com.floatingmuseum.android.test.helper.adb.AdbShell
+import com.floatingmuseum.android.test.helper.localization.commandError
+import com.floatingmuseum.android.test.helper.localization.commandStatus
+import com.floatingmuseum.android.test.helper.localization.localized
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -209,10 +212,10 @@ private class JvmDeviceAdb : DeviceAdb {
         )
         val localDirectory = File(outputDirectoryPath)
         if (!localDirectory.exists() && !localDirectory.mkdirs()) {
-            throw IllegalStateException("无法创建截图保存目录：${localDirectory.absolutePath}")
+            throw IllegalStateException(localized("auto.unable_to_create_screenshot_output_directory_0.2fcef420", localDirectory.absolutePath))
         }
         if (!localDirectory.isDirectory) {
-            throw IllegalStateException("截图保存路径不是目录：${localDirectory.absolutePath}")
+            throw IllegalStateException(localized("auto.screenshot_output_path_is_not_a_directory_0.7f693cdf", localDirectory.absolutePath))
         }
 
         AdbShell.executeAdb(
@@ -249,7 +252,7 @@ private class JvmDeviceAdb : DeviceAdb {
                         filePath = file.absolutePath,
                         fileName = file.name,
                         success = false,
-                        message = "文件不存在或不可读取",
+                        message = localized("auto.file_does_not_exist_or_is_not_readable.6afbc0ad"),
                     )
                 } else {
                     val extension = file.extension.lowercase()
@@ -273,7 +276,7 @@ private class JvmDeviceAdb : DeviceAdb {
                                 filePath = file.absolutePath,
                                 fileName = file.name,
                                 success = false,
-                                message = trimmedOutput.ifBlank { "安装命令未返回 Success" },
+                                message = trimmedOutput.ifBlank { localized("auto.install_command_did_not_return_success.34b0818f") },
                             )
                         }
                     } else if (extension == "xapk") {
@@ -283,7 +286,7 @@ private class JvmDeviceAdb : DeviceAdb {
                             filePath = file.absolutePath,
                             fileName = file.name,
                             success = false,
-                            message = "不支持的文件格式: $extension",
+                            message = localized("auto.unsupported_file_format_0.de4e3700", extension),
                         )
                     }
                 }
@@ -294,7 +297,7 @@ private class JvmDeviceAdb : DeviceAdb {
                     filePath = file.absolutePath,
                     fileName = file.name,
                     success = false,
-                    message = error.message ?: "未知错误",
+                    message = error.message ?: localized("auto.unknown_error.ea5e8956"),
                 )
             }
         }
@@ -358,10 +361,10 @@ private class JvmDeviceAdb : DeviceAdb {
         }
 
         if (result != null) {
-            logCommand("状态: 当前界面包名: ${result.first}")
-            logCommand("状态: 当前界面Activity: ${result.second}")
+            logCommand(commandStatus(localized("auto.current_package_0.917ae6e8", result.first)))
+            logCommand(commandStatus(localized("auto.current_activity_0.38d6de2e", result.second)))
         } else {
-            logCommand("错误: 无法获取当前界面信息")
+            logCommand(commandError(localized("auto.unable_to_get_current_screen_info.471ec82b")))
         }
     }
 
@@ -886,7 +889,7 @@ private suspend fun installXApk(
                 filePath = xapkFile.absolutePath,
                 fileName = xapkFile.name,
                 success = false,
-                message = "XAPK 解压后未找到 APK 文件",
+                message = localized("auto.no_apk_file_found_after_extracting_xapk.17656796"),
             )
         }
         
@@ -909,7 +912,7 @@ private suspend fun installXApk(
                 filePath = xapkFile.absolutePath,
                 fileName = xapkFile.name,
                 success = false,
-                message = "安装命令未返回 Success: $trimmedOutput",
+                message = localized("auto.install_command_did_not_return_success_0.e5c4bc98", trimmedOutput),
             )
         }
         
@@ -921,7 +924,7 @@ private suspend fun installXApk(
         for (expansion in expansions) {
             val expansionFile = baseDir.walk().firstOrNull { it.name == File(expansion.file).name }
             if (expansionFile == null || !expansionFile.exists()) {
-                obbResults.add("找不到 OBB 文件: ${expansion.file}")
+                obbResults.add(localized("auto.obb_file_not_found_0.8f93b07b", expansion.file))
                 obbSuccess = false
                 continue
             }
@@ -935,7 +938,7 @@ private suspend fun installXApk(
             }
             
             if (installPath.isBlank()) {
-                obbResults.add("无法确定 OBB 安装路径: ${expansion.file}")
+                obbResults.add(localized("auto.unable_to_determine_obb_install_path_0.f0185267", expansion.file))
                 obbSuccess = false
                 continue
             }
@@ -959,7 +962,7 @@ private suspend fun installXApk(
                 val pushDisplay = "adb -s $deviceSerial push \"${expansionFile.absolutePath}\" \"$deviceObbPath\""
                 AdbShell.executeAdb(pushArgs, pushDisplay, logCommand)
             } catch (e: Exception) {
-                obbResults.add("推送 OBB 失败 (${expansion.file}): ${e.message}")
+                obbResults.add(localized("auto.failed_to_push_obb_0_1.b7b8d46d", expansion.file, e.message))
                 obbSuccess = false
             }
         }
@@ -967,9 +970,9 @@ private suspend fun installXApk(
         val message = if (obbResults.isEmpty()) {
             "Success"
         } else if (obbSuccess) {
-            "Success (含 OBB 推送)"
+            localized("auto.success_with_obb_push.530640b1")
         } else {
-            "APK 安装成功，但 OBB 推送失败: ${obbResults.joinToString("; ")}"
+            localized("auto.apk_installed_but_obb_push_failed_0.e0f1a920", obbResults.joinToString("; "))
         }
         
         return ApkInstallResult(

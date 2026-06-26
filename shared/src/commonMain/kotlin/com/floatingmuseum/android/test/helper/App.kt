@@ -24,13 +24,18 @@ import androidx.compose.ui.unit.dp
 import com.floatingmuseum.android.test.helper.adb.createAdbDeviceManager
 import com.floatingmuseum.android.test.helper.datafill.DataFillModuleContent
 import com.floatingmuseum.android.test.helper.datafill.rememberDataFillModuleController
+import com.floatingmuseum.android.test.helper.app.ApplicationAction
 import com.floatingmuseum.android.test.helper.app.InstalledAppInfo
 import com.floatingmuseum.android.test.helper.app.ApplicationDetailContent
 import com.floatingmuseum.android.test.helper.app.ApplicationDetailSection
+import com.floatingmuseum.android.test.helper.app.ApplicationDetailSource
+import com.floatingmuseum.android.test.helper.app.ApplicationDetailItem
 import com.floatingmuseum.android.test.helper.app.PluginVersionInfo
 import com.floatingmuseum.android.test.helper.app.ApplicationTestPanel
 import com.floatingmuseum.android.test.helper.app.PluginCheckBanner
+import com.floatingmuseum.android.test.helper.app.applicationActionLabel
 import com.floatingmuseum.android.test.helper.app.createAppAdb
+import com.floatingmuseum.android.test.helper.app.displayTitle
 import com.floatingmuseum.android.test.helper.app.pluginCheckIgnoreKey
 import com.floatingmuseum.android.test.helper.app.removeInstalledApp
 import com.floatingmuseum.android.test.helper.device.DeviceSystemInfo
@@ -38,11 +43,16 @@ import com.floatingmuseum.android.test.helper.device.DeviceQuickAction
 import com.floatingmuseum.android.test.helper.device.SystemProperty
 import com.floatingmuseum.android.test.helper.device.createDeviceAdb
 import com.floatingmuseum.android.test.helper.device.DeviceTestPanel
+import com.floatingmuseum.android.test.helper.device.displayLabel
 import com.floatingmuseum.android.test.helper.devicelog.DeviceLogPanel
 import com.floatingmuseum.android.test.helper.devicelog.LogCaptureFloatingButton
 import com.floatingmuseum.android.test.helper.devicelog.rememberDeviceLogModuleController
 import com.floatingmuseum.android.test.helper.filemanager.FileManagerModuleContent
 import com.floatingmuseum.android.test.helper.filemanager.rememberFileManagerModuleController
+import com.floatingmuseum.android.test.helper.localization.commandError
+import com.floatingmuseum.android.test.helper.localization.commandStatus
+import com.floatingmuseum.android.test.helper.localization.localized
+import com.floatingmuseum.android.test.helper.localization.unknownError
 import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
 import com.floatingmuseum.android.test.helper.settings.SettingsModuleContent
 import com.floatingmuseum.android.test.helper.getCurrentTimeFormatted
@@ -80,7 +90,7 @@ fun App() {
         var isBannerDismissedThisSession by remember { mutableStateOf(false) }
         var localApkBytes by remember { mutableStateOf<ByteArray?>(null) }
         var localApkVersionInfo by remember { mutableStateOf<PluginVersionInfo?>(null) }
-        var statusText by remember { mutableStateOf("等待连接设备") }
+        var statusText by remember { mutableStateOf(localized("auto.waiting_for_device.762ff8f8")) }
         var isRunning by remember { mutableStateOf(false) }
         var commandLog by remember { mutableStateOf<List<String>>(emptyList()) }
         var bottomPanelHeightPx by remember { mutableStateOf<Float?>(null) }
@@ -120,6 +130,16 @@ fun App() {
             commandLog = (commandLog + "$timePrefix$command").takeLast(200)
         }
 
+        fun appendStatus(message: String) {
+            appendCommand(commandStatus(message))
+        }
+
+        fun appendError(message: String) {
+            appendCommand(commandError(message))
+        }
+
+        fun noReadyDeviceMessage(): String = localized("auto.select_a_device_in_device_state_first.cf5bc374")
+
         val dataFillModule = rememberDataFillModuleController(
             scope = scope,
             getSelectedReadyDevice = {
@@ -155,7 +175,7 @@ fun App() {
             if (isRunning) return
             scope.launch {
                 isRunning = true
-                statusText = "扫描设备..."
+                statusText = localized("auto.scanning_devices.36f421dd")
                 try {
                     val discoveredDevices = adbDeviceManager.listDevices(::appendCommand)
                     devices = discoveredDevices
@@ -194,54 +214,54 @@ fun App() {
 
                     if (nextSelectedDeviceSerial == null) {
                         statusText = if (discoveredDevices.isEmpty()) {
-                            "未发现设备"
+                            localized("auto.no_devices_found.0b4ef309")
                         } else {
-                            "发现 ${discoveredDevices.size} 台设备，无可用设备"
+                            localized("auto.found_0_devices_none_available.7cf498df", discoveredDevices.size)
                         }
-                        appendCommand("状态: $statusText")
+                        appendStatus(statusText)
                     } else if (selectedTestModule == TestModule.DataFill) {
-                        statusText = "发现 ${discoveredDevices.size} 台设备，读取存储..."
+                        statusText = localized("auto.found_0_devices_reading_storage.bdbccf66", discoveredDevices.size)
                         try {
                             dataFillModule.loadStorageInfoForDeviceScan(nextSelectedDeviceSerial)
-                            statusText = "发现 ${discoveredDevices.size} 台设备，已刷新存储"
-                            appendCommand("状态: 设备已连接，存储已刷新")
+                            statusText = localized("auto.found_0_devices_storage_refreshed.ee664033", discoveredDevices.size)
+                            appendStatus(localized("auto.device_connected_storage_refreshed.b9d926fe"))
                         } catch (error: Throwable) {
-                            statusText = error.message ?: "读取存储失败"
-                            appendCommand("错误: 读取存储失败 - ${error.message ?: "未知错误"}")
+                            statusText = error.message ?: localized("auto.storage_read_failed.ea8fd918")
+                            appendError(localized("auto.storage_read_failed.ea8fd918") + " - ${error.message ?: unknownError()}")
                         }
                     } else if (selectedTestModule == TestModule.Device) {
-                        statusText = "发现 ${discoveredDevices.size} 台设备，读取设备系统信息..."
+                        statusText = localized("auto.found_0_devices_reading_system_info.23c2e7a8", discoveredDevices.size)
                         try {
                             deviceSystemInfo = deviceAdb.loadSystemInfo(nextSelectedDeviceSerial, ::appendCommand)
                             systemProperties = deviceAdb.loadSystemProperties(nextSelectedDeviceSerial, ::appendCommand)
                             deviceSystemInfoLoadedSerial = nextSelectedDeviceSerial
                             devicePropertiesLoadedSerial = nextSelectedDeviceSerial
-                            statusText = "发现 ${discoveredDevices.size} 台设备，已刷新系统信息"
-                            appendCommand("状态: 设备已连接，系统信息与属性已刷新")
+                            statusText = localized("auto.found_0_devices_system_info_refreshed.e01eb8d9", discoveredDevices.size)
+                            appendStatus(localized("auto.device_connected_system_info_and_properties_refreshe.fcd4aa88"))
                         } catch (error: Throwable) {
-                            statusText = error.message ?: "读取系统信息失败"
-                            appendCommand("错误: 读取系统信息失败 - ${error.message ?: "未知错误"}")
+                            statusText = error.message ?: localized("auto.system_info_read_failed.f415358a")
+                            appendError(localized("auto.system_info_read_failed.f415358a") + " - ${error.message ?: unknownError()}")
                         }
                     } else if (selectedTestModule == TestModule.Log) {
-                        statusText = "发现 ${discoveredDevices.size} 台设备，准备抓取 Logcat"
-                        appendCommand("状态: $statusText")
+                        statusText = localized("auto.found_0_devices_ready_to_capture_logcat.9eb6aaef", discoveredDevices.size)
+                        appendStatus(statusText)
                     } else if (selectedTestModule == TestModule.FileManager) {
-                        statusText = "发现 ${discoveredDevices.size} 台设备，读取文件..."
+                        statusText = localized("auto.found_0_devices_reading_files.140270f5", discoveredDevices.size)
                         try {
                             fileManagerModule.loadRootForDeviceScan(nextSelectedDeviceSerial)
-                            statusText = "发现 ${discoveredDevices.size} 台设备，已读取文件"
-                            appendCommand("状态: 设备已连接，文件目录已刷新")
+                            statusText = localized("auto.found_0_devices_files_loaded.877e8979", discoveredDevices.size)
+                            appendStatus(localized("auto.device_connected_file_directory_refreshed.67d4b380"))
                         } catch (error: Throwable) {
-                            statusText = error.message ?: "读取文件失败"
-                            appendCommand("错误: 读取文件失败 - ${error.message ?: "未知错误"}")
+                            statusText = error.message ?: localized("auto.file_read_failed.62cc5bec")
+                            appendError(localized("auto.file_read_failed.62cc5bec") + " - ${error.message ?: unknownError()}")
                         }
                     } else {
-                        statusText = "发现 ${discoveredDevices.size} 台设备，准备读取应用"
-                        appendCommand("状态: $statusText")
+                        statusText = localized("auto.found_0_devices_ready_to_read_apps.88e40384", discoveredDevices.size)
+                        appendStatus(statusText)
                     }
                 } catch (error: Throwable) {
-                    statusText = error.message ?: "扫描设备失败"
-                    appendCommand("错误: 扫描设备失败 - ${error.message ?: "未知错误"}")
+                    statusText = error.message ?: localized("auto.device_scan_failed.6d2abdf4")
+                    appendError(localized("auto.device_scan_failed.6d2abdf4") + " - ${error.message ?: unknownError()}")
                 } finally {
                     isRunning = false
                 }
@@ -255,16 +275,16 @@ fun App() {
                 isLoadingDeviceSystemInfo = true
                 deviceSystemInfo = null
                 deviceSystemInfoLoadedSerial = deviceSerial
-                statusText = "读取设备系统信息..."
-                appendCommand("状态: 读取设备系统信息...")
+                statusText = localized("auto.reading_device_system_info.eb9fdd51")
+                appendStatus(localized("auto.reading_device_system_info.eb9fdd51"))
                 try {
                     deviceSystemInfo = deviceAdb.loadSystemInfo(deviceSerial, ::appendCommand)
-                    statusText = "读取设备系统信息完成"
-                    appendCommand("状态: 读取设备系统信息完成")
+                    statusText = localized("auto.device_system_info_loaded.9c9737ed")
+                    appendStatus(statusText)
                 } catch (error: Throwable) {
                     deviceSystemInfoLoadedSerial = null
-                    statusText = error.message ?: "读取设备系统信息失败"
-                    appendCommand("错误: 读取设备系统信息失败 - ${error.message ?: "未知错误"}")
+                    statusText = error.message ?: localized("auto.device_system_info_read_failed.fbb280e1")
+                    appendError(localized("auto.device_system_info_read_failed.fbb280e1") + " - ${error.message ?: unknownError()}")
                 } finally {
                     isLoadingDeviceSystemInfo = false
                     isRunning = false
@@ -279,16 +299,16 @@ fun App() {
                 isLoadingDeviceProperties = true
                 systemProperties = emptyList()
                 devicePropertiesLoadedSerial = deviceSerial
-                statusText = "读取系统属性..."
-                appendCommand("状态: 读取系统属性...")
+                statusText = localized("auto.reading_system_properties.a66e52e0")
+                appendStatus(localized("auto.reading_system_properties.a66e52e0"))
                 try {
                     systemProperties = deviceAdb.loadSystemProperties(deviceSerial, ::appendCommand)
-                    statusText = "读取系统属性完成，共 ${systemProperties.size} 个属性"
-                    appendCommand("状态: 读取系统属性完成，共 ${systemProperties.size} 个属性")
+                    statusText = localized("auto.system_properties_loaded_0_properties.06d5f95e", systemProperties.size)
+                    appendStatus(statusText)
                 } catch (error: Throwable) {
                     devicePropertiesLoadedSerial = null
-                    statusText = error.message ?: "读取系统属性失败"
-                    appendCommand("错误: 读取系统属性失败 - ${error.message ?: "未知错误"}")
+                    statusText = error.message ?: localized("auto.system_properties_read_failed.54ef3499")
+                    appendError(localized("auto.system_properties_read_failed.54ef3499") + " - ${error.message ?: unknownError()}")
                 } finally {
                     isLoadingDeviceProperties = false
                     isRunning = false
@@ -300,18 +320,18 @@ fun App() {
             if (isRunning) return
             scope.launch {
                 isRunning = true
-                statusText = "正在重启设备..."
-                appendCommand("状态: 开始重启设备 $deviceSerial")
+                statusText = localized("auto.rebooting_device.e7db9aff")
+                appendStatus(localized("auto.start_rebooting_device_0.2d49f3a3", deviceSerial))
                 try {
                     deviceAdb.rebootDevice(deviceSerial, ::appendCommand)
-                    statusText = "重启命令已发送"
-                    appendCommand("状态: 重启命令已发送完成，设备即将重启")
+                    statusText = localized("auto.reboot_command_sent.0c3ed4f8")
+                    appendStatus(localized("auto.reboot_command_sent_device_will_reboot.1c2dfbc4"))
                     selectedDeviceSerial = null
                     deviceSystemInfo = null
                     systemProperties = emptyList()
                 } catch (error: Throwable) {
-                    statusText = error.message ?: "重启设备失败"
-                    appendCommand("错误: 重启设备失败 - ${error.message ?: "未知错误"}")
+                    statusText = error.message ?: localized("auto.device_reboot_failed.87f106a4")
+                    appendError(localized("auto.device_reboot_failed.87f106a4") + " - ${error.message ?: unknownError()}")
                 } finally {
                     isRunning = false
                 }
@@ -322,12 +342,13 @@ fun App() {
             if (isRunning) return
             scope.launch {
                 isRunning = true
-                statusText = "正在执行${action.label}..."
-                appendCommand("状态: 开始执行${action.label} $deviceSerial")
+                val actionLabel = action.displayLabel()
+                statusText = localized("auto.running_0.c6a590d5", actionLabel)
+                appendStatus(localized("auto.start_0_on_1.4da0d1f5", actionLabel, deviceSerial))
                 try {
                     deviceAdb.runQuickAction(deviceSerial, action, ::appendCommand)
-                    statusText = "${action.label}命令已发送"
-                    appendCommand("状态: ${action.label}命令已发送完成")
+                    statusText = localized("auto.0_command_sent.8a227ddb", actionLabel)
+                    appendStatus(localized("auto.0_command_sent.9cbe1344", actionLabel))
                     if (action == DeviceQuickAction.SHUTDOWN ||
                         action == DeviceQuickAction.REBOOT_RECOVERY ||
                         action == DeviceQuickAction.REBOOT_FASTBOOT
@@ -337,8 +358,8 @@ fun App() {
                         systemProperties = emptyList()
                     }
                 } catch (error: Throwable) {
-                    statusText = error.message ?: "${action.label}失败"
-                    appendCommand("错误: ${action.label}失败 - ${error.message ?: "未知错误"}")
+                    statusText = error.message ?: localized("auto.0_failed.7a359370", actionLabel)
+                    appendError(localized("auto.0_failed.7a359370", actionLabel) + " - ${error.message ?: unknownError()}")
                 } finally {
                     isRunning = false
                 }
@@ -349,26 +370,26 @@ fun App() {
             if (isRunning) return
             scope.launch {
                 isRunning = true
-                statusText = "选择截图保存目录..."
-                appendCommand("状态: 选择截图保存目录")
+                statusText = localized("auto.select_screenshot_save_directory.834722ee")
+                appendStatus(localized("auto.select_screenshot_save_directory.86e4055a"))
                 try {
                     val outputPath = selectDirectory(
-                        dialogTitle = "选择截图保存路径",
-                        approveButtonText = "保存",
+                        dialogTitle = localized("auto.select_screenshot_save_path.7fedf467"),
+                        approveButtonText = localized("auto.save.429a21f2"),
                     )
                     if (outputPath == null) {
-                        statusText = "已取消截图"
-                        appendCommand("状态: 已取消截图")
+                        statusText = localized("auto.screenshot_cancelled.1b9f33e9")
+                        appendStatus(statusText)
                     } else {
-                        statusText = "正在截取设备屏幕..."
-                        appendCommand("状态: 开始截取设备 $deviceSerial 屏幕，保存到 $outputPath")
+                        statusText = localized("auto.capturing_device_screen.55bda553")
+                        appendStatus(localized("auto.start_screenshot_on_device_0_save_to_1.3eea5e54", deviceSerial, outputPath))
                         val result = deviceAdb.takeScreenshot(deviceSerial, outputPath, ::appendCommand)
-                        statusText = "屏幕截图成功，已保存到 ${result.localPath}"
-                        appendCommand("状态: 屏幕截图成功，本地文件: ${result.localPath}，设备文件: ${result.remotePath}")
+                        statusText = localized("auto.screenshot_saved_to_0.be22fabc", result.localPath)
+                        appendStatus(localized("auto.screenshot_succeeded_local_file_0_device_file_1.f844cafe", result.localPath, result.remotePath))
                     }
                 } catch (error: Throwable) {
-                    statusText = error.message ?: "屏幕截图失败"
-                    appendCommand("错误: 屏幕截图失败 - ${error.message ?: "未知错误"}")
+                    statusText = error.message ?: localized("auto.screenshot_failed.564fd41a")
+                    appendError(localized("auto.screenshot_failed.564fd41a") + " - ${error.message ?: unknownError()}")
                 } finally {
                     isRunning = false
                 }
@@ -379,28 +400,28 @@ fun App() {
             if (isRunning) return
             scope.launch {
                 isRunning = true
-                statusText = "选择要安装的 APK..."
-                appendCommand("状态: 选择要安装的 APK")
+                statusText = localized("auto.select_apk_files_to_install.34a69122")
+                appendStatus(localized("auto.select_apk_files_to_install.c4350f36"))
                 try {
                     val apkPaths = selectApkFiles(
-                        dialogTitle = "选择要安装的 APK",
-                        approveButtonText = "安装",
+                        dialogTitle = localized("auto.select_apk_files_to_install.c4350f36"),
+                        approveButtonText = localized("auto.install.e1c753b2"),
                     )
                     if (apkPaths.isEmpty()) {
-                        statusText = "已取消安装应用"
-                        appendCommand("状态: 已取消安装应用")
+                        statusText = localized("auto.app_installation_cancelled.b67c3019")
+                        appendStatus(statusText)
                     } else {
-                        statusText = "正在安装 ${apkPaths.size} 个应用..."
-                        appendCommand("状态: 开始向设备 $deviceSerial 安装 ${apkPaths.size} 个 APK")
+                        statusText = localized("auto.installing_0_apps.ab91b200", apkPaths.size)
+                        appendStatus(localized("auto.start_installing_0_apk_files_to_device_1.846939de", apkPaths.size, deviceSerial))
                         val results = deviceAdb.installApplications(deviceSerial, apkPaths, ::appendCommand)
                         val successCount = results.count { it.success }
                         val failureResults = results.filterNot { it.success }
 
                         results.forEach { result ->
                             if (result.success) {
-                                appendCommand("状态: 安装成功 - ${result.fileName}")
+                                appendStatus(localized("auto.install_succeeded.c2bba9b2") + " - ${result.fileName}")
                             } else {
-                                appendCommand("错误: 安装失败 - ${result.fileName} - ${result.message}")
+                                appendError(localized("auto.install_failed.41922c40") + " - ${result.fileName} - ${result.message}")
                             }
                         }
 
@@ -419,18 +440,18 @@ fun App() {
                         }
 
                         statusText = if (failureResults.isEmpty()) {
-                            "应用安装完成，成功 $successCount / ${results.size}"
+                            localized("auto.app_installation_complete_succeeded_0_1.ab878451", successCount, results.size)
                         } else {
-                            "应用安装完成，成功 $successCount / ${results.size}，失败 ${failureResults.size} 个"
+                            localized("auto.app_installation_complete_succeeded_0_1_failed_2.06a49e90", successCount, results.size, failureResults.size)
                         }
-                        appendCommand("状态: $statusText")
+                        appendStatus(statusText)
                     }
                 } catch (error: CancellationException) {
-                    statusText = "安装应用已停止"
-                    appendCommand("状态: 安装应用已停止")
+                    statusText = localized("auto.app_installation_stopped.12d501d2")
+                    appendStatus(statusText)
                 } catch (error: Throwable) {
-                    statusText = error.message ?: "安装应用失败"
-                    appendCommand("错误: 安装应用失败 - ${error.message ?: "未知错误"}")
+                    statusText = error.message ?: localized("auto.app_installation_failed.21882c2a")
+                    appendError(localized("auto.app_installation_failed.21882c2a") + " - ${error.message ?: unknownError()}")
                 } finally {
                     isRunning = false
                 }
@@ -449,21 +470,21 @@ fun App() {
                 applicationDetailPackageName = null
                 applicationDetailSections = emptyMap()
                 loadingApplicationDetailSection = null
-                statusText = "读取第三方应用..."
-                appendCommand("状态: 读取第三方应用...")
+                statusText = localized("auto.reading_third_party_apps.4e8f83ca")
+                appendStatus(localized("auto.reading_third_party_apps.4e8f83ca"))
                 try {
                     thirdPartyApps = appAdb.loadInstalledApps(deviceSerial, false, ::appendCommand) { current, total ->
                         thirdPartyProgressCurrent = current
                         thirdPartyProgressTotal = total
-                        statusText = "读取第三方应用: $current / $total..."
+                        statusText = localized("auto.reading_third_party_apps_0_1.0485f183", current, total)
                     }
                     val disabledCount = thirdPartyApps.count { !it.isEnabled }
-                    statusText = "已读取 ${thirdPartyApps.size} 个第三方应用，禁用 $disabledCount 个"
-                    appendCommand("状态: 已读取 ${thirdPartyApps.size} 个第三方应用，禁用 $disabledCount 个")
+                    statusText = localized("auto.loaded_0_third_party_apps_1_disabled.3fb14c9c", thirdPartyApps.size, disabledCount)
+                    appendStatus(statusText)
                 } catch (error: Throwable) {
                     thirdPartyLoadedSerial = null
-                    statusText = error.message ?: "读取第三方应用失败"
-                    appendCommand("错误: 读取第三方应用失败 - ${error.message ?: "未知错误"}")
+                    statusText = error.message ?: localized("auto.third_party_app_read_failed.70eaad85")
+                    appendError(localized("auto.third_party_app_read_failed.70eaad85") + " - ${error.message ?: unknownError()}")
                 } finally {
                     isLoadingThirdParty = false
                     isRunning = false
@@ -484,18 +505,18 @@ fun App() {
                 applicationDetailPackageName = null
                 applicationDetailSections = emptyMap()
                 loadingApplicationDetailSection = null
-                statusText = "读取系统应用..."
-                appendCommand("状态: 读取系统应用...")
+                statusText = localized("auto.reading_system_apps.584fc54c")
+                appendStatus(localized("auto.reading_system_apps.584fc54c"))
                 try {
                     val apps = appAdb.loadInstalledApps(deviceSerial, true, ::appendCommand) { current, total ->
                         systemProgressCurrent = current
                         systemProgressTotal = total
-                        statusText = "读取系统应用: $current / $total..."
+                        statusText = localized("auto.reading_system_apps_0_1.cc0c89b3", current, total)
                     }
                     systemApps = apps
                     val disabledCount = apps.count { !it.isEnabled }
-                    statusText = "已读取 ${apps.size} 个系统应用，禁用 $disabledCount 个"
-                    appendCommand("状态: 已读取 ${apps.size} 个系统应用，禁用 $disabledCount 个")
+                    statusText = localized("auto.loaded_0_system_apps_1_disabled.984c8678", apps.size, disabledCount)
+                    appendStatus(statusText)
                     appAdb.saveCachedSystemApps(deviceSerial, apps)
                     val cached = appAdb.loadCachedSystemApps(deviceSerial)
                     if (cached != null) {
@@ -504,8 +525,8 @@ fun App() {
                     systemCacheCheckedSerial = deviceSerial
                 } catch (error: Throwable) {
                     systemLoadedSerial = null
-                    statusText = error.message ?: "读取系统应用失败"
-                    appendCommand("错误: 读取系统应用失败 - ${error.message ?: "未知错误"}")
+                    statusText = error.message ?: localized("auto.system_app_read_failed.2d2dd351")
+                    appendError(localized("auto.system_app_read_failed.2d2dd351") + " - ${error.message ?: unknownError()}")
                 } finally {
                     isLoadingSystem = false
                     isRunning = false
@@ -517,15 +538,15 @@ fun App() {
             if (isRunning) return
             val deviceSerial = selectedReadyDevice?.serialNumber
             if (deviceSerial == null) {
-                statusText = "先选择状态为 device 的设备"
-                appendCommand("错误: 先选择状态为 device 的设备")
+                statusText = noReadyDeviceMessage()
+                appendError(statusText)
                 return
             }
 
             scope.launch {
                 isRunning = true
-                statusText = "清空应用列表缓存..."
-                appendCommand("状态: 清空应用列表缓存...")
+                statusText = localized("auto.clearing_app_list_cache.8fe5f820")
+                appendStatus(localized("auto.clearing_app_list_cache.8fe5f820"))
                 try {
                     appAdb.clearApplicationListCache(deviceSerial)
                     thirdPartyApps = emptyList()
@@ -542,11 +563,11 @@ fun App() {
                     applicationDetailPackageName = null
                     applicationDetailSections = emptyMap()
                     loadingApplicationDetailSection = null
-                    statusText = "已清空应用列表缓存"
-                    appendCommand("状态: 已清空应用列表缓存")
+                    statusText = localized("auto.app_list_cache_cleared.932fc598")
+                    appendStatus(statusText)
                 } catch (error: Throwable) {
-                    statusText = error.message ?: "清空应用列表缓存失败"
-                    appendCommand("错误: 清空应用列表缓存失败 - ${error.message ?: "未知错误"}")
+                    statusText = error.message ?: localized("auto.app_list_cache_clear_failed.4583079a")
+                    appendError(localized("auto.app_list_cache_clear_failed.4583079a") + " - ${error.message ?: unknownError()}")
                 } finally {
                     isRunning = false
                 }
@@ -557,8 +578,8 @@ fun App() {
             if (isRunning) return
             val deviceSerial = selectedReadyDevice?.serialNumber
             if (deviceSerial == null) {
-                statusText = "先选择状态为 device 的设备"
-                appendCommand("错误: 先选择状态为 device 的设备")
+                statusText = noReadyDeviceMessage()
+                appendError(statusText)
                 return
             }
 
@@ -569,8 +590,9 @@ fun App() {
                     applicationDetailSections = emptyMap()
                 }
                 loadingApplicationDetailSection = section
-                statusText = "读取 ${app.packageName} ${section.title}信息..."
-                appendCommand("状态: 读取 ${app.packageName} ${section.title}信息...")
+                val sectionTitle = section.displayTitle()
+                statusText = localized("auto.reading_0_1_info.b2c00628", app.packageName, sectionTitle)
+                appendStatus(statusText)
                 try {
                     val content = appAdb.loadApplicationDetail(
                         deviceSerial = deviceSerial,
@@ -581,18 +603,18 @@ fun App() {
                     if (applicationDetailPackageName == app.packageName) {
                         applicationDetailSections = applicationDetailSections + (section to content)
                     }
-                    statusText = "已读取 ${app.packageName} ${section.title}信息"
-                    appendCommand("状态: 已读取 ${app.packageName} ${section.title}信息")
+                    statusText = localized("auto.read_0_1_info.91137c16", app.packageName, sectionTitle)
+                    appendStatus(statusText)
                 } catch (error: Throwable) {
-                    val message = error.message ?: "读取应用详情失败"
+                    val message = error.message ?: localized("auto.app_detail_read_failed.ae413164")
                     if (applicationDetailPackageName == app.packageName) {
                         applicationDetailSections = applicationDetailSections + (
                             section to ApplicationDetailContent(
                                 section = section,
-                                source = com.floatingmuseum.android.test.helper.app.ApplicationDetailSource.ADB,
+                                source = ApplicationDetailSource.ADB,
                                 items = listOf(
-                                    com.floatingmuseum.android.test.helper.app.ApplicationDetailItem(
-                                        label = "错误",
+                                    ApplicationDetailItem(
+                                        label = localized("auto.error.5966c2d3"),
                                         value = message,
                                     ),
                                 ),
@@ -600,7 +622,7 @@ fun App() {
                         )
                     }
                     statusText = message
-                    appendCommand("错误: 读取 ${app.packageName} ${section.title}信息失败 - $message")
+                    appendError(localized("auto.read_0_1_info_failed.eda8a8a6", app.packageName, sectionTitle) + " - $message")
                 } finally {
                     loadingApplicationDetailSection = null
                     isRunning = false
@@ -638,51 +660,52 @@ fun App() {
             if (isRunning) return
             val deviceSerial = selectedReadyDevice?.serialNumber
             if (deviceSerial == null) {
-                statusText = "先选择状态为 device 的设备"
-                appendCommand("错误: 先选择状态为 device 的设备")
+                statusText = noReadyDeviceMessage()
+                appendError(statusText)
                 return
             }
 
             scope.launch {
                 isRunning = true
-                statusText = "$action ${app.packageName}..."
-                appendCommand("状态: 开始$action ${app.packageName}...")
+                val actionLabel = applicationActionLabel(action)
+                statusText = localized("auto.0_1.c181f623", actionLabel, app.packageName)
+                appendStatus(localized("auto.start_0_1.d7d85e25", actionLabel, app.packageName))
                 try {
                     when (action) {
-                        "启动应用" -> {
+                        ApplicationAction.LAUNCH -> {
                             appAdb.launchApplication(deviceSerial, app.packageName, ::appendCommand)
-                            statusText = "已启动 ${app.packageName}"
-                            appendCommand("状态: 已启动 ${app.packageName}")
+                            statusText = localized("auto.launched_0.f1477d6a", app.packageName)
+                            appendStatus(statusText)
                         }
-                        "结束应用" -> {
+                        ApplicationAction.STOP -> {
                             appAdb.stopApplication(deviceSerial, app.packageName, ::appendCommand)
-                            statusText = "已结束 ${app.packageName}"
-                            appendCommand("状态: 已结束 ${app.packageName}")
+                            statusText = localized("auto.force_stopped_0.68623e10", app.packageName)
+                            appendStatus(statusText)
                         }
-                        "清除数据" -> {
+                        ApplicationAction.CLEAR_DATA -> {
                             appAdb.clearApplicationData(deviceSerial, app.packageName, ::appendCommand)
-                            statusText = "已清除数据 ${app.packageName}"
-                            appendCommand("状态: 已清除数据 ${app.packageName}")
+                            statusText = localized("auto.cleared_data_for_0.e6b79858", app.packageName)
+                            appendStatus(statusText)
                         }
-                        "停用应用" -> {
+                        ApplicationAction.DISABLE -> {
                             appAdb.disableApplication(deviceSerial, app.packageName, ::appendCommand)
                             val nextSystemApps = updateApplicationEnabledState(app.packageName, false)
                             if (app.isSystem) {
                                 appAdb.saveCachedSystemApps(deviceSerial, nextSystemApps)
                             }
-                            statusText = "已停用 ${app.packageName}"
-                            appendCommand("状态: 已停用 ${app.packageName}")
+                            statusText = localized("auto.disabled_0.0dbf6a84", app.packageName)
+                            appendStatus(statusText)
                         }
-                        "启用应用" -> {
+                        ApplicationAction.ENABLE -> {
                             appAdb.enableApplication(deviceSerial, app.packageName, ::appendCommand)
                             val nextSystemApps = updateApplicationEnabledState(app.packageName, true)
                             if (app.isSystem) {
                                 appAdb.saveCachedSystemApps(deviceSerial, nextSystemApps)
                             }
-                            statusText = "已启用 ${app.packageName}"
-                            appendCommand("状态: 已启用 ${app.packageName}")
+                            statusText = localized("auto.enabled_0.f1167c7c", app.packageName)
+                            appendStatus(statusText)
                         }
-                        "卸载应用" -> {
+                        ApplicationAction.UNINSTALL -> {
                             appAdb.uninstallApplication(deviceSerial, app.packageName, app.isSystem, ::appendCommand)
                             val nextSystemApps = removeApplicationFromLists(app.packageName)
                             if (app.isSystem) {
@@ -690,61 +713,61 @@ fun App() {
                                 val cached = appAdb.loadCachedSystemApps(deviceSerial)
                                 systemAppsCacheFormattedTime = cached?.cacheTimeFormatted
                             }
-                            statusText = "已卸载 ${app.packageName}"
-                            appendCommand("状态: 已卸载 ${app.packageName}")
+                            statusText = localized("auto.uninstalled_0.b26c29fe", app.packageName)
+                            appendStatus(statusText)
                         }
-                        "导出APK" -> {
+                        ApplicationAction.EXPORT_APK -> {
                             val outputPath = selectDirectory(
-                                dialogTitle = "选择 APK 导出路径",
-                                approveButtonText = "导出",
+                                dialogTitle = localized("auto.select_apk_export_path.19b08cbd"),
+                                approveButtonText = localized("auto.export.5a8c8fe7"),
                             )
                             if (outputPath == null) {
-                                statusText = "已取消导出"
-                                appendCommand("状态: 已取消导出")
+                                statusText = localized("auto.export_cancelled.658ddbf7")
+                                appendStatus(statusText)
                             } else {
                                 val result = appAdb.exportApplicationApk(deviceSerial, app.packageName, outputPath, ::appendCommand)
-                                statusText = "已导出 ${result.fileCount} 个 APK 到 ${result.directoryPath}"
-                                appendCommand("状态: 已导出 ${result.fileCount} 个 APK 到 ${result.directoryPath}")
+                                statusText = localized("auto.exported_0_apk_files_to_1.933e41a3", result.fileCount, result.directoryPath)
+                                appendStatus(statusText)
                             }
                         }
-                        "保存图标" -> {
+                        ApplicationAction.SAVE_ICON -> {
                             val iconBytes = app.iconBytes
                             if (iconBytes == null) {
-                                statusText = "无法保存：应用没有图标数据"
-                                appendCommand("错误: 无法保存：应用没有图标数据")
+                                statusText = localized("auto.cannot_save_app_has_no_icon_data.978f32e2")
+                                appendError(statusText)
                             } else {
                                 val outputPath = selectDirectory(
-                                    dialogTitle = "选择图标保存路径",
-                                    approveButtonText = "保存",
+                                    dialogTitle = localized("auto.select_icon_save_path.72013e8c"),
+                                    approveButtonText = localized("auto.save.429a21f2"),
                                 )
                                 if (outputPath == null) {
-                                    statusText = "已取消保存图标"
-                                    appendCommand("状态: 已取消保存图标")
+                                    statusText = localized("auto.icon_save_cancelled.46f65426")
+                                    appendStatus(statusText)
                                 } else {
                                     val safeAppName = app.appName.replace(Regex("[\\\\/:*?\"<>|]"), "_")
                                     val fileName = "${safeAppName}_${app.packageName}.png"
                                     try {
                                         saveBytesToFile(outputPath, fileName, iconBytes)
-                                        statusText = "图标已成功保存到 $outputPath/$fileName"
-                                        appendCommand("状态: 图标已成功保存到 $outputPath/$fileName")
+                                        statusText = localized("auto.icon_saved_to_0_1.7ffae884", outputPath, fileName)
+                                        appendStatus(statusText)
                                     } catch (e: Exception) {
-                                        statusText = "保存图标失败: ${e.message}"
-                                        appendCommand("错误: 保存图标失败: ${e.message}")
+                                        statusText = localized("auto.icon_save_failed_0.3f0fbb2a", e.message)
+                                        appendError(statusText)
                                     }
                                 }
                             }
                         }
                         else -> {
-                            statusText = "未知应用操作：$action"
-                            appendCommand("错误: 未知应用操作：$action")
+                            statusText = localized("auto.unknown_app_action_0.2a004304", action)
+                            appendError(statusText)
                         }
                     }
                 } catch (error: CancellationException) {
-                    statusText = "应用操作已停止"
-                    appendCommand("状态: 应用操作已停止")
+                    statusText = localized("auto.app_operation_stopped.2fddacbf")
+                    appendStatus(statusText)
                 } catch (error: Throwable) {
-                    statusText = error.message ?: "$action 失败"
-                    appendCommand("错误: $action 失败 - ${error.message ?: "未知错误"}")
+                    statusText = error.message ?: localized("auto.0_failed.7a359370", actionLabel)
+                    appendError(localized("auto.0_failed.7a359370", actionLabel) + " - ${error.message ?: unknownError()}")
                 } finally {
                     isRunning = false
                 }
@@ -761,11 +784,11 @@ fun App() {
                             localApkBytes = bytes
                             localApkVersionInfo = appAdb.getApkVersionInfo(bytes)
                         } else {
-                            appendCommand("错误: 未能在 resources/files 下找到 ATHPlugin apk 文件")
+                            appendError(localized("auto.athplugin_apk_file_was_not_found_under_resources_fil.fb27afb1"))
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
-                        appendCommand("错误: 未能在 resources/files 下加载到 ATHPlugin apk 文件: ${e.message}")
+                        appendError(localized("auto.failed_to_load_athplugin_apk_file_under_resources_fi.006f4dc8") + ": ${e.message}")
                     }
                 }
 
@@ -780,17 +803,17 @@ fun App() {
                     try {
                         val installedVersionInfo = appAdb.getInstalledPluginVersionInfo(deviceSerial, ::appendCommand)
                         if (installedVersionInfo == null) {
-                            bannerMessage = "检测到当前设备未安装辅助插件(ATHPlugin)，安装后可极大提升应用数据获取的效率与性能。"
+                            bannerMessage = localized("auto.athplugin_is_not_installed_on_this_device_installing.4986bdb1")
                             bannerActionType = BannerActionType.INSTALL
                             showPluginBanner = true
                         } else {
                             val isPluginEnabled = appAdb.isPluginEnabled(deviceSerial, ::appendCommand)
                             if (!isPluginEnabled) {
-                                bannerMessage = "检测到辅助插件 (ATHPlugin) 当前处于禁用状态。这可能会延长应用信息的获取时间，且会影响获取结果的完整性。建议立即启用。"
+                                bannerMessage = localized("auto.athplugin_is_disabled_app_info_loading_may_take_long.55fe0abb")
                                 bannerActionType = BannerActionType.ENABLE
                                 showPluginBanner = true
                             } else if (installedVersionInfo.versionCode < targetLocalVersionInfo.versionCode) {
-                                bannerMessage = "检测到设备上已安装的辅助插件(ATHPlugin)版本过低(当前: ${installedVersionInfo.versionName}，最新: ${targetLocalVersionInfo.versionName})，建议更新。"
+                                bannerMessage = localized("auto.installed_athplugin_is_outdated_current_0_latest_1_u.9a46c154", installedVersionInfo.versionName, targetLocalVersionInfo.versionName)
                                 bannerActionType = BannerActionType.UPDATE
                                 showPluginBanner = true
                             } else {
@@ -904,9 +927,9 @@ fun App() {
                 ) {
                 if (showPluginBanner && !isBannerDismissedThisSession) {
                     val actionLabel = when (bannerActionType) {
-                        BannerActionType.INSTALL -> "立即安装"
-                        BannerActionType.UPDATE -> "立即更新"
-                        BannerActionType.ENABLE -> "立即启用"
+                        BannerActionType.INSTALL -> localized("auto.install_now.705c59ae")
+                        BannerActionType.UPDATE -> localized("auto.update_now.9250be6a")
+                        BannerActionType.ENABLE -> localized("auto.enable_now.4e53e542")
                     }
                     PluginCheckBanner(
                         message = bannerMessage,
@@ -918,23 +941,23 @@ fun App() {
                                     if (!isEnablingPlugin) {
                                         isEnablingPlugin = true
                                         scope.launch {
-                                            statusText = "正在启用辅助插件..."
-                                            appendCommand("状态: 开始在设备 $serial 上启用辅助插件...")
+                                            statusText = localized("auto.enabling_helper_plugin.39bc8397")
+                                            appendStatus(localized("auto.start_enabling_helper_plugin_on_device_0.1e5c6c92", serial))
                                             try {
                                                 appAdb.enableApplication(serial, "com.floatingmuseum.android.test.helper.plugin", ::appendCommand)
                                                 // 延迟 500ms，等待系统状态更新
                                                 kotlinx.coroutines.delay(500)
                                                 val isEnabled = appAdb.isPluginEnabled(serial, ::appendCommand)
                                                 if (isEnabled) {
-                                                    statusText = "辅助插件已启用"
-                                                    appendCommand("状态: 设备 $serial 上的辅助插件已启用成功")
+                                                    statusText = localized("auto.helper_plugin_enabled.fefddac5")
+                                                    appendStatus(localized("auto.helper_plugin_enabled_on_device_0.2c0d5229", serial))
                                                 } else {
-                                                    statusText = "自动启用失败，建议手动启用"
-                                                    appendCommand("错误: 设备 $serial 上的辅助插件启用命令执行完毕，但重新检测状态仍为禁用，请尝试在手机设置中手动启用。")
+                                                    statusText = localized("auto.automatic_enable_failed_manual_enable_is_recommended.572c217c")
+                                                    appendError(localized("auto.helper_plugin_enable_command_finished_on_device_0_bu.2f99c577", serial))
                                                 }
                                             } catch (e: Exception) {
-                                                statusText = "自动启用失败，建议手动启用"
-                                                appendCommand("错误: 在设备 $serial 上启用辅助插件失败 - ${e.message}")
+                                                statusText = localized("auto.automatic_enable_failed_manual_enable_is_recommended.572c217c")
+                                                appendError(localized("auto.failed_to_enable_helper_plugin_on_device_0.9e500036", serial) + " - ${e.message}")
                                             } finally {
                                                 isEnablingPlugin = false
                                                 showPluginBanner = false // 无论成功与否，横幅直接隐藏，避免常驻
@@ -946,16 +969,16 @@ fun App() {
                                     if (bytes != null && !isInstallingPlugin) {
                                         isInstallingPlugin = true
                                         scope.launch {
-                                            statusText = "正在设备 $serial 上安装辅助插件..."
-                                            appendCommand("状态: 开始在设备 $serial 上安装辅助插件...")
+                                            statusText = localized("auto.installing_helper_plugin_on_device_0.60df6f21", serial)
+                                            appendStatus(localized("auto.start_installing_helper_plugin_on_device_0.4039eff2", serial))
                                             val success = appAdb.installPluginApk(serial, bytes, ::appendCommand)
                                             if (success) {
-                                                statusText = "辅助插件安装成功"
-                                                appendCommand("状态: 设备 $serial 上的辅助插件安装成功")
+                                                statusText = localized("auto.helper_plugin_installed.3583e339")
+                                                appendStatus(localized("auto.helper_plugin_installed_on_device_0.2e221c2f", serial))
                                                 showPluginBanner = false
                                             } else {
-                                                statusText = "辅助插件安装失败，请检查连接"
-                                                appendCommand("错误: 设备 $serial 上的辅助插件安装失败")
+                                                statusText = localized("auto.helper_plugin_installation_failed_check_the_connecti.5cb911b9")
+                                                appendError(localized("auto.helper_plugin_installation_failed_on_device_0.7f843529", serial))
                                             }
                                             isInstallingPlugin = false
                                         }
@@ -1019,16 +1042,16 @@ fun App() {
                                         selectedReadyDevice?.serialNumber?.let { serial ->
                                             scope.launch {
                                                 isRunning = true
-                                                statusText = "执行电池模拟操作..."
-                                                appendCommand("状态: 执行电池模拟操作 adb -s $serial shell dumpsys battery ${args.joinToString(" ")}")
+                                                statusText = localized("auto.running_battery_simulation.8f955faa")
+                                                appendStatus(localized("auto.run_battery_simulation_adb_s_0_shell_dumpsys_battery.38cbdda7", serial, args.joinToString(" ")))
                                                 try {
                                                     deviceAdb.controlBattery(serial, args, ::appendCommand)
-                                                    statusText = "电池模拟操作已执行"
-                                                    appendCommand("状态: 电池模拟操作已执行")
+                                                    statusText = localized("auto.battery_simulation_executed.40b8397b")
+                                                    appendStatus(statusText)
                                                     deviceSystemInfo = deviceAdb.loadSystemInfo(serial, ::appendCommand)
                                                 } catch (error: Throwable) {
-                                                    statusText = error.message ?: "电池模拟操作失败"
-                                                    appendCommand("错误: 电池模拟操作失败 - ${error.message ?: "未知错误"}")
+                                                    statusText = error.message ?: localized("auto.battery_simulation_failed.5cd705c3")
+                                                    appendError(localized("auto.battery_simulation_failed.5cd705c3") + " - ${error.message ?: unknownError()}")
                                                 } finally {
                                                     isRunning = false
                                                 }
@@ -1039,16 +1062,16 @@ fun App() {
                                         selectedReadyDevice?.serialNumber?.let { serial ->
                                             scope.launch {
                                                 isRunning = true
-                                                statusText = "执行屏幕分辨率修改操作..."
-                                                appendCommand("状态: 执行屏幕分辨率修改操作 adb -s $serial shell wm size $size")
+                                                statusText = localized("auto.changing_screen_resolution.4c4fab34")
+                                                appendStatus(localized("auto.change_screen_resolution_adb_s_0_shell_wm_size_1.ebafdbdd", serial, size))
                                                 try {
                                                     deviceAdb.modifyScreenSize(serial, size, ::appendCommand)
-                                                    statusText = "屏幕分辨率修改操作已执行"
-                                                    appendCommand("状态: 屏幕分辨率修改操作已执行")
+                                                    statusText = localized("auto.screen_resolution_change_executed.8ddc0dbd")
+                                                    appendStatus(statusText)
                                                     deviceSystemInfo = deviceAdb.loadSystemInfo(serial, ::appendCommand)
                                                 } catch (error: Throwable) {
-                                                    statusText = error.message ?: "屏幕分辨率修改操作失败"
-                                                    appendCommand("错误: 屏幕分辨率修改操作失败 - ${error.message ?: "未知错误"}")
+                                                    statusText = error.message ?: localized("auto.screen_resolution_change_failed.cbc576b4")
+                                                    appendError(localized("auto.screen_resolution_change_failed.cbc576b4") + " - ${error.message ?: unknownError()}")
                                                 } finally {
                                                     isRunning = false
                                                 }
@@ -1059,16 +1082,16 @@ fun App() {
                                         selectedReadyDevice?.serialNumber?.let { serial ->
                                             scope.launch {
                                                 isRunning = true
-                                                statusText = "执行屏幕密度修改操作..."
-                                                appendCommand("状态: 执行屏幕密度修改操作 adb -s $serial shell wm density $density")
+                                                statusText = localized("auto.changing_screen_density.5afcf930")
+                                                appendStatus(localized("auto.change_screen_density_adb_s_0_shell_wm_density_1.3504afeb", serial, density))
                                                 try {
                                                     deviceAdb.modifyScreenDensity(serial, density, ::appendCommand)
-                                                    statusText = "屏幕密度修改操作已执行"
-                                                    appendCommand("状态: 屏幕密度修改操作已执行")
+                                                    statusText = localized("auto.screen_density_change_executed.6969aefb")
+                                                    appendStatus(statusText)
                                                     deviceSystemInfo = deviceAdb.loadSystemInfo(serial, ::appendCommand)
                                                 } catch (error: Throwable) {
-                                                    statusText = error.message ?: "屏幕密度修改操作失败"
-                                                    appendCommand("错误: 屏幕密度修改操作失败 - ${error.message ?: "未知错误"}")
+                                                    statusText = error.message ?: localized("auto.screen_density_change_failed.b0e11d20")
+                                                    appendError(localized("auto.screen_density_change_failed.b0e11d20") + " - ${error.message ?: unknownError()}")
                                                 } finally {
                                                     isRunning = false
                                                 }
@@ -1198,12 +1221,12 @@ fun App() {
                                             loadDeviceSystemInfo(device.serialNumber)
                                             loadDeviceSystemProperties(device.serialNumber)
                                         } else if (selectedTestModule == TestModule.Log) {
-                                            statusText = "已选择设备 ${device.serialNumber}，可抓取 Logcat"
+                                            statusText = localized("auto.selected_device_0_ready_to_capture_logcat.311bdd3c", device.serialNumber)
                                         } else {
-                                            statusText = "已选择设备 ${device.serialNumber}"
+                                            statusText = localized("auto.selected_device_0.8087625d", device.serialNumber)
                                         }
                                     } else {
-                                        statusText = "设备不可用：${device.state}"
+                                        statusText = localized("auto.device_unavailable_0.2717ccc4", device.state)
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
@@ -1223,7 +1246,7 @@ fun App() {
                 }
                 if (isCapturingLogcat) {
                     LogCaptureFloatingButton(
-                        deviceLabel = deviceLogModule.capturingDeviceLabel ?: "Logcat 正在抓取",
+                        deviceLabel = deviceLogModule.capturingDeviceLabel ?: localized("auto.capturing_logcat.fbada554"),
                         onStop = deviceLogModule::stopCapture,
                         modifier = Modifier
                             .align(Alignment.TopEnd)

@@ -1,5 +1,6 @@
 package com.floatingmuseum.android.test.helper
 
+import com.floatingmuseum.android.test.helper.localization.localized
 import java.io.File
 import java.nio.file.Files
 
@@ -67,7 +68,7 @@ private fun File.ensureDirectory(): File {
         mkdirs()
     }
     if (!isDirectory) {
-        throw IllegalStateException("路径不是目录：$absolutePath")
+        throw IllegalStateException(localized("runtime_paths.error.path_is_not_directory", absolutePath))
     }
     return this
 }

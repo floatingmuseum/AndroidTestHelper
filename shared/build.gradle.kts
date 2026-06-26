@@ -10,6 +10,9 @@ kotlin {
 
 
     sourceSets {
+        commonMain {
+            resources.srcDir("src/commonMain/resources")
+        }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)

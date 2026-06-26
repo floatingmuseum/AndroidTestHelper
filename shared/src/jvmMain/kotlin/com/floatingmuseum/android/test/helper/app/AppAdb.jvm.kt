@@ -2,6 +2,8 @@ package com.floatingmuseum.android.test.helper.app
 
 import com.floatingmuseum.android.test.helper.AppRuntimePaths
 import com.floatingmuseum.android.test.helper.adb.AdbShell
+import com.floatingmuseum.android.test.helper.localization.commandError
+import com.floatingmuseum.android.test.helper.localization.localized
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -95,7 +97,7 @@ private class JvmAppAdb : AppAdb {
             logCommand = logCommand
         )
 
-        val jsonStr = parseContentQueryJson(output) ?: throw IllegalStateException("未从 ContentProvider 中获取到数据")
+        val jsonStr = parseContentQueryJson(output) ?: throw IllegalStateException(localized("auto.no_data_returned_from_contentprovider.634542f1"))
         val metaList = Json.decodeFromString<List<PluginAppMeta>>(jsonStr)
         val total = metaList.size
         onProgress(0, total)
@@ -400,7 +402,7 @@ private class JvmAppAdb : AppAdb {
             displayCommand = "adb -s $deviceSerial shell content query --uri \"$uri\"",
             logCommand = logCommand,
         )
-        val jsonStr = parseContentQueryJson(output) ?: throw IllegalStateException("未从 ATHPlugin 获取应用详情")
+        val jsonStr = parseContentQueryJson(output) ?: throw IllegalStateException(localized("auto.no_app_detail_returned_from_athplugin.155bd9a6"))
         val payload = Json {
             ignoreUnknownKeys = true
         }.decodeFromString<PluginApplicationDetailPayload>(jsonStr)
@@ -572,7 +574,7 @@ private class JvmAppAdb : AppAdb {
         )
         val remotePaths = parsePmPathOutput(pathOutput)
         if (remotePaths.isEmpty()) {
-            throw IllegalArgumentException("未找到 APK 路径：$packageName")
+            throw IllegalArgumentException(localized("auto.apk_path_not_found_0.585c0f0e", packageName))
         }
 
         val baseDir = if (outputPath.isNullOrBlank()) {
@@ -792,7 +794,7 @@ private class JvmAppAdb : AppAdb {
             output.contains("Success")
         } catch (e: Exception) {
             e.printStackTrace()
-            logCommand("错误: 设备 $deviceSerial 上的辅助插件安装失败 - ${e.message}")
+            logCommand(commandError(localized("auto.helper_plugin_installation_failed_on_device_0.7f843529", deviceSerial) + " - ${e.message}"))
             false
         } finally {
             tempDirectory.deleteRecursively()
@@ -1278,7 +1280,7 @@ private fun buildApplicationDetailItems(
         ApplicationDetailSection.CONTENT_PROVIDERS -> buildApplicationComponentItems(manifestDetails?.providers.orEmpty())
         ApplicationDetailSection.SIGNATURES -> parsePackageDumpsysSigningItems(dumpsysOutput)
     }.ifEmpty {
-        listOf(ApplicationDetailItem("状态", "未解析到该分类信息"))
+        listOf(ApplicationDetailItem(localized("auto.status.938e06cb"), localized("auto.no_information_parsed_for_this_section.01b2e18c")))
     }
 }
 
@@ -1288,15 +1290,15 @@ private fun buildApplicationBasicDetailItems(
     manifestDetails: ManifestDetails?,
 ): List<ApplicationDetailItem> {
     return listOf(
-        ApplicationDetailItem("应用名", app.appName),
-        ApplicationDetailItem("包名", app.packageName),
-        ApplicationDetailItem("版本名", app.versionName),
-        ApplicationDetailItem("版本号", app.versionCode?.toString() ?: "-"),
+        ApplicationDetailItem(localized("auto.app_name.0361a7c2"), app.appName),
+        ApplicationDetailItem(localized("auto.package_name.6e682010"), app.packageName),
+        ApplicationDetailItem(localized("auto.version_name.1e1aa5f0"), app.versionName),
+        ApplicationDetailItem(localized("auto.version_code.e7075959"), app.versionCode?.toString() ?: "-"),
         ApplicationDetailItem("compileSdkVersion", formatDetailSdkVersion(app.compileSdkVersion)),
         ApplicationDetailItem("minSdkVersion", formatDetailSdkVersion(app.minSdkVersion)),
         ApplicationDetailItem("targetSdkVersion", formatDetailSdkVersion(app.targetSdkVersion)),
-        ApplicationDetailItem("应用类型", if (app.isSystem) "系统应用" else "第三方应用"),
-        ApplicationDetailItem("启用状态", if (app.isEnabled) "已启用" else "已停用"),
+        ApplicationDetailItem(localized("auto.app_type.bf60402c"), if (app.isSystem) localized("auto.system_app.a10afe81") else localized("auto.third_party_app.ea38f53b")),
+        ApplicationDetailItem(localized("auto.enabled_state.edc70d86"), if (app.isEnabled) localized("auto.enabled.390d4b49") else localized("auto.disabled.b78f2d64")),
     ) + listOfNotNull(
         manifestDetails?.packageName?.takeIf { it.isNotBlank() }?.let { ApplicationDetailItem("Manifest package", it) },
     ) + parsePackageDumpsysBasicItems(dumpsysOutput)
@@ -1331,7 +1333,7 @@ private fun buildApplicationPermissionItems(
     dumpsysOutput: String,
 ): List<ApplicationDetailItem> {
     val declaredItems = manifestDetails?.requestedPermissions.orEmpty().map {
-        ApplicationDetailItem("声明权限", it)
+        ApplicationDetailItem(localized("auto.declared_permission.32447c8d"), it)
     }
     val installedItems = parsePackageDumpsysPermissionItems(dumpsysOutput)
     return (declaredItems + installedItems).distinctBy { it.label to it.value }
@@ -1345,7 +1347,7 @@ internal fun parsePackageDumpsysPermissionItems(output: String): List<Applicatio
                 line.startsWith("android.permission.") ||
                 line.startsWith("permission.")
         }
-        .map { line -> ApplicationDetailItem("安装态", line) }
+        .map { line -> ApplicationDetailItem(localized("auto.install_state.34f4aa76"), line) }
         .distinctBy { it.value }
         .toList()
 }
@@ -1362,7 +1364,7 @@ private fun buildApplicationComponentItems(
         )
         ApplicationDetailItem(
             label = component.name,
-            value = attributes.joinToString(" · ").ifBlank { "已声明" },
+            value = attributes.joinToString(" · ").ifBlank { localized("auto.declared.0f1a04af") },
         )
     }
 }
@@ -1385,7 +1387,7 @@ internal fun parsePackageDumpsysSigningItems(output: String): List<ApplicationDe
     }
     return lines
         .filter { it.isNotBlank() }
-        .mapIndexed { index, line -> ApplicationDetailItem("签名 ${index + 1}", line) }
+        .mapIndexed { index, line -> ApplicationDetailItem(localized("auto.signature_0.e07ec8e8", index + 1), line) }
         .distinctBy { it.value }
 }
 
@@ -1912,6 +1914,6 @@ internal fun requireSuccessfulUninstallOutput(
 ) {
     val hasSuccessLine = output.lineSequence().any { it.trim() == "Success" }
     if (!hasSuccessLine) {
-        throw IllegalStateException("卸载应用失败\n$displayCommand\n${output.trim()}")
+        throw IllegalStateException(localized("auto.uninstall_failed.c12d0523") + "\n$displayCommand\n${output.trim()}")
     }
 }

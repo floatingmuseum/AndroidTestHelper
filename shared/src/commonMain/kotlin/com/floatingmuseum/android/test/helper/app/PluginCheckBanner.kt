@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 
 @Composable
 fun PluginCheckBanner(
@@ -27,6 +28,7 @@ fun PluginCheckBanner(
     isProcessing: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -57,20 +59,14 @@ fun PluginCheckBanner(
                     containerColor = MaterialTheme.colorScheme.primary,
                 ),
             ) {
-                val processingLabel = when (actionLabel) {
-                    "立即安装" -> "安装中..."
-                    "立即更新" -> "更新中..."
-                    "立即启用" -> "启用中..."
-                    else -> "处理中..."
-                }
-                Text(if (isProcessing) processingLabel else actionLabel)
+                Text(if (isProcessing) strings.t("plugin_banner.processing") else actionLabel)
             }
 
             TextButton(
                 onClick = onIgnore,
                 enabled = !isProcessing,
             ) {
-                Text("不再提示")
+                Text(strings.t("plugin_banner.ignore"))
             }
 
             TextButton(

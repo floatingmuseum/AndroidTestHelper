@@ -7,6 +7,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.floatingmuseum.android.test.helper.AndroidDevice
+import com.floatingmuseum.android.test.helper.localization.commandError
+import com.floatingmuseum.android.test.helper.localization.commandStatus
+import com.floatingmuseum.android.test.helper.localization.localized
+import com.floatingmuseum.android.test.helper.localization.unknownError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -44,15 +48,16 @@ internal class DataFillModuleController(
     fun refreshStorageForSelectedDevice() {
         val deviceSerial = getSelectedReadyDevice()?.serialNumber
         if (deviceSerial == null) {
-            setStatusText("先选择状态为 device 的设备")
-            appendCommand("错误: 先选择状态为 device 的设备")
+            val message = localized("auto.select_a_device_in_device_state_first.cf5bc374")
+            setStatusText(message)
+            appendCommand(commandError(message))
         } else {
             refreshStorageForDevice(deviceSerial)
         }
     }
 
     fun refreshStorageForDevice(deviceSerial: String) {
-        runAdbTask("读取平板存储") {
+        runAdbTask(localized("auto.read_tablet_storage.9a3ecb39")) {
             dataFillAdb.loadStorageInfo(deviceSerial, appendCommand)
         }
     }
@@ -64,7 +69,7 @@ internal class DataFillModuleController(
     fun fillFixed(sizeBytes: Long) {
         val deviceSerial = getSelectedReadyDevice()?.serialNumber
         if (deviceSerial != null) {
-            runAdbTask("填充 ${formatBytes(sizeBytes)}") {
+            runAdbTask(localized("auto.fill_0.c4fa9280", formatBytes(sizeBytes))) {
                 dataFillAdb.fillSize(deviceSerial, sizeBytes, appendCommand) { progress ->
                     fillProgress = progress
                 }
@@ -76,14 +81,15 @@ internal class DataFillModuleController(
         val deviceSerial = getSelectedReadyDevice()?.serialNumber
         val sizeBytes = parseGiBInput(customFillValue)
         if (deviceSerial != null && sizeBytes != null) {
-            runAdbTask("填充 ${formatBytes(sizeBytes)}") {
+            runAdbTask(localized("auto.fill_0.c4fa9280", formatBytes(sizeBytes))) {
                 dataFillAdb.fillSize(deviceSerial, sizeBytes, appendCommand) { progress ->
                     fillProgress = progress
                 }
             }
         } else {
-            setStatusText("请输入有效的填充大小")
-            appendCommand("错误: 请输入有效的填充大小")
+            val message = localized("auto.enter_a_valid_fill_size.a897deb2")
+            setStatusText(message)
+            appendCommand(commandError(message))
         }
     }
 
@@ -91,7 +97,7 @@ internal class DataFillModuleController(
         val deviceSerial = getSelectedReadyDevice()?.serialNumber
         val targetBytes = parseGiBInput(remainingValue)
         if (deviceSerial != null && targetBytes != null) {
-            runAdbTask("填充到剩余 ${formatBytes(targetBytes)}") {
+            runAdbTask(localized("auto.fill_until_0_remains.561cc5f9", formatBytes(targetBytes))) {
                 dataFillAdb.fillUntilRemaining(
                     deviceSerial = deviceSerial,
                     targetAvailableBytes = targetBytes,
@@ -105,8 +111,9 @@ internal class DataFillModuleController(
                 )
             }
         } else {
-            setStatusText("请输入有效的剩余空间")
-            appendCommand("错误: 请输入有效的剩余空间")
+            val message = localized("auto.enter_valid_remaining_space.b8341939")
+            setStatusText(message)
+            appendCommand(commandError(message))
         }
     }
 
@@ -116,34 +123,39 @@ internal class DataFillModuleController(
             setRunning(true)
             fillProgress = null
             setStatusText("$name...")
-            appendCommand("状态: 开始$name...")
+            appendCommand(commandStatus(localized("auto.start_0.7e1a56f0", name)))
             try {
                 storageInfo = block()
-                setStatusText("$name 完成")
-                appendCommand("状态: $name 完成")
+                setStatusText(localized("auto.0_completed.ef9690e9", name))
+                appendCommand(commandStatus(localized("auto.0_completed.ef9690e9", name)))
             } catch (error: CancellationException) {
                 fillProgress = null
                 val deviceSerial = getSelectedReadyDevice()?.serialNumber
                 if (deviceSerial == null) {
-                    setStatusText("任务已停止")
-                    appendCommand("状态: 任务已停止")
+                    val message = localized("auto.task_stopped.7d702bab")
+                    setStatusText(message)
+                    appendCommand(commandStatus(message))
                 } else {
-                    setStatusText("任务已停止，刷新存储...")
-                    appendCommand("状态: 任务已停止，刷新存储...")
+                    val message = localized("auto.task_stopped_refreshing_storage.70a471e2")
+                    setStatusText(message)
+                    appendCommand(commandStatus(message))
                     try {
                         storageInfo = withContext(NonCancellable) {
                             dataFillAdb.loadStorageInfo(deviceSerial, appendCommand)
                         }
-                        setStatusText("任务已停止，已刷新存储")
-                        appendCommand("状态: 任务已停止，已刷新存储")
+                        val refreshedMessage = localized("auto.task_stopped_storage_refreshed.cafb2d5a")
+                        setStatusText(refreshedMessage)
+                        appendCommand(commandStatus(refreshedMessage))
                     } catch (refreshError: Throwable) {
-                        setStatusText("任务已停止，刷新存储失败：${refreshError.message ?: "未知错误"}")
-                        appendCommand("错误: 刷新存储失败 - ${refreshError.message ?: "未知错误"}")
+                        setStatusText(
+                            localized("auto.task_stopped_storage_refresh_failed_0.3c0353c5", refreshError.message ?: unknownError())
+                        )
+                        appendCommand(commandError(localized("auto.storage_refresh_failed.c3279cfb") + " - ${refreshError.message ?: unknownError()}"))
                     }
                 }
             } catch (error: Throwable) {
-                setStatusText(error.message ?: "任务失败")
-                appendCommand("错误: $name 失败 - ${error.message ?: "未知错误"}")
+                setStatusText(error.message ?: localized("auto.task_failed.94b9e504"))
+                appendCommand(commandError(localized("auto.0_failed.7a359370", name) + " - ${error.message ?: unknownError()}"))
             } finally {
                 setRunning(false)
                 runningJob = null

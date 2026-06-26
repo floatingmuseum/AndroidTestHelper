@@ -6,6 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.floatingmuseum.android.test.helper.AndroidDevice
+import com.floatingmuseum.android.test.helper.localization.commandError
+import com.floatingmuseum.android.test.helper.localization.commandStatus
+import com.floatingmuseum.android.test.helper.localization.localized
+import com.floatingmuseum.android.test.helper.localization.unknownError
 import com.floatingmuseum.android.test.helper.revealFileInDirectory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -43,8 +47,9 @@ internal class DeviceLogModuleController(
         if (isCapturing) return
         val device = getSelectedReadyDevice()
         if (device == null) {
-            setStatusText("先选择状态为 device 的设备")
-            appendCommand("错误: 先选择状态为 device 的设备")
+            val message = localized("auto.select_a_device_in_device_state_first.cf5bc374")
+            setStatusText(message)
+            appendCommand(commandError(message))
             return
         }
 
@@ -52,8 +57,8 @@ internal class DeviceLogModuleController(
             progress = null
             lastResult = null
             capturingDeviceLabel = "${device.model} · ${device.serialNumber}"
-            setStatusText("正在抓取 Logcat...")
-            appendCommand("状态: 开始抓取设备 ${device.serialNumber} Logcat")
+            setStatusText(localized("auto.capturing_logcat.835215be"))
+            appendCommand(commandStatus(localized("auto.start_capturing_logcat_from_device_0.9b881a13", device.serialNumber)))
             try {
                 val result = deviceLogAdb.captureFullLogs(
                     deviceSerial = device.serialNumber,
@@ -62,8 +67,7 @@ internal class DeviceLogModuleController(
                     onProgress = { nextProgress ->
                         progress = nextProgress
                         setStatusText(
-                            "抓取 Logcat：${nextProgress.currentSection} " +
-                                "${nextProgress.completedSections}/${nextProgress.totalSections}"
+                            localized("auto.capturing_logcat_0_1_2.90692351", nextProgress.currentSection, nextProgress.completedSections, nextProgress.totalSections)
                         )
                     },
                 )
@@ -71,28 +75,29 @@ internal class DeviceLogModuleController(
                 lastResult = result
                 when (result.endState) {
                     DeviceLogCaptureEndState.COMPLETED -> {
-                        setStatusText("Logcat 抓取完成：${result.filePath}")
-                        appendCommand("状态: Logcat 抓取完成 - ${result.filePath}")
+                        setStatusText(localized("auto.logcat_capture_completed_0.13468776", result.filePath))
+                        appendCommand(commandStatus(localized("auto.logcat_capture_completed.91af5080") + " - ${result.filePath}"))
                     }
                     DeviceLogCaptureEndState.STOPPED -> {
-                        setStatusText("Logcat 已停止，日志已保存：${result.filePath}")
-                        appendCommand("状态: Logcat 已停止，日志已保存 - ${result.filePath}")
+                        setStatusText(localized("auto.logcat_stopped_log_saved_0.4925a4c0", result.filePath))
+                        appendCommand(commandStatus(localized("auto.logcat_stopped_log_saved.ac395a7f") + " - ${result.filePath}"))
                     }
                     DeviceLogCaptureEndState.INTERRUPTED -> {
-                        setStatusText("Logcat 意外中止，日志已保存：${result.filePath}")
-                        appendCommand("状态: Logcat 意外中止，日志已保存 - ${result.filePath}")
+                        setStatusText(localized("auto.logcat_interrupted_log_saved_0.20a89368", result.filePath))
+                        appendCommand(commandStatus(localized("auto.logcat_interrupted_log_saved.2412026f") + " - ${result.filePath}"))
                     }
                 }
             } catch (error: CancellationException) {
                 progress = null
                 capturingDeviceLabel = null
-                setStatusText("Logcat 抓取已停止")
-                appendCommand("状态: Logcat 抓取已停止")
+                val message = localized("auto.logcat_capture_stopped.98f70b20")
+                setStatusText(message)
+                appendCommand(commandStatus(message))
             } catch (error: Throwable) {
                 progress = null
                 capturingDeviceLabel = null
-                setStatusText(error.message ?: "Logcat 抓取失败")
-                appendCommand("错误: Logcat 抓取失败 - ${error.message ?: "未知错误"}")
+                setStatusText(error.message ?: localized("auto.logcat_capture_failed.7ff0923b"))
+                appendCommand(commandError(localized("auto.logcat_capture_failed.7ff0923b") + " - ${error.message ?: unknownError()}"))
             } finally {
                 deviceLogJob = null
                 capturingDeviceLabel = null
@@ -108,11 +113,13 @@ internal class DeviceLogModuleController(
     fun revealLogFile(filePath: String) {
         val opened = revealFileInDirectory(filePath)
         if (opened) {
-            setStatusText("已打开日志所在目录")
-            appendCommand("状态: 已打开日志所在目录 - $filePath")
+            val message = localized("auto.opened_log_directory.331d7b15")
+            setStatusText(message)
+            appendCommand(commandStatus("$message - $filePath"))
         } else {
-            setStatusText("无法打开日志所在目录")
-            appendCommand("错误: 无法打开日志所在目录 - $filePath")
+            val message = localized("auto.unable_to_open_log_directory.411eddb7")
+            setStatusText(message)
+            appendCommand(commandError("$message - $filePath"))
         }
     }
 }

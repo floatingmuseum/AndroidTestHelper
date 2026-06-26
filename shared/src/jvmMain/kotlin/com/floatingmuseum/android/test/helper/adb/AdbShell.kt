@@ -2,6 +2,8 @@ package com.floatingmuseum.android.test.helper.adb
 
 import com.floatingmuseum.android.test.helper.AndroidDevice
 import com.floatingmuseum.android.test.helper.AppRuntimePaths
+import com.floatingmuseum.android.test.helper.localization.commandStatus
+import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.settings.AppSettings
 import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
 import kotlinx.coroutines.CancellationException
@@ -17,7 +19,7 @@ class AdbCommandException(
     command: String,
     exitCode: Int,
     output: String,
-) : RuntimeException("ADB 命令失败，退出码 $exitCode\n$command\n$output")
+) : RuntimeException(localized("auto.adb_command_failed_with_exit_code_0.c428ca41", exitCode) + "\n$command\n$output")
 
 object AdbShell {
     val adbPath: String
@@ -48,7 +50,7 @@ object AdbShell {
                 }
                 if (AppSettingsShared.currentSettings.showCommandDuration) {
                     val duration = System.currentTimeMillis() - startTime
-                    logCommand("状态: 命令耗时 ${duration}ms")
+                    logCommand(commandStatus(localized("auto.command_duration_0_ms.59b9b474", duration)))
                 }
                 output
             } catch (error: CancellationException) {
@@ -86,7 +88,7 @@ object AdbShell {
                 }
                 if (AppSettingsShared.currentSettings.showCommandDuration) {
                     val duration = System.currentTimeMillis() - startTime
-                    logCommand("状态: 命令耗时 ${duration}ms")
+                    logCommand(commandStatus(localized("auto.command_duration_0_ms.59b9b474", duration)))
                 }
                 output
             } catch (error: CancellationException) {
@@ -138,15 +140,15 @@ object AdbShell {
                 val completed = process.waitFor(5L, TimeUnit.SECONDS)
                 if (!completed) {
                     process.destroyForcibly()
-                    throw IllegalStateException("读取 adb 版本超时")
+                    throw IllegalStateException(localized("auto.timed_out_while_reading_adb_version.ce1661d6"))
                 }
                 val output = process.inputStream.bufferedReader().readText()
                 val exitCode = process.exitValue()
                 if (exitCode != 0) {
-                    throw IllegalStateException(output.ifBlank { "adb version 退出码 $exitCode" })
+                    throw IllegalStateException(output.ifBlank { localized("auto.adb_version_exited_with_code_0.ca9a4090", exitCode) })
                 }
                 parseAdbVersion(output).ifBlank {
-                    throw IllegalStateException("adb version 未返回版本信息")
+                    throw IllegalStateException(localized("auto.adb_version_returned_no_version_info.0a2c0fa8"))
                 }
             }
         }
@@ -206,7 +208,7 @@ actual suspend fun checkAdbExecutable(path: String): AdbExecutableCheckResult {
             isValid = false,
             normalizedPath = file.absolutePath,
             version = null,
-            errorMessage = "选择的路径不是可执行文件。",
+            errorMessage = localized("auto.selected_path_is_not_an_executable_file.eacb1fe9"),
         )
     }
 
@@ -225,7 +227,7 @@ private fun Throwable.displayMessage(): String {
         ?.firstOrNull { it.isNotBlank() }
         ?.trim()
         ?: this::class.simpleName
-        ?: "未知错误"
+        ?: localized("auto.unknown_error.ea5e8956")
 }
 
 class JvmAdbDeviceManager : AdbDeviceManager {

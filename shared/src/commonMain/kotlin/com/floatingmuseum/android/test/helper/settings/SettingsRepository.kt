@@ -11,11 +11,16 @@ interface SettingsRepository {
 
 expect fun createSettingsRepository(): SettingsRepository
 
+expect fun systemDefaultAppLanguage(): AppLanguage
+
 object AppSettingsShared {
     private val repository: SettingsRepository by lazy { createSettingsRepository() }
     
     var currentSettings by mutableStateOf(AppSettings())
         private set
+
+    val currentLanguage: AppLanguage
+        get() = currentSettings.effectiveLanguage(systemDefaultAppLanguage())
         
     fun init() {
         currentSettings = repository.loadSettings().normalized()

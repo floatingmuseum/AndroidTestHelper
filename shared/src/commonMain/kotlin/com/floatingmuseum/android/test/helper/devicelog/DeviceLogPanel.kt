@@ -25,6 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.floatingmuseum.android.test.helper.AndroidDevice
+import com.floatingmuseum.android.test.helper.localization.localized
+import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 
 @Composable
 fun DeviceLogPanel(
@@ -37,6 +39,7 @@ fun DeviceLogPanel(
     onRevealLogFile: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     Card(modifier = modifier.fillMaxWidth()) {
         if (selectedDevice == null) {
             Box(
@@ -44,7 +47,7 @@ fun DeviceLogPanel(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "请先在底部选择一个状态为 device 的已连接设备。",
+                    text = strings.t("auto.select_a_connected_device_in_device_state_from_the_b.cc929da4"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -64,7 +67,7 @@ fun DeviceLogPanel(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "日志抓取",
+                            text = strings.t("auto.log_capture.a0fa067a"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -81,13 +84,13 @@ fun DeviceLogPanel(
                             onClick = onCaptureLogs,
                             enabled = !isRunning && selectedDevice.isReady,
                         ) {
-                            Text("开始")
+                            Text(strings.t("auto.start.51e1dab3"))
                         }
                         Button(
                             onClick = onStopCapture,
                             enabled = isRunning && progress != null,
                         ) {
-                            Text("停止")
+                            Text(strings.t("auto.stop.83cc81af"))
                         }
                     }
                 }
@@ -103,12 +106,12 @@ fun DeviceLogPanel(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text(
-                            text = "采集范围",
+                            text = strings.t("auto.capture_scope.1580090c"),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "只抓取 logcat。使用 all 缓冲区导出当前可读日志，包含 main、system、radio、events、crash 等设备支持的缓冲区。",
+                            text = strings.t("auto.captures_logcat_only_the_all_buffer_exports_currentl.357fe2a0"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -129,7 +132,7 @@ fun DeviceLogPanel(
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Text(
-                            text = "正在抓取：${progress.currentSection} · ${progress.completedSections}/${progress.totalSections}",
+                            text = strings.t("auto.capturing_0_1_2.c62f8557", progress.currentSection, progress.completedSections, progress.totalSections),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -148,7 +151,7 @@ fun DeviceLogPanel(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                text = "最近日志",
+                                text = strings.t("auto.latest_log.6bcc12ab"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -174,7 +177,7 @@ fun DeviceLogPanel(
                     }
                 } else {
                     Text(
-                        text = "日志完成后会在这里显示本地路径。点击路径会打开所在目录并定位到日志文件。",
+                        text = strings.t("auto.after_capture_completes_the_local_path_appears_here_.2ffa3a53"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -186,11 +189,11 @@ fun DeviceLogPanel(
 
 private fun DeviceLogCaptureResult.summaryText(): String {
     val stateText = when (endState) {
-        DeviceLogCaptureEndState.COMPLETED -> "已完成"
-        DeviceLogCaptureEndState.STOPPED -> "已停止"
-        DeviceLogCaptureEndState.INTERRUPTED -> "意外中止"
+        DeviceLogCaptureEndState.COMPLETED -> localized("auto.completed.384c5f3a")
+        DeviceLogCaptureEndState.STOPPED -> localized("auto.stopped.abb59f88")
+        DeviceLogCaptureEndState.INTERRUPTED -> localized("auto.interrupted.0c146a61")
     }
-    val sectionText = "$completedSections/$totalSections 个采集段"
+    val sectionText = localized("auto.0_1_capture_sections.4231c6d8", completedSections, totalSections)
     return message
         ?.takeIf { it.isNotBlank() }
         ?.let { "$stateText · $sectionText · $it" }

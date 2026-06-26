@@ -74,6 +74,7 @@ import androidtesthelper.shared.generated.resources.ic_file_table_chart
 import androidtesthelper.shared.generated.resources.ic_file_terminal
 import androidtesthelper.shared.generated.resources.ic_file_text_snippet
 import com.floatingmuseum.android.test.helper.AndroidDevice
+import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -112,6 +113,7 @@ internal fun FileManagerPanel(
     onUnsupportedDrop: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     val hasReadyDevice = selectedDevice?.isReady == true
     var pendingDeleteEntry by remember { mutableStateOf<RemoteFileEntry?>(null) }
     var pendingCreateEntry by remember { mutableStateOf<PendingCreateEntry?>(null) }
@@ -144,12 +146,12 @@ internal fun FileManagerPanel(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "设备文件",
+                            text = strings.t("auto.device_files.fe22ab8b"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = selectedDevice?.let { "${it.model} · ${it.serialNumber}" } ?: "未选择设备",
+                            text = selectedDevice?.let { "${it.model} · ${it.serialNumber}" } ?: strings.t("auto.no_device_selected.b8530870"),
                             modifier = Modifier.weight(1f, fill = false),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -159,9 +161,11 @@ internal fun FileManagerPanel(
                     }
                     Text(
                         text = if (isDragOver) {
-                            dragTargetPath?.let { "松开后上传到 $it" } ?: "拖到目录或文件行上松手即可上传"
+                            dragTargetPath?.let {
+                                strings.t("auto.release_to_upload_to_0.01f2c148", it)
+                            } ?: strings.t("auto.drop_on_a_directory_or_file_row_to_upload.92a68800")
                         } else {
-                            "右键刷新、导出、删除；拖入本地文件到目录行或目录内文件行即可上传"
+                            strings.t("auto.right_click_to_refresh_export_or_delete_drop_local_f.9ba29292")
                         },
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall,
@@ -183,10 +187,10 @@ internal fun FileManagerPanel(
 
                 when {
                     !hasReadyDevice -> {
-                        EmptyFileManagerState("先选择状态为 device 的设备。")
+                        EmptyFileManagerState(strings.t("auto.select_a_device_in_device_state_first.4a4eaa6d"))
                     }
                     loadedSerial != selectedDevice.serialNumber -> {
-                        EmptyFileManagerState("尚未读取根目录。扫描或切换设备后会自动读取。")
+                        EmptyFileManagerState(strings.t("auto.root_directory_has_not_been_loaded_it_loads_automati.9409ddaf"))
                     }
                     else -> {
                         val highlightedDropDirectory = if (isDragOver) {
@@ -246,14 +250,14 @@ internal fun FileManagerPanel(
             onDismissRequest = { pendingDeleteEntry = null },
             title = {
                 Text(
-                    text = "确认删除",
+                    text = strings.t("auto.confirm_delete.e69b202d"),
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium,
                 )
             },
             text = {
                 Text(
-                    text = "是否要删除${if (entry.isDirectory) "文件夹" else "文件"} ${entry.name}？\n${entry.path}",
+                    text = strings.t("auto.delete_0_1_2.68fd094c", if (entry.isDirectory) "directory" else "file", entry.name, entry.path),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -264,12 +268,12 @@ internal fun FileManagerPanel(
                         pendingDeleteEntry = null
                     },
                 ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(strings.t("auto.delete.cdab3894"), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDeleteEntry = null }) {
-                    Text("取消")
+                    Text(strings.t("auto.cancel.7c242c64"))
                 }
             }
         )
@@ -293,6 +297,7 @@ private fun UploadProgressBar(
     isRunning: Boolean,
     onStopUpload: () -> Unit,
 ) {
+    val strings = rememberAppStrings()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -322,8 +327,7 @@ private fun UploadProgressBar(
                 )
             }
             Text(
-                text = "上传 ${progress.currentFileIndex}/${progress.totalFiles} · ${progress.currentFileName} · " +
-                    "${formatUploadBytes(progress.completedBytes)} / ${formatUploadBytes(progress.totalBytes)}",
+                text = strings.t("auto.upload_0_1_2_3_4.e7688c82", progress.currentFileIndex, progress.totalFiles, progress.currentFileName, formatUploadBytes(progress.completedBytes), formatUploadBytes(progress.totalBytes)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -338,13 +342,14 @@ private fun UploadProgressBar(
                 contentColor = MaterialTheme.colorScheme.onError,
             ),
         ) {
-            Text("中止")
+            Text(strings.t("auto.stop.d138c365"))
         }
     }
 }
 
 @Composable
 private fun FileManagerHeader() {
+    val strings = rememberAppStrings()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -353,10 +358,10 @@ private fun FileManagerHeader() {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Name", modifier = Modifier.weight(3.4f), fontWeight = FontWeight.SemiBold)
-        Text("Permissions", modifier = Modifier.weight(1.2f), fontWeight = FontWeight.SemiBold)
-        Text("Date", modifier = Modifier.weight(1.4f), fontWeight = FontWeight.SemiBold)
-        Text("Size", modifier = Modifier.weight(0.8f), fontWeight = FontWeight.SemiBold)
+        Text(strings.t("file_manager.header.name"), modifier = Modifier.weight(3.4f), fontWeight = FontWeight.SemiBold)
+        Text(strings.t("file_manager.header.permissions"), modifier = Modifier.weight(1.2f), fontWeight = FontWeight.SemiBold)
+        Text(strings.t("file_manager.header.date"), modifier = Modifier.weight(1.4f), fontWeight = FontWeight.SemiBold)
+        Text(strings.t("file_manager.header.size"), modifier = Modifier.weight(0.8f), fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -574,6 +579,7 @@ private fun FileManagerEntryContextMenu(
     onRightClick: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
+    val strings = rememberAppStrings()
     var menuOffset by remember { mutableStateOf<IntOffset?>(null) }
     var showCreateMenu by remember { mutableStateOf(false) }
 
@@ -607,7 +613,7 @@ private fun FileManagerEntryContextMenu(
                 ) {
                     FileContextMenuSurface {
                         FileContextMenuItem(
-                            text = "刷新",
+                            text = strings.t("auto.refresh.d44e61bb"),
                             enabled = enabled,
                             onHover = { showCreateMenu = false },
                             onClick = {
@@ -616,13 +622,13 @@ private fun FileManagerEntryContextMenu(
                             },
                         )
                         FileContextMenuItem(
-                            text = "创建  >",
+                            text = strings.t("auto.create.a4ca599e"),
                             enabled = createEnabled,
                             onHover = { showCreateMenu = createEnabled },
                             onClick = { showCreateMenu = createEnabled },
                         )
                         FileContextMenuItem(
-                            text = "复制路径",
+                            text = strings.t("auto.copy_path.559196b8"),
                             enabled = enabled,
                             onHover = { showCreateMenu = false },
                             onClick = {
@@ -631,7 +637,7 @@ private fun FileManagerEntryContextMenu(
                             },
                         )
                         FileContextMenuItem(
-                            text = "导出",
+                            text = strings.t("auto.export.5a8c8fe7"),
                             enabled = enabled,
                             onHover = { showCreateMenu = false },
                             onClick = {
@@ -640,7 +646,7 @@ private fun FileManagerEntryContextMenu(
                             },
                         )
                         FileContextMenuItem(
-                            text = "删除",
+                            text = strings.t("auto.delete.cdab3894"),
                             enabled = deleteEnabled,
                             onHover = { showCreateMenu = false },
                             onClick = {
@@ -654,7 +660,7 @@ private fun FileManagerEntryContextMenu(
                     if (showCreateMenu && createEnabled) {
                         FileContextMenuSurface {
                             FileContextMenuItem(
-                                text = "文件",
+                                text = strings.t("auto.file.fa42ebd1"),
                                 enabled = true,
                                 onClick = {
                                     menuOffset = null
@@ -663,7 +669,7 @@ private fun FileManagerEntryContextMenu(
                                 },
                             )
                             FileContextMenuItem(
-                                text = "文件夹",
+                                text = strings.t("auto.directory.9815550b"),
                                 enabled = true,
                                 onClick = {
                                     menuOffset = null
@@ -748,9 +754,18 @@ private fun CreateEntryDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val strings = rememberAppStrings()
     val defaultName = if (request.type == RemoteCreateType.Directory) "NewDir" else "NewFile.txt"
-    val title = if (request.type == RemoteCreateType.Directory) "创建文件夹" else "创建文件"
-    val label = if (request.type == RemoteCreateType.Directory) "文件夹名" else "文件名"
+    val title = if (request.type == RemoteCreateType.Directory) {
+        strings.t("auto.create_directory.3be68b29")
+    } else {
+        strings.t("auto.create_file.48d029e2")
+    }
+    val label = if (request.type == RemoteCreateType.Directory) {
+        strings.t("auto.directory_name.9d140eaa")
+    } else {
+        strings.t("auto.file_name.734498c7")
+    }
     var nameValue by remember(request) {
         mutableStateOf(
             TextFieldValue(
@@ -777,7 +792,7 @@ private fun CreateEntryDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "目标目录：${request.targetDirectory.path}",
+                    text = strings.t("auto.target_directory_0.28b998a1", request.targetDirectory.path),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -797,12 +812,12 @@ private fun CreateEntryDialog(
                 enabled = nameValue.text.trim().isNotEmpty(),
                 onClick = { onConfirm(nameValue.text) },
             ) {
-                Text("创建")
+                Text(strings.t("auto.create.90fad297"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(strings.t("auto.cancel.7c242c64"))
             }
         },
     )
@@ -810,6 +825,7 @@ private fun CreateEntryDialog(
 
 @Composable
 private fun EmptyFileManagerState(text: String) {
+    val strings = rememberAppStrings()
     Box(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         contentAlignment = Alignment.Center,
@@ -818,7 +834,7 @@ private fun EmptyFileManagerState(text: String) {
             Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "目录左侧三角展开；拖到目录或目录内文件行即可上传。",
+                text = strings.t("auto.use_the_triangle_to_expand_directories_drop_on_a_dir.f5c96d45"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

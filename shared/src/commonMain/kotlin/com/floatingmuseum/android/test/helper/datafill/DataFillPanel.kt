@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 
 @Composable
 fun StoragePanel(
@@ -28,6 +29,7 @@ fun StoragePanel(
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = modifier,
@@ -42,17 +44,17 @@ fun StoragePanel(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "设备存储",
+                    text = strings.t("auto.device_storage.608239d7"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Button(onClick = onRefresh, enabled = !isRunning) {
-                    Text("刷新")
+                    Text(strings.t("auto.refresh.d44e61bb"))
                 }
             }
 
             if (storageInfo == null) {
-                Text("尚未读取。连接平板后点击刷新。")
+                Text(strings.t("auto.not_loaded_connect_a_tablet_and_refresh.353a74d4"))
             } else {
                 LinearProgressIndicator(
                     progress = { storageInfo.usedRatio.coerceIn(0f, 1f) },
@@ -62,9 +64,9 @@ fun StoragePanel(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    StorageMetric("总容量", formatBytes(storageInfo.totalBytes), Modifier.weight(1f))
-                    StorageMetric("已使用", formatBytes(storageInfo.usedBytes), Modifier.weight(1f))
-                    StorageMetric("可用", formatBytes(storageInfo.availableBytes), Modifier.weight(1f))
+                    StorageMetric(strings.t("auto.total.8cfcf59b"), formatBytes(storageInfo.totalBytes), Modifier.weight(1f))
+                    StorageMetric(strings.t("auto.used.2a4775c2"), formatBytes(storageInfo.usedBytes), Modifier.weight(1f))
+                    StorageMetric(strings.t("auto.available.3cb935e4"), formatBytes(storageInfo.availableBytes), Modifier.weight(1f))
                 }
             }
         }
@@ -94,6 +96,7 @@ fun FillControls(
     onFillUntilRemaining: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = rememberAppStrings()
     Card(modifier = modifier) {
         Column(
             modifier = Modifier
@@ -103,7 +106,7 @@ fun FillControls(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
-                text = "填充任务",
+                text = strings.t("auto.fill_tasks.9903610f"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -126,11 +129,11 @@ fun FillControls(
                             contentColor = MaterialTheme.colorScheme.onError,
                         ),
                     ) {
-                        Text("停止")
+                        Text(strings.t("auto.stop.83cc81af"))
                     }
                 }
                 Text(
-                    text = "进度 ${formatPercent(fillProgress.ratio)} · 已写入 ${formatBytes(fillProgress.completedBytes)} / ${formatBytes(fillProgress.totalBytes)}",
+                    text = strings.t("auto.progress_0_written_1_2.63171655", formatPercent(fillProgress.ratio), formatBytes(fillProgress.completedBytes), formatBytes(fillProgress.totalBytes)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -138,13 +141,13 @@ fun FillControls(
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = { onFillFixed(1L * BytesInGiB) }, enabled = !isRunning && hasReadyDevice) {
-                    Text("填充 1G")
+                    Text(strings.t("auto.fill_1g.b1a44fab"))
                 }
                 Button(onClick = { onFillFixed(5L * BytesInGiB) }, enabled = !isRunning && hasReadyDevice) {
-                    Text("填充 5G")
+                    Text(strings.t("auto.fill_5g.dbdf944a"))
                 }
                 Button(onClick = { onFillFixed(10L * BytesInGiB) }, enabled = !isRunning && hasReadyDevice) {
-                    Text("填充 10G")
+                    Text(strings.t("auto.fill_10g.fa97672f"))
                 }
             }
 
@@ -158,11 +161,11 @@ fun FillControls(
                     onValueChange = onCustomFillValueChange,
                     enabled = !isRunning && hasReadyDevice,
                     singleLine = true,
-                    label = { Text("自定义填充大小 GB") },
+                    label = { Text(strings.t("auto.custom_fill_size_gb.aa9491c1")) },
                     modifier = Modifier.weight(1f),
                 )
                 Button(onClick = onFillCustom, enabled = !isRunning && hasReadyDevice) {
-                    Text("开始填充")
+                    Text(strings.t("auto.start.127ecd79"))
                 }
             }
 
@@ -176,11 +179,11 @@ fun FillControls(
                     onValueChange = onRemainingValueChange,
                     enabled = !isRunning && hasReadyDevice,
                     singleLine = true,
-                    label = { Text("目标剩余空间 GB") },
+                    label = { Text(strings.t("auto.target_remaining_gb.a202365c")) },
                     modifier = Modifier.weight(1f),
                 )
                 Button(onClick = onFillUntilRemaining, enabled = !isRunning && hasReadyDevice) {
-                    Text("填充到目标")
+                    Text(strings.t("auto.fill_to_target.3f194e69"))
                 }
             }
         }
