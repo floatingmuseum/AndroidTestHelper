@@ -212,10 +212,10 @@ private class JvmDeviceAdb : DeviceAdb {
         )
         val localDirectory = File(outputDirectoryPath)
         if (!localDirectory.exists() && !localDirectory.mkdirs()) {
-            throw IllegalStateException(localized("auto.unable_to_create_screenshot_output_directory_0.2fcef420", localDirectory.absolutePath))
+            throw IllegalStateException(localized("device.unable_to_create_screenshot_output_directory_arg0", localDirectory.absolutePath))
         }
         if (!localDirectory.isDirectory) {
-            throw IllegalStateException(localized("auto.screenshot_output_path_is_not_a_directory_0.7f693cdf", localDirectory.absolutePath))
+            throw IllegalStateException(localized("device.screenshot_output_path_is_not_a_directory_arg0", localDirectory.absolutePath))
         }
 
         AdbShell.executeAdb(
@@ -252,7 +252,7 @@ private class JvmDeviceAdb : DeviceAdb {
                         filePath = file.absolutePath,
                         fileName = file.name,
                         success = false,
-                        message = localized("auto.file_does_not_exist_or_is_not_readable.6afbc0ad"),
+                        message = localized("device.file_does_not_exist_or_is_not_readable"),
                     )
                 } else {
                     val extension = file.extension.lowercase()
@@ -276,7 +276,7 @@ private class JvmDeviceAdb : DeviceAdb {
                                 filePath = file.absolutePath,
                                 fileName = file.name,
                                 success = false,
-                                message = trimmedOutput.ifBlank { localized("auto.install_command_did_not_return_success.34b0818f") },
+                                message = trimmedOutput.ifBlank { localized("device.install_command_did_not_return_success") },
                             )
                         }
                     } else if (extension == "xapk") {
@@ -286,7 +286,7 @@ private class JvmDeviceAdb : DeviceAdb {
                             filePath = file.absolutePath,
                             fileName = file.name,
                             success = false,
-                            message = localized("auto.unsupported_file_format_0.de4e3700", extension),
+                            message = localized("device.unsupported_file_format_arg0", extension),
                         )
                     }
                 }
@@ -297,7 +297,7 @@ private class JvmDeviceAdb : DeviceAdb {
                     filePath = file.absolutePath,
                     fileName = file.name,
                     success = false,
-                    message = error.message ?: localized("auto.unknown_error.ea5e8956"),
+                    message = error.message ?: localized("common.unknown_error"),
                 )
             }
         }
@@ -361,10 +361,10 @@ private class JvmDeviceAdb : DeviceAdb {
         }
 
         if (result != null) {
-            logCommand(commandStatus(localized("auto.current_package_0.917ae6e8", result.first)))
-            logCommand(commandStatus(localized("auto.current_activity_0.38d6de2e", result.second)))
+            logCommand(commandStatus(localized("device.current_package_arg0", result.first)))
+            logCommand(commandStatus(localized("device.current_activity_arg0", result.second)))
         } else {
-            logCommand(commandError(localized("auto.unable_to_get_current_screen_info.471ec82b")))
+            logCommand(commandError(localized("device.unable_to_get_current_screen_info")))
         }
     }
 
@@ -889,7 +889,7 @@ private suspend fun installXApk(
                 filePath = xapkFile.absolutePath,
                 fileName = xapkFile.name,
                 success = false,
-                message = localized("auto.no_apk_file_found_after_extracting_xapk.17656796"),
+                message = localized("device.no_apk_file_found_after_extracting_xapk"),
             )
         }
         
@@ -912,7 +912,7 @@ private suspend fun installXApk(
                 filePath = xapkFile.absolutePath,
                 fileName = xapkFile.name,
                 success = false,
-                message = localized("auto.install_command_did_not_return_success_0.e5c4bc98", trimmedOutput),
+                message = localized("device.install_command_did_not_return_success_arg0", trimmedOutput),
             )
         }
         
@@ -924,7 +924,7 @@ private suspend fun installXApk(
         for (expansion in expansions) {
             val expansionFile = baseDir.walk().firstOrNull { it.name == File(expansion.file).name }
             if (expansionFile == null || !expansionFile.exists()) {
-                obbResults.add(localized("auto.obb_file_not_found_0.8f93b07b", expansion.file))
+                obbResults.add(localized("device.obb_file_not_found_arg0", expansion.file))
                 obbSuccess = false
                 continue
             }
@@ -938,7 +938,7 @@ private suspend fun installXApk(
             }
             
             if (installPath.isBlank()) {
-                obbResults.add(localized("auto.unable_to_determine_obb_install_path_0.f0185267", expansion.file))
+                obbResults.add(localized("device.unable_to_determine_obb_install_path_arg0", expansion.file))
                 obbSuccess = false
                 continue
             }
@@ -962,7 +962,7 @@ private suspend fun installXApk(
                 val pushDisplay = "adb -s $deviceSerial push \"${expansionFile.absolutePath}\" \"$deviceObbPath\""
                 AdbShell.executeAdb(pushArgs, pushDisplay, logCommand)
             } catch (e: Exception) {
-                obbResults.add(localized("auto.failed_to_push_obb_0_1.b7b8d46d", expansion.file, e.message))
+                obbResults.add(localized("device.failed_to_push_obb_arg0_arg1", expansion.file, e.message))
                 obbSuccess = false
             }
         }
@@ -970,9 +970,9 @@ private suspend fun installXApk(
         val message = if (obbResults.isEmpty()) {
             "Success"
         } else if (obbSuccess) {
-            localized("auto.success_with_obb_push.530640b1")
+            localized("device.success_with_obb_push")
         } else {
-            localized("auto.apk_installed_but_obb_push_failed_0.e0f1a920", obbResults.joinToString("; "))
+            localized("device.apk_installed_but_obb_push_failed_arg0", obbResults.joinToString("; "))
         }
         
         return ApkInstallResult(

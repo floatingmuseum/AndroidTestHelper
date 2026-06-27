@@ -44,17 +44,17 @@ fun StoragePanel(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = strings.t("auto.device_storage.608239d7"),
+                    text = strings.t("data_fill.device_storage"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Button(onClick = onRefresh, enabled = !isRunning) {
-                    Text(strings.t("auto.refresh.d44e61bb"))
+                    Text(strings.t("common.action.refresh"))
                 }
             }
 
             if (storageInfo == null) {
-                Text(strings.t("auto.not_loaded_connect_a_tablet_and_refresh.353a74d4"))
+                Text(strings.t("data_fill.not_loaded_connect_a_tablet_and_refresh"))
             } else {
                 LinearProgressIndicator(
                     progress = { storageInfo.usedRatio.coerceIn(0f, 1f) },
@@ -64,9 +64,9 @@ fun StoragePanel(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    StorageMetric(strings.t("auto.total.8cfcf59b"), formatBytes(storageInfo.totalBytes), Modifier.weight(1f))
-                    StorageMetric(strings.t("auto.used.2a4775c2"), formatBytes(storageInfo.usedBytes), Modifier.weight(1f))
-                    StorageMetric(strings.t("auto.available.3cb935e4"), formatBytes(storageInfo.availableBytes), Modifier.weight(1f))
+                    StorageMetric(strings.t("data_fill.total"), formatBytes(storageInfo.totalBytes), Modifier.weight(1f))
+                    StorageMetric(strings.t("data_fill.used"), formatBytes(storageInfo.usedBytes), Modifier.weight(1f))
+                    StorageMetric(strings.t("data_fill.available"), formatBytes(storageInfo.availableBytes), Modifier.weight(1f))
                 }
             }
         }
@@ -106,7 +106,7 @@ fun FillControls(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
-                text = strings.t("auto.fill_tasks.9903610f"),
+                text = strings.t("data_fill.fill_tasks"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -129,11 +129,11 @@ fun FillControls(
                             contentColor = MaterialTheme.colorScheme.onError,
                         ),
                     ) {
-                        Text(strings.t("auto.stop.83cc81af"))
+                        Text(strings.t("common.action.stop"))
                     }
                 }
                 Text(
-                    text = strings.t("auto.progress_0_written_1_2.63171655", formatPercent(fillProgress.ratio), formatBytes(fillProgress.completedBytes), formatBytes(fillProgress.totalBytes)),
+                    text = strings.t("data_fill.progress_arg0_written_arg1_arg2", formatPercent(fillProgress.ratio), formatBytes(fillProgress.completedBytes), formatBytes(fillProgress.totalBytes)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -141,13 +141,13 @@ fun FillControls(
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = { onFillFixed(1L * BytesInGiB) }, enabled = !isRunning && hasReadyDevice) {
-                    Text(strings.t("auto.fill_1g.b1a44fab"))
+                    Text(strings.t("data_fill.fill_1g"))
                 }
                 Button(onClick = { onFillFixed(5L * BytesInGiB) }, enabled = !isRunning && hasReadyDevice) {
-                    Text(strings.t("auto.fill_5g.dbdf944a"))
+                    Text(strings.t("data_fill.fill_5g"))
                 }
                 Button(onClick = { onFillFixed(10L * BytesInGiB) }, enabled = !isRunning && hasReadyDevice) {
-                    Text(strings.t("auto.fill_10g.fa97672f"))
+                    Text(strings.t("data_fill.fill_10g"))
                 }
             }
 
@@ -161,11 +161,11 @@ fun FillControls(
                     onValueChange = onCustomFillValueChange,
                     enabled = !isRunning && hasReadyDevice,
                     singleLine = true,
-                    label = { Text(strings.t("auto.custom_fill_size_gb.aa9491c1")) },
+                    label = { Text(strings.t("data_fill.custom_fill_size_gb")) },
                     modifier = Modifier.weight(1f),
                 )
                 Button(onClick = onFillCustom, enabled = !isRunning && hasReadyDevice) {
-                    Text(strings.t("auto.start.127ecd79"))
+                    Text(strings.t("data_fill.action.start"))
                 }
             }
 
@@ -179,11 +179,11 @@ fun FillControls(
                     onValueChange = onRemainingValueChange,
                     enabled = !isRunning && hasReadyDevice,
                     singleLine = true,
-                    label = { Text(strings.t("auto.target_remaining_gb.a202365c")) },
+                    label = { Text(strings.t("data_fill.target_remaining_gb")) },
                     modifier = Modifier.weight(1f),
                 )
                 Button(onClick = onFillUntilRemaining, enabled = !isRunning && hasReadyDevice) {
-                    Text(strings.t("auto.fill_to_target.3f194e69"))
+                    Text(strings.t("data_fill.fill_to_target"))
                 }
             }
         }

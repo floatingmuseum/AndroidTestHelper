@@ -47,7 +47,7 @@ internal class DeviceLogModuleController(
         if (isCapturing) return
         val device = getSelectedReadyDevice()
         if (device == null) {
-            val message = localized("auto.select_a_device_in_device_state_first.cf5bc374")
+            val message = localized("common.device.select_device_first")
             setStatusText(message)
             appendCommand(commandError(message))
             return
@@ -57,8 +57,8 @@ internal class DeviceLogModuleController(
             progress = null
             lastResult = null
             capturingDeviceLabel = "${device.model} · ${device.serialNumber}"
-            setStatusText(localized("auto.capturing_logcat.835215be"))
-            appendCommand(commandStatus(localized("auto.start_capturing_logcat_from_device_0.9b881a13", device.serialNumber)))
+            setStatusText(localized("log.capture.capturing_status"))
+            appendCommand(commandStatus(localized("log.start_capturing_logcat_from_device_arg0", device.serialNumber)))
             try {
                 val result = deviceLogAdb.captureFullLogs(
                     deviceSerial = device.serialNumber,
@@ -67,7 +67,7 @@ internal class DeviceLogModuleController(
                     onProgress = { nextProgress ->
                         progress = nextProgress
                         setStatusText(
-                            localized("auto.capturing_logcat_0_1_2.90692351", nextProgress.currentSection, nextProgress.completedSections, nextProgress.totalSections)
+                            localized("log.capturing_logcat_arg0_arg1_arg2", nextProgress.currentSection, nextProgress.completedSections, nextProgress.totalSections)
                         )
                     },
                 )
@@ -75,29 +75,29 @@ internal class DeviceLogModuleController(
                 lastResult = result
                 when (result.endState) {
                     DeviceLogCaptureEndState.COMPLETED -> {
-                        setStatusText(localized("auto.logcat_capture_completed_0.13468776", result.filePath))
-                        appendCommand(commandStatus(localized("auto.logcat_capture_completed.91af5080") + " - ${result.filePath}"))
+                        setStatusText(localized("log.logcat_capture_completed_arg0", result.filePath))
+                        appendCommand(commandStatus(localized("log.logcat_capture_completed") + " - ${result.filePath}"))
                     }
                     DeviceLogCaptureEndState.STOPPED -> {
-                        setStatusText(localized("auto.logcat_stopped_log_saved_0.4925a4c0", result.filePath))
-                        appendCommand(commandStatus(localized("auto.logcat_stopped_log_saved.ac395a7f") + " - ${result.filePath}"))
+                        setStatusText(localized("log.logcat_stopped_log_saved_arg0", result.filePath))
+                        appendCommand(commandStatus(localized("log.logcat_stopped_log_saved") + " - ${result.filePath}"))
                     }
                     DeviceLogCaptureEndState.INTERRUPTED -> {
-                        setStatusText(localized("auto.logcat_interrupted_log_saved_0.20a89368", result.filePath))
-                        appendCommand(commandStatus(localized("auto.logcat_interrupted_log_saved.2412026f") + " - ${result.filePath}"))
+                        setStatusText(localized("log.logcat_interrupted_log_saved_arg0", result.filePath))
+                        appendCommand(commandStatus(localized("log.logcat_interrupted_log_saved") + " - ${result.filePath}"))
                     }
                 }
             } catch (error: CancellationException) {
                 progress = null
                 capturingDeviceLabel = null
-                val message = localized("auto.logcat_capture_stopped.98f70b20")
+                val message = localized("log.logcat_capture_stopped")
                 setStatusText(message)
                 appendCommand(commandStatus(message))
             } catch (error: Throwable) {
                 progress = null
                 capturingDeviceLabel = null
-                setStatusText(error.message ?: localized("auto.logcat_capture_failed.7ff0923b"))
-                appendCommand(commandError(localized("auto.logcat_capture_failed.7ff0923b") + " - ${error.message ?: unknownError()}"))
+                setStatusText(error.message ?: localized("log.logcat_capture_failed"))
+                appendCommand(commandError(localized("log.logcat_capture_failed") + " - ${error.message ?: unknownError()}"))
             } finally {
                 deviceLogJob = null
                 capturingDeviceLabel = null
@@ -113,11 +113,11 @@ internal class DeviceLogModuleController(
     fun revealLogFile(filePath: String) {
         val opened = revealFileInDirectory(filePath)
         if (opened) {
-            val message = localized("auto.opened_log_directory.331d7b15")
+            val message = localized("log.opened_log_directory")
             setStatusText(message)
             appendCommand(commandStatus("$message - $filePath"))
         } else {
-            val message = localized("auto.unable_to_open_log_directory.411eddb7")
+            val message = localized("log.unable_to_open_log_directory")
             setStatusText(message)
             appendCommand(commandError("$message - $filePath"))
         }

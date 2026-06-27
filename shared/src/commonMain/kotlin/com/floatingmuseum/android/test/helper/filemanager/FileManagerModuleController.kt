@@ -104,7 +104,7 @@ internal class FileManagerModuleController(
         applyDefaultRootPath()
         val serial = getSelectedReadyDevice()?.serialNumber
         if (serial == null) {
-            val message = localized("auto.select_a_device_in_device_state_first.cf5bc374")
+            val message = localized("common.device.select_device_first")
             setStatusText(message)
             appendCommand(commandError(message))
             return
@@ -115,7 +115,7 @@ internal class FileManagerModuleController(
     fun refreshEntryDirectory(entry: RemoteFileEntry) {
         val serial = getSelectedReadyDevice()?.serialNumber
         if (serial == null) {
-            val message = localized("auto.select_a_device_in_device_state_first.cf5bc374")
+            val message = localized("common.device.select_device_first")
             setStatusText(message)
             appendCommand(commandError(message))
             return
@@ -167,20 +167,20 @@ internal class FileManagerModuleController(
         scope.launch {
             setRunning(true)
             loadingPath = normalizedPath
-            setStatusText(localized("auto.reading_directory_0.095874ba", normalizedPath))
-            appendCommand(commandStatus(localized("auto.read_directory_0_on_device_1.2ee7c1b5", normalizedPath, deviceSerial)))
+            setStatusText(localized("file_manager.reading_directory_arg0", normalizedPath))
+            appendCommand(commandStatus(localized("file_manager.read_directory_arg0_on_device_arg1", normalizedPath, deviceSerial)))
             try {
                 loadDirectoryNow(deviceSerial, normalizedPath)
                 val count = childrenByPath[normalizedPath].orEmpty().size
-                setStatusText(localized("auto.read_0_1_items.e1a8eca4", normalizedPath, count))
-                appendCommand(commandStatus(localized("auto.read_directory_0_1_items.eda0769f", normalizedPath, count)))
+                setStatusText(localized("file_manager.read_arg0_arg1_items", normalizedPath, count))
+                appendCommand(commandStatus(localized("file_manager.read_directory_arg0_arg1_items", normalizedPath, count)))
             } catch (error: CancellationException) {
-                val message = localized("auto.file_manager_operation_stopped.945bb508")
+                val message = localized("file_manager.operation_stopped")
                 setStatusText(message)
                 appendCommand(commandStatus(message))
             } catch (error: Throwable) {
-                setStatusText(error.message ?: localized("auto.directory_read_failed.824769f2"))
-                appendCommand(commandError(localized("auto.directory_read_failed.824769f2") + " - ${error.message ?: unknownError()}"))
+                setStatusText(error.message ?: localized("file_manager.directory_read_failed"))
+                appendCommand(commandError(localized("file_manager.directory_read_failed") + " - ${error.message ?: unknownError()}"))
             } finally {
                 loadingPath = null
                 setRunning(false)
@@ -195,7 +195,7 @@ internal class FileManagerModuleController(
     fun exportEntry(entry: RemoteFileEntry) {
         val serial = getSelectedReadyDevice()?.serialNumber
         if (serial == null) {
-            val message = localized("auto.select_a_device_in_device_state_first.cf5bc374")
+            val message = localized("common.device.select_device_first")
             setStatusText(message)
             appendCommand(commandError(message))
             return
@@ -204,29 +204,29 @@ internal class FileManagerModuleController(
 
         scope.launch {
             setRunning(true)
-            setStatusText(localized("auto.select_export_directory.cd01fd2b"))
-            appendCommand(commandStatus(localized("auto.select_export_directory_for_0.c0dd8ac3", entry.path)))
+            setStatusText(localized("file_manager.select_export_directory"))
+            appendCommand(commandStatus(localized("file_manager.select_export_directory_for_arg0", entry.path)))
             try {
                 val outputPath = selectDirectory(
-                    dialogTitle = localized("auto.select_file_export_directory.9cf7507b"),
-                    approveButtonText = localized("auto.export.5a8c8fe7"),
+                    dialogTitle = localized("file_manager.select_file_export_directory"),
+                    approveButtonText = localized("file_manager.export"),
                 )
                 if (outputPath == null) {
-                    val message = localized("auto.export_cancelled.658ddbf7")
+                    val message = localized("file_manager.export_cancelled")
                     setStatusText(message)
                     appendCommand(commandStatus(message))
                 } else {
                     val exportedPath = fileManagerAdb.exportPath(serial, entry.path, outputPath, appendCommand)
-                    setStatusText(localized("auto.exported_0_to_1.b4782f86", entry.name, exportedPath))
-                    appendCommand(commandStatus(localized("auto.exported_0_to_1.b4782f86", entry.path, exportedPath)))
+                    setStatusText(localized("file_manager.exported_arg0_to_arg1", entry.name, exportedPath))
+                    appendCommand(commandStatus(localized("file_manager.exported_arg0_to_arg1", entry.path, exportedPath)))
                 }
             } catch (error: CancellationException) {
-                val message = localized("auto.export_stopped.6fefb88a")
+                val message = localized("file_manager.export_stopped")
                 setStatusText(message)
                 appendCommand(commandStatus(message))
             } catch (error: Throwable) {
-                setStatusText(error.message ?: localized("auto.export_failed.b732b4aa"))
-                appendCommand(commandError(localized("auto.export_failed.b732b4aa") + " - ${error.message ?: unknownError()}"))
+                setStatusText(error.message ?: localized("file_manager.export_failed"))
+                appendCommand(commandError(localized("file_manager.export_failed") + " - ${error.message ?: unknownError()}"))
             } finally {
                 setRunning(false)
             }
@@ -236,7 +236,7 @@ internal class FileManagerModuleController(
     fun deleteEntry(entry: RemoteFileEntry) {
         val serial = getSelectedReadyDevice()?.serialNumber
         if (serial == null) {
-            val message = localized("auto.select_a_device_in_device_state_first.cf5bc374")
+            val message = localized("common.device.select_device_first")
             setStatusText(message)
             appendCommand(commandError(message))
             return
@@ -245,7 +245,7 @@ internal class FileManagerModuleController(
 
         val normalizedPath = normalizeRemotePath(entry.path)
         if (normalizedPath == appliedRootPath || normalizedPath == "/") {
-            val message = localized("auto.cannot_delete_the_current_file_manager_root.d9deddd5")
+            val message = localized("file_manager.cannot_delete_the_current_file_manager_root")
             setStatusText(message)
             appendCommand(commandError("$message $normalizedPath"))
             return
@@ -253,8 +253,8 @@ internal class FileManagerModuleController(
 
         scope.launch {
             setRunning(true)
-            setStatusText(localized("auto.deleting_0.65ecf623", entry.name))
-            appendCommand(commandStatus(localized("auto.delete_0_on_device_1.a57bf6d9", entry.path, serial)))
+            setStatusText(localized("file_manager.deleting_arg0", entry.name))
+            appendCommand(commandStatus(localized("file_manager.delete_arg0_on_device_arg1", entry.path, serial)))
             try {
                 fileManagerAdb.deletePath(serial, normalizedPath, appendCommand)
                 val parentPath = parentRemotePath(normalizedPath)
@@ -271,15 +271,15 @@ internal class FileManagerModuleController(
                 }
                 selectedEntryPath = parentPath
                 loadedSerial = serial
-                setStatusText(localized("auto.deleted_0.3efd7127", entry.name))
-                appendCommand(commandStatus(localized("auto.deleted_0_and_refreshed_1.125ae0ae", entry.path, parentPath)))
+                setStatusText(localized("file_manager.deleted_arg0", entry.name))
+                appendCommand(commandStatus(localized("file_manager.deleted_arg0_and_refreshed_arg1", entry.path, parentPath)))
             } catch (error: CancellationException) {
-                val message = localized("auto.delete_stopped.a7aec9a4")
+                val message = localized("file_manager.delete_stopped")
                 setStatusText(message)
                 appendCommand(commandStatus(message))
             } catch (error: Throwable) {
-                setStatusText(error.message ?: localized("auto.delete_failed.4ee171d6"))
-                appendCommand(commandError(localized("auto.delete_failed.4ee171d6") + " - ${error.message ?: unknownError()}"))
+                setStatusText(error.message ?: localized("file_manager.delete_failed"))
+                appendCommand(commandError(localized("file_manager.delete_failed") + " - ${error.message ?: unknownError()}"))
             } finally {
                 setRunning(false)
             }
@@ -289,14 +289,14 @@ internal class FileManagerModuleController(
     fun createEntry(targetDirectory: RemoteFileEntry, name: String, type: RemoteCreateType) {
         val serial = getSelectedReadyDevice()?.serialNumber
         if (serial == null) {
-            val message = localized("auto.select_a_device_in_device_state_first.cf5bc374")
+            val message = localized("common.device.select_device_first")
             setStatusText(message)
             appendCommand(commandError(message))
             return
         }
         if (isRunning()) return
         if (!targetDirectory.isDirectory) {
-            val message = localized("auto.can_only_create_inside_a_directory.212e5ff9")
+            val message = localized("file_manager.can_only_create_inside_a_directory")
             setStatusText(message)
             appendCommand(commandError(message))
             return
@@ -306,20 +306,20 @@ internal class FileManagerModuleController(
         val childName = try {
             validateRemoteChildName(name)
         } catch (error: IllegalArgumentException) {
-            setStatusText(error.message ?: localized("auto.invalid_name.106612ca"))
-            appendCommand(commandError(localized("auto.create_failed.bfa5b5ba") + " - ${error.message ?: localized("auto.invalid_name.106612ca")}"))
+            setStatusText(error.message ?: localized("file_manager.invalid_name"))
+            appendCommand(commandError(localized("file_manager.create_failed") + " - ${error.message ?: localized("file_manager.invalid_name")}"))
             return
         }
 
         scope.launch {
             setRunning(true)
             val createTypeText = if (type == RemoteCreateType.Directory) {
-                localized("auto.directory.21d3c6af")
+                localized("file_manager.entry_type.directory_lowercase")
             } else {
-                localized("auto.file.a2fa9a6b")
+                localized("file_manager.entry_type.file_lowercase")
             }
-            setStatusText(localized("auto.creating_0_1.fa0eda03", createTypeText, childName))
-            appendCommand(commandStatus(localized("auto.create_0_1_on_device_2_3.6272ec22", createTypeText, childName, serial, normalizedDirectory)))
+            setStatusText(localized("file_manager.creating_arg0_arg1", createTypeText, childName))
+            appendCommand(commandStatus(localized("file_manager.create_arg0_arg1_on_device_arg2_arg3", createTypeText, childName, serial, normalizedDirectory)))
             try {
                 val createdPath = fileManagerAdb.createPath(
                     deviceSerial = serial,
@@ -334,15 +334,15 @@ internal class FileManagerModuleController(
                 currentPath = normalizedDirectory
                 selectedEntryPath = createdPath
                 loadedSerial = serial
-                setStatusText(localized("auto.created_0.4f6e6cfb", createdPath))
-                appendCommand(commandStatus(localized("auto.created_0_and_refreshed_1.a5663f6b", createdPath, normalizedDirectory)))
+                setStatusText(localized("file_manager.created_arg0", createdPath))
+                appendCommand(commandStatus(localized("file_manager.created_arg0_and_refreshed_arg1", createdPath, normalizedDirectory)))
             } catch (error: CancellationException) {
-                val message = localized("auto.create_stopped.c9de71d5")
+                val message = localized("file_manager.create_stopped")
                 setStatusText(message)
                 appendCommand(commandStatus(message))
             } catch (error: Throwable) {
-                setStatusText(error.message ?: localized("auto.create_failed.bfa5b5ba"))
-                appendCommand(commandError(localized("auto.create_failed.bfa5b5ba") + " - ${error.message ?: unknownError()}"))
+                setStatusText(error.message ?: localized("file_manager.create_failed"))
+                appendCommand(commandError(localized("file_manager.create_failed") + " - ${error.message ?: unknownError()}"))
             } finally {
                 setRunning(false)
             }
@@ -350,14 +350,14 @@ internal class FileManagerModuleController(
     }
 
     fun copyEntryPath(path: String) {
-        setStatusText(localized("auto.copied_path_0.74f15e26", path))
-        appendCommand(commandStatus(localized("auto.copied_absolute_path_0_to_clipboard.4c46f4f6", path)))
+        setStatusText(localized("file_manager.copied_path_arg0", path))
+        appendCommand(commandStatus(localized("file_manager.copied_absolute_path_arg0_to_clipboard", path)))
     }
 
     fun uploadDroppedFiles(filePaths: List<String>, targetDirectoryPath: String) {
         if (filePaths.isEmpty()) return
         if (isRunning()) {
-            val message = localized("auto.a_task_is_already_running_cannot_upload.b387f70f")
+            val message = localized("file_manager.a_task_is_already_running_cannot_upload")
             setStatusText(message)
             appendCommand(commandError(message))
             return
@@ -378,8 +378,8 @@ internal class FileManagerModuleController(
 
     fun stopUpload() {
         if (uploadJob == null) return
-        setStatusText(localized("auto.stopping_upload.cf34f350"))
-        appendCommand(commandStatus(localized("auto.request_upload_stop.7149ded6")))
+        setStatusText(localized("file_manager.stopping_upload"))
+        appendCommand(commandStatus(localized("file_manager.request_upload_stop")))
         uploadJob?.cancel()
     }
 
@@ -389,9 +389,9 @@ internal class FileManagerModuleController(
     }
 
     fun handleUnsupportedDrop() {
-        val message = localized("auto.drop_on_a_directory_row_or_a_file_row_inside_a_direc.85afc052")
+        val message = localized("file_manager.drop_on_a_directory_row_or_a_file_row_inside_a_direc")
         setStatusText(message)
-        appendCommand(commandStatus(localized("auto.drop_did_not_hit_an_uploadable_directory.bbaa7de4")))
+        appendCommand(commandStatus(localized("file_manager.drop_did_not_hit_an_uploadable_directory")))
     }
 
     private suspend fun loadDirectoryNow(deviceSerial: String, remotePath: String) {
@@ -407,15 +407,15 @@ internal class FileManagerModuleController(
     private suspend fun uploadFilesToDirectory(filePaths: List<String>, targetDirectoryPath: String) {
         val serial = getSelectedReadyDevice()?.serialNumber
         if (serial == null) {
-            val message = localized("auto.select_a_device_in_device_state_first.cf5bc374")
+            val message = localized("common.device.select_device_first")
             setStatusText(message)
             appendCommand(commandError(message))
             return
         }
         val normalizedTarget = normalizeRemotePath(targetDirectoryPath)
         try {
-            setStatusText(localized("auto.uploading_0_files_to_1.f8d73625", filePaths.size, normalizedTarget))
-            appendCommand(commandStatus(localized("auto.upload_0_local_files_to_device_1_2.dbf7bb35", filePaths.size, serial, normalizedTarget)))
+            setStatusText(localized("file_manager.uploading_arg0_files_to_arg1", filePaths.size, normalizedTarget))
+            appendCommand(commandStatus(localized("file_manager.upload_arg0_local_files_to_device_arg1_arg2", filePaths.size, serial, normalizedTarget)))
             val count = fileManagerAdb.uploadFiles(
                 deviceSerial = serial,
                 localFilePaths = filePaths,
@@ -424,7 +424,7 @@ internal class FileManagerModuleController(
                 onProgress = { progress ->
                     uploadProgress = progress
                     setStatusText(
-                        localized("auto.upload_0_1_2_3.fb4a7a3d", progress.currentFileIndex, progress.totalFiles, progress.currentFileName, formatFileManagerProgressPercent(progress.ratio)),
+                        localized("file_manager.upload_arg0_arg1_arg2_arg3", progress.currentFileIndex, progress.totalFiles, progress.currentFileName, formatFileManagerProgressPercent(progress.ratio)),
                     )
                 },
             )
@@ -434,11 +434,11 @@ internal class FileManagerModuleController(
             currentPath = normalizedTarget
             selectedEntryPath = normalizedTarget
             loadedSerial = serial
-            setStatusText(localized("auto.uploaded_0_files_to_1.3f10cd8f", count, normalizedTarget))
-            appendCommand(commandStatus(localized("auto.uploaded_0_files_to_1_and_refreshed_directory.408d6069", count, normalizedTarget)))
+            setStatusText(localized("file_manager.uploaded_arg0_files_to_arg1", count, normalizedTarget))
+            appendCommand(commandStatus(localized("file_manager.uploaded_arg0_files_to_arg1_and_refreshed_directory", count, normalizedTarget)))
         } catch (error: CancellationException) {
-            setStatusText(localized("auto.upload_stopped_refreshing_directory.0b16a20c"))
-            appendCommand(commandStatus(localized("auto.upload_stopped_refreshing_0.3c022488", normalizedTarget)))
+            setStatusText(localized("file_manager.upload_stopped_refreshing_directory"))
+            appendCommand(commandStatus(localized("file_manager.upload_stopped_refreshing_arg0", normalizedTarget)))
             try {
                 val children = withContext(NonCancellable) {
                     fileManagerAdb.listDirectory(serial, normalizedTarget, appendCommand)
@@ -448,15 +448,15 @@ internal class FileManagerModuleController(
                 currentPath = normalizedTarget
                 selectedEntryPath = normalizedTarget
                 loadedSerial = serial
-                setStatusText(localized("auto.upload_stopped_refreshed_0.1decb8d1", normalizedTarget))
-                appendCommand(commandStatus(localized("auto.upload_stopped_refreshed_0.1decb8d1", normalizedTarget)))
+                setStatusText(localized("file_manager.upload_stopped_refreshed_arg0", normalizedTarget))
+                appendCommand(commandStatus(localized("file_manager.upload_stopped_refreshed_arg0", normalizedTarget)))
             } catch (refreshError: Throwable) {
-                setStatusText(localized("auto.upload_stopped_refresh_failed_0.f7db5742", refreshError.message ?: unknownError()))
-                appendCommand(commandError(localized("auto.refresh_failed_after_upload_stopped.bf81aae9") + " - ${refreshError.message ?: unknownError()}"))
+                setStatusText(localized("file_manager.upload_stopped_refresh_failed_arg0", refreshError.message ?: unknownError()))
+                appendCommand(commandError(localized("file_manager.refresh_failed_after_upload_stopped") + " - ${refreshError.message ?: unknownError()}"))
             }
         } catch (error: Throwable) {
-            setStatusText(error.message ?: localized("auto.upload_failed.16f782d9"))
-            appendCommand(commandError(localized("auto.upload_failed.16f782d9") + " - ${error.message ?: unknownError()}"))
+            setStatusText(error.message ?: localized("file_manager.upload_failed"))
+            appendCommand(commandError(localized("file_manager.upload_failed") + " - ${error.message ?: unknownError()}"))
         }
     }
 

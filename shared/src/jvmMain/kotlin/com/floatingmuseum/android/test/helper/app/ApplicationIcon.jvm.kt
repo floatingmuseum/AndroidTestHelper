@@ -47,7 +47,7 @@ actual fun ApplicationIcon(
     } else {
         Image(
             bitmap = bitmap,
-            contentDescription = localized("auto.0_icon.d6227172", packageName),
+            contentDescription = localized("app.icon.content_description", packageName),
             modifier = modifier
                 .size(42.dp)
                 .clip(RoundedCornerShape(8.dp)),

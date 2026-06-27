@@ -81,19 +81,19 @@ enum class DeviceQuickAction {
 }
 
 fun DeviceQuickAction.displayLabel(): String = when (this) {
-    DeviceQuickAction.SHUTDOWN -> localized("auto.shut_down.8a5ae346")
-    DeviceQuickAction.POWER -> localized("auto.power.64fb184f")
-    DeviceQuickAction.MENU -> localized("auto.menu.0ea06926")
-    DeviceQuickAction.HOME -> localized("auto.home.c90ee457")
-    DeviceQuickAction.BACK -> localized("auto.back.8c6f017e")
-    DeviceQuickAction.VOLUME_UP -> localized("auto.volume_up.541bb141")
-    DeviceQuickAction.VOLUME_DOWN -> localized("auto.volume_down.76d2f8ad")
-    DeviceQuickAction.MUTE -> localized("auto.mute.7f10e234")
-    DeviceQuickAction.WAKE -> localized("auto.wake.23581b44")
-    DeviceQuickAction.SLEEP -> localized("auto.sleep.e74552c5")
-    DeviceQuickAction.REBOOT_RECOVERY -> localized("auto.reboot_to_recovery.c6f901c2")
-    DeviceQuickAction.REBOOT_FASTBOOT -> localized("auto.reboot_to_fastboot.3dc369b5")
-    DeviceQuickAction.CURRENT_ACTIVITY -> localized("auto.current_activity.37ce7c5c")
+    DeviceQuickAction.SHUTDOWN -> localized("device.shut_down")
+    DeviceQuickAction.POWER -> localized("device.power")
+    DeviceQuickAction.MENU -> localized("device.menu")
+    DeviceQuickAction.HOME -> localized("device.home")
+    DeviceQuickAction.BACK -> localized("device.shortcut.back")
+    DeviceQuickAction.VOLUME_UP -> localized("device.volume_up")
+    DeviceQuickAction.VOLUME_DOWN -> localized("device.volume_down")
+    DeviceQuickAction.MUTE -> localized("device.mute")
+    DeviceQuickAction.WAKE -> localized("device.wake")
+    DeviceQuickAction.SLEEP -> localized("device.sleep")
+    DeviceQuickAction.REBOOT_RECOVERY -> localized("device.reboot_to_recovery")
+    DeviceQuickAction.REBOOT_FASTBOOT -> localized("device.reboot_to_fastboot")
+    DeviceQuickAction.CURRENT_ACTIVITY -> localized("device.current_activity")
 }
 
 interface DeviceAdb {

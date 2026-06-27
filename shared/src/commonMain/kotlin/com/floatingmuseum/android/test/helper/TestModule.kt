@@ -12,10 +12,10 @@ internal enum class TestModule {
 }
 
 internal fun TestModule.title(strings: AppStrings): String = when (this) {
-    TestModule.Device -> strings.t("auto.device.fb0336cd")
-    TestModule.App -> strings.t("auto.apps.dfc620ce")
-    TestModule.DataFill -> strings.t("auto.data_fill.c232aadd")
-    TestModule.FileManager -> strings.t("auto.files.220e07f7")
-    TestModule.Log -> strings.t("auto.logs.ff42c1f9")
-    TestModule.Settings -> strings.t("auto.settings.3c65c5f8")
+    TestModule.Device -> strings.t("module.device")
+    TestModule.App -> strings.t("common.apps")
+    TestModule.DataFill -> strings.t("module.data_fill")
+    TestModule.FileManager -> strings.t("module.files")
+    TestModule.Log -> strings.t("module.logs")
+    TestModule.Settings -> strings.t("module.settings")
 }

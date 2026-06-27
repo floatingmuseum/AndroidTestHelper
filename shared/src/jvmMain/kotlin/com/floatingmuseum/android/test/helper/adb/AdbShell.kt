@@ -19,7 +19,7 @@ class AdbCommandException(
     command: String,
     exitCode: Int,
     output: String,
-) : RuntimeException(localized("auto.adb_command_failed_with_exit_code_0.c428ca41", exitCode) + "\n$command\n$output")
+) : RuntimeException(localized("adb.command_failed_with_exit_code_arg0", exitCode) + "\n$command\n$output")
 
 object AdbShell {
     val adbPath: String
@@ -50,7 +50,7 @@ object AdbShell {
                 }
                 if (AppSettingsShared.currentSettings.showCommandDuration) {
                     val duration = System.currentTimeMillis() - startTime
-                    logCommand(commandStatus(localized("auto.command_duration_0_ms.59b9b474", duration)))
+                    logCommand(commandStatus(localized("shell.command_duration_arg0_ms", duration)))
                 }
                 output
             } catch (error: CancellationException) {
@@ -88,7 +88,7 @@ object AdbShell {
                 }
                 if (AppSettingsShared.currentSettings.showCommandDuration) {
                     val duration = System.currentTimeMillis() - startTime
-                    logCommand(commandStatus(localized("auto.command_duration_0_ms.59b9b474", duration)))
+                    logCommand(commandStatus(localized("shell.command_duration_arg0_ms", duration)))
                 }
                 output
             } catch (error: CancellationException) {
@@ -140,15 +140,15 @@ object AdbShell {
                 val completed = process.waitFor(5L, TimeUnit.SECONDS)
                 if (!completed) {
                     process.destroyForcibly()
-                    throw IllegalStateException(localized("auto.timed_out_while_reading_adb_version.ce1661d6"))
+                    throw IllegalStateException(localized("adb.timed_out_while_reading_adb_version"))
                 }
                 val output = process.inputStream.bufferedReader().readText()
                 val exitCode = process.exitValue()
                 if (exitCode != 0) {
-                    throw IllegalStateException(output.ifBlank { localized("auto.adb_version_exited_with_code_0.ca9a4090", exitCode) })
+                    throw IllegalStateException(output.ifBlank { localized("adb.version_exited_with_code_arg0", exitCode) })
                 }
                 parseAdbVersion(output).ifBlank {
-                    throw IllegalStateException(localized("auto.adb_version_returned_no_version_info.0a2c0fa8"))
+                    throw IllegalStateException(localized("adb.version_returned_no_version_info"))
                 }
             }
         }
@@ -208,7 +208,7 @@ actual suspend fun checkAdbExecutable(path: String): AdbExecutableCheckResult {
             isValid = false,
             normalizedPath = file.absolutePath,
             version = null,
-            errorMessage = localized("auto.selected_path_is_not_an_executable_file.eacb1fe9"),
+            errorMessage = localized("adb.selected_path_is_not_an_executable_file"),
         )
     }
 
@@ -227,7 +227,7 @@ private fun Throwable.displayMessage(): String {
         ?.firstOrNull { it.isNotBlank() }
         ?.trim()
         ?: this::class.simpleName
-        ?: localized("auto.unknown_error.ea5e8956")
+        ?: localized("common.unknown_error")
 }
 
 class JvmAdbDeviceManager : AdbDeviceManager {

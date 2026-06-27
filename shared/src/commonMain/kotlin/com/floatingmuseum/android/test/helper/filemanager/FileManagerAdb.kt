@@ -177,10 +177,10 @@ fun childRemotePath(parent: String, childName: String): String {
 
 fun validateRemoteChildName(name: String): String {
     val trimmedName = name.trim()
-    require(trimmedName.isNotEmpty()) { localized("auto.name_cannot_be_empty.8c49562d") }
-    require(trimmedName != "." && trimmedName != "..") { localized("auto.name_cannot_be_0.15d91244", trimmedName) }
+    require(trimmedName.isNotEmpty()) { localized("file_manager.name_cannot_be_empty") }
+    require(trimmedName != "." && trimmedName != "..") { localized("file_manager.name_cannot_be_arg0", trimmedName) }
     require(!trimmedName.contains('/') && !trimmedName.contains('\\')) {
-        localized("auto.name_cannot_contain_path_separators.0cf53937")
+        localized("file_manager.name_cannot_contain_path_separators")
     }
     return trimmedName
 }

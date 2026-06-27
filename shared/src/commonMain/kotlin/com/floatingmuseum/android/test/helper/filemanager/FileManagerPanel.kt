@@ -146,12 +146,12 @@ internal fun FileManagerPanel(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = strings.t("auto.device_files.fe22ab8b"),
+                            text = strings.t("file_manager.device_files"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = selectedDevice?.let { "${it.model} · ${it.serialNumber}" } ?: strings.t("auto.no_device_selected.b8530870"),
+                            text = selectedDevice?.let { "${it.model} · ${it.serialNumber}" } ?: strings.t("file_manager.no_device_selected"),
                             modifier = Modifier.weight(1f, fill = false),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -162,10 +162,10 @@ internal fun FileManagerPanel(
                     Text(
                         text = if (isDragOver) {
                             dragTargetPath?.let {
-                                strings.t("auto.release_to_upload_to_0.01f2c148", it)
-                            } ?: strings.t("auto.drop_on_a_directory_or_file_row_to_upload.92a68800")
+                                strings.t("file_manager.release_to_upload_to_arg0", it)
+                            } ?: strings.t("file_manager.drop_on_a_directory_or_file_row_to_upload")
                         } else {
-                            strings.t("auto.right_click_to_refresh_export_or_delete_drop_local_f.9ba29292")
+                            strings.t("file_manager.help.context_menu_and_drop_upload")
                         },
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall,
@@ -187,10 +187,10 @@ internal fun FileManagerPanel(
 
                 when {
                     !hasReadyDevice -> {
-                        EmptyFileManagerState(strings.t("auto.select_a_device_in_device_state_first.4a4eaa6d"))
+                        EmptyFileManagerState(strings.t("common.device.select_device_first_with_period"))
                     }
                     loadedSerial != selectedDevice.serialNumber -> {
-                        EmptyFileManagerState(strings.t("auto.root_directory_has_not_been_loaded_it_loads_automati.9409ddaf"))
+                        EmptyFileManagerState(strings.t("file_manager.root_directory_has_not_been_loaded_it_loads_automati"))
                     }
                     else -> {
                         val highlightedDropDirectory = if (isDragOver) {
@@ -250,14 +250,14 @@ internal fun FileManagerPanel(
             onDismissRequest = { pendingDeleteEntry = null },
             title = {
                 Text(
-                    text = strings.t("auto.confirm_delete.e69b202d"),
+                    text = strings.t("file_manager.confirm_delete"),
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium,
                 )
             },
             text = {
                 Text(
-                    text = strings.t("auto.delete_0_1_2.68fd094c", if (entry.isDirectory) "directory" else "file", entry.name, entry.path),
+                    text = strings.t("file_manager.delete_arg0_arg1_arg2", if (entry.isDirectory) "directory" else "file", entry.name, entry.path),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -268,12 +268,12 @@ internal fun FileManagerPanel(
                         pendingDeleteEntry = null
                     },
                 ) {
-                    Text(strings.t("auto.delete.cdab3894"), color = MaterialTheme.colorScheme.error)
+                    Text(strings.t("file_manager.delete"), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDeleteEntry = null }) {
-                    Text(strings.t("auto.cancel.7c242c64"))
+                    Text(strings.t("common.cancel"))
                 }
             }
         )
@@ -327,7 +327,7 @@ private fun UploadProgressBar(
                 )
             }
             Text(
-                text = strings.t("auto.upload_0_1_2_3_4.e7688c82", progress.currentFileIndex, progress.totalFiles, progress.currentFileName, formatUploadBytes(progress.completedBytes), formatUploadBytes(progress.totalBytes)),
+                text = strings.t("file_manager.upload.progress_bytes", progress.currentFileIndex, progress.totalFiles, progress.currentFileName, formatUploadBytes(progress.completedBytes), formatUploadBytes(progress.totalBytes)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -342,7 +342,7 @@ private fun UploadProgressBar(
                 contentColor = MaterialTheme.colorScheme.onError,
             ),
         ) {
-            Text(strings.t("auto.stop.d138c365"))
+            Text(strings.t("file_manager.upload.stop"))
         }
     }
 }
@@ -613,7 +613,7 @@ private fun FileManagerEntryContextMenu(
                 ) {
                     FileContextMenuSurface {
                         FileContextMenuItem(
-                            text = strings.t("auto.refresh.d44e61bb"),
+                            text = strings.t("common.action.refresh"),
                             enabled = enabled,
                             onHover = { showCreateMenu = false },
                             onClick = {
@@ -622,13 +622,13 @@ private fun FileManagerEntryContextMenu(
                             },
                         )
                         FileContextMenuItem(
-                            text = strings.t("auto.create.a4ca599e"),
+                            text = strings.t("file_manager.context_menu.create_submenu"),
                             enabled = createEnabled,
                             onHover = { showCreateMenu = createEnabled },
                             onClick = { showCreateMenu = createEnabled },
                         )
                         FileContextMenuItem(
-                            text = strings.t("auto.copy_path.559196b8"),
+                            text = strings.t("file_manager.copy_path"),
                             enabled = enabled,
                             onHover = { showCreateMenu = false },
                             onClick = {
@@ -637,7 +637,7 @@ private fun FileManagerEntryContextMenu(
                             },
                         )
                         FileContextMenuItem(
-                            text = strings.t("auto.export.5a8c8fe7"),
+                            text = strings.t("file_manager.export"),
                             enabled = enabled,
                             onHover = { showCreateMenu = false },
                             onClick = {
@@ -646,7 +646,7 @@ private fun FileManagerEntryContextMenu(
                             },
                         )
                         FileContextMenuItem(
-                            text = strings.t("auto.delete.cdab3894"),
+                            text = strings.t("file_manager.delete"),
                             enabled = deleteEnabled,
                             onHover = { showCreateMenu = false },
                             onClick = {
@@ -660,7 +660,7 @@ private fun FileManagerEntryContextMenu(
                     if (showCreateMenu && createEnabled) {
                         FileContextMenuSurface {
                             FileContextMenuItem(
-                                text = strings.t("auto.file.fa42ebd1"),
+                                text = strings.t("file_manager.entry_type.file_label"),
                                 enabled = true,
                                 onClick = {
                                     menuOffset = null
@@ -669,7 +669,7 @@ private fun FileManagerEntryContextMenu(
                                 },
                             )
                             FileContextMenuItem(
-                                text = strings.t("auto.directory.9815550b"),
+                                text = strings.t("file_manager.entry_type.directory_label"),
                                 enabled = true,
                                 onClick = {
                                     menuOffset = null
@@ -757,14 +757,14 @@ private fun CreateEntryDialog(
     val strings = rememberAppStrings()
     val defaultName = if (request.type == RemoteCreateType.Directory) "NewDir" else "NewFile.txt"
     val title = if (request.type == RemoteCreateType.Directory) {
-        strings.t("auto.create_directory.3be68b29")
+        strings.t("file_manager.create_directory")
     } else {
-        strings.t("auto.create_file.48d029e2")
+        strings.t("file_manager.create_file")
     }
     val label = if (request.type == RemoteCreateType.Directory) {
-        strings.t("auto.directory_name.9d140eaa")
+        strings.t("file_manager.directory_name")
     } else {
-        strings.t("auto.file_name.734498c7")
+        strings.t("file_manager.file_name")
     }
     var nameValue by remember(request) {
         mutableStateOf(
@@ -792,7 +792,7 @@ private fun CreateEntryDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = strings.t("auto.target_directory_0.28b998a1", request.targetDirectory.path),
+                    text = strings.t("file_manager.target_directory_arg0", request.targetDirectory.path),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -812,12 +812,12 @@ private fun CreateEntryDialog(
                 enabled = nameValue.text.trim().isNotEmpty(),
                 onClick = { onConfirm(nameValue.text) },
             ) {
-                Text(strings.t("auto.create.90fad297"))
+                Text(strings.t("file_manager.create.confirm"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(strings.t("auto.cancel.7c242c64"))
+                Text(strings.t("common.cancel"))
             }
         },
     )
@@ -834,7 +834,7 @@ private fun EmptyFileManagerState(text: String) {
             Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = strings.t("auto.use_the_triangle_to_expand_directories_drop_on_a_dir.f5c96d45"),
+                text = strings.t("file_manager.help.expand_and_drop_upload"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

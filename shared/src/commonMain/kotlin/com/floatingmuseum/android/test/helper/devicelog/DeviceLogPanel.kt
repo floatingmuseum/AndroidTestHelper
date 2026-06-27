@@ -47,7 +47,7 @@ fun DeviceLogPanel(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = strings.t("auto.select_a_connected_device_in_device_state_from_the_b.cc929da4"),
+                    text = strings.t("common.device.select_from_bottom_panel"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -67,7 +67,7 @@ fun DeviceLogPanel(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = strings.t("auto.log_capture.a0fa067a"),
+                            text = strings.t("log.capture"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -84,13 +84,13 @@ fun DeviceLogPanel(
                             onClick = onCaptureLogs,
                             enabled = !isRunning && selectedDevice.isReady,
                         ) {
-                            Text(strings.t("auto.start.51e1dab3"))
+                            Text(strings.t("log.capture.start"))
                         }
                         Button(
                             onClick = onStopCapture,
                             enabled = isRunning && progress != null,
                         ) {
-                            Text(strings.t("auto.stop.83cc81af"))
+                            Text(strings.t("common.action.stop"))
                         }
                     }
                 }
@@ -106,12 +106,12 @@ fun DeviceLogPanel(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text(
-                            text = strings.t("auto.capture_scope.1580090c"),
+                            text = strings.t("log.capture_scope"),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = strings.t("auto.captures_logcat_only_the_all_buffer_exports_currentl.357fe2a0"),
+                            text = strings.t("log.captures_logcat_only_the_all_buffer_exports_currentl"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -132,7 +132,7 @@ fun DeviceLogPanel(
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Text(
-                            text = strings.t("auto.capturing_0_1_2.c62f8557", progress.currentSection, progress.completedSections, progress.totalSections),
+                            text = strings.t("log.capturing_arg0_arg1_arg2", progress.currentSection, progress.completedSections, progress.totalSections),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -151,7 +151,7 @@ fun DeviceLogPanel(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                text = strings.t("auto.latest_log.6bcc12ab"),
+                                text = strings.t("log.latest_log"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -177,7 +177,7 @@ fun DeviceLogPanel(
                     }
                 } else {
                     Text(
-                        text = strings.t("auto.after_capture_completes_the_local_path_appears_here_.2ffa3a53"),
+                        text = strings.t("log.capture.completed_path_hint"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -189,11 +189,11 @@ fun DeviceLogPanel(
 
 private fun DeviceLogCaptureResult.summaryText(): String {
     val stateText = when (endState) {
-        DeviceLogCaptureEndState.COMPLETED -> localized("auto.completed.384c5f3a")
-        DeviceLogCaptureEndState.STOPPED -> localized("auto.stopped.abb59f88")
-        DeviceLogCaptureEndState.INTERRUPTED -> localized("auto.interrupted.0c146a61")
+        DeviceLogCaptureEndState.COMPLETED -> localized("log.completed")
+        DeviceLogCaptureEndState.STOPPED -> localized("log.stopped")
+        DeviceLogCaptureEndState.INTERRUPTED -> localized("log.interrupted")
     }
-    val sectionText = localized("auto.0_1_capture_sections.4231c6d8", completedSections, totalSections)
+    val sectionText = localized("log.capture.sections_progress", completedSections, totalSections)
     return message
         ?.takeIf { it.isNotBlank() }
         ?.let { "$stateText · $sectionText · $it" }

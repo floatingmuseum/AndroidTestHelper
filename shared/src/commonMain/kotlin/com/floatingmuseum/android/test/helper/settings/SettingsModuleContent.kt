@@ -79,8 +79,8 @@ fun SettingsModuleContent(
                         ) {
                             Text(
                                 text = when (category) {
-                                    SettingCategory.General -> strings.t("auto.general.1823af98")
-                                    SettingCategory.FileManager -> strings.t("auto.file_manager.b61a05b1")
+                                    SettingCategory.General -> strings.t("settings.general")
+                                    SettingCategory.FileManager -> strings.t("settings.file_manager")
                                 },
                                 style = MaterialTheme.typography.titleMedium
                             )
@@ -138,30 +138,30 @@ fun GeneralSettingsPanel(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = strings.t("auto.adb_configuration.6658200c"),
+                    text = strings.t("settings.adb_configuration"),
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = "${strings.t("auto.current_source.ebf3885d")}: " +
+                    text = "${strings.t("settings.current_source")}: " +
                         if (adbRuntimeInfo?.isCustom == true) {
-                            strings.t("auto.custom.69796b08")
+                            strings.t("settings.custom")
                         } else {
-                            strings.t("auto.bundled.b55b9572")
+                            strings.t("settings.bundled")
                         },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "${strings.t("auto.path.f433503b")}: ${adbRuntimeInfo?.path ?: strings.t("auto.loading.7d20d2dc")}",
+                    text = "${strings.t("settings.path")}: ${adbRuntimeInfo?.path ?: strings.t("common.loading")}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "${strings.t("auto.version.8bd064a3")}: " +
+                    text = "${strings.t("settings.version")}: " +
                         (adbRuntimeInfo?.version ?: if (adbRuntimeInfo == null) {
-                            strings.t("auto.loading.7d20d2dc")
+                            strings.t("common.loading")
                         } else {
-                            strings.t("auto.unavailable.4dc00079")
+                            strings.t("settings.unavailable")
                         }),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (adbRuntimeInfo?.version == null && adbRuntimeInfo != null) {
@@ -172,7 +172,7 @@ fun GeneralSettingsPanel(
                 )
                 adbRuntimeInfo?.errorMessage?.let { errorMessage ->
                     Text(
-                        text = "${strings.t("auto.error.5966c2d3")}: $errorMessage",
+                        text = "${strings.t("common.error")}: $errorMessage",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -196,8 +196,8 @@ fun GeneralSettingsPanel(
                                 adbActionMessage = null
                                 try {
                                     val selectedPath = selectFiles(
-                                        dialogTitle = strings.t("auto.select_adb_executable.b74e2c6e"),
-                                        approveButtonText = strings.t("auto.use.7770795d"),
+                                        dialogTitle = strings.t("settings.select_adb_executable"),
+                                        approveButtonText = strings.t("settings.use"),
                                     ).firstOrNull()
                                     if (selectedPath != null) {
                                         val checkResult = checkAdbExecutable(selectedPath)
@@ -205,10 +205,10 @@ fun GeneralSettingsPanel(
                                             AppSettingsShared.updateSettings(
                                                 settings.copy(customAdbPath = checkResult.normalizedPath)
                                             )
-                                            adbActionMessage = strings.t("auto.switched_to_custom_adb.6466a20b")
+                                            adbActionMessage = strings.t("settings.switched_to_custom_adb")
                                         } else {
-                                            adbActionMessage = strings.t("auto.not_switched.63fb8e6d") +
-                                                ": ${checkResult.errorMessage ?: strings.t("auto.unable_to_read_adb_version.287fb046")}"
+                                            adbActionMessage = strings.t("settings.not_switched") +
+                                                ": ${checkResult.errorMessage ?: strings.t("settings.unable_to_read_adb_version")}"
                                         }
                                     }
                                 } finally {
@@ -217,16 +217,16 @@ fun GeneralSettingsPanel(
                             }
                         }
                     ) {
-                        Text(if (isCheckingAdb) strings.t("auto.checking.f7a3748f") else strings.t("auto.change.8df5aec0"))
+                        Text(if (isCheckingAdb) strings.t("settings.checking") else strings.t("common.change"))
                     }
                     OutlinedButton(
                         enabled = settings.customAdbPath != null && !isCheckingAdb,
                         onClick = {
                             AppSettingsShared.updateSettings(settings.copy(customAdbPath = null))
-                            adbActionMessage = strings.t("auto.restored_bundled_adb.f4ad0ea9")
+                            adbActionMessage = strings.t("settings.restored_bundled_adb")
                         }
                     ) {
-                        Text(strings.t("auto.restore_default.38a935c9"))
+                        Text(strings.t("settings.restore_default"))
                     }
                 }
             }
@@ -240,11 +240,11 @@ fun GeneralSettingsPanel(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = strings.t("auto.language.48dea00b"),
+                    text = strings.t("settings.language"),
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = strings.t("auto.before_manual_switching_the_app_follows_the_system_l.3baa80ed"),
+                    text = strings.t("settings.language.system_default_hint"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -300,12 +300,12 @@ fun GeneralSettingsPanel(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = strings.t("auto.show_command_timestamp.8e0e5ebd"),
+                        text = strings.t("settings.show_command_timestamp"),
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = strings.t("auto.when_enabled_command_log_entries_include_a_time_pref.47b8a52f"),
+                        text = strings.t("settings.when_enabled_command_log_entries_include_a_time_pref"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -329,12 +329,12 @@ fun GeneralSettingsPanel(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = strings.t("auto.show_command_duration.8b060224"),
+                        text = strings.t("settings.show_command_duration"),
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = strings.t("auto.when_enabled_each_completed_adb_command_logs_the_tim.937c1e6a"),
+                        text = strings.t("settings.command_log.duration_hint"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -372,11 +372,11 @@ fun FileManagerSettingsPanel(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = strings.t("auto.default_root_directory.b817d958"),
+                    text = strings.t("settings.default_root_directory"),
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = strings.t("auto.the_file_manager_starts_from_this_directory_when_ent.75400650"),
+                    text = strings.t("settings.file_manager.default_root_hint"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

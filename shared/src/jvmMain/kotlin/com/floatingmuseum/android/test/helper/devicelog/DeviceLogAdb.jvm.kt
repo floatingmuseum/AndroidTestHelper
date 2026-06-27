@@ -39,10 +39,10 @@ private class JvmDeviceLogAdb : DeviceLogAdb {
         val capturedAt = LocalDateTime.now()
         val directory = AppRuntimePaths.logsDirectory().absoluteFile
         if (!directory.exists() && !directory.mkdirs()) {
-            throw IllegalStateException(localized("auto.unable_to_create_log_output_directory_0.a8520227", directory.absolutePath))
+            throw IllegalStateException(localized("log.unable_to_create_log_output_directory_arg0", directory.absolutePath))
         }
         if (!directory.isDirectory) {
-            throw IllegalStateException(localized("auto.log_output_path_is_not_a_directory_0.926786fb", directory.absolutePath))
+            throw IllegalStateException(localized("log.output_path_is_not_a_directory_arg0", directory.absolutePath))
         }
 
         val fileName = buildDeviceLogFileName(deviceModel, deviceSerial, capturedAt)
@@ -137,14 +137,14 @@ private class JvmDeviceLogAdb : DeviceLogAdb {
                     if (exitCode != 0) {
                         writer.appendLine()
                         if (stopRequested) {
-                            val message = localized("auto.user_stopped_capture_logcat_exited_with_code_0.0d4a96f8", exitCode)
+                            val message = localized("log.user_stopped_capture_logcat_exited_with_code_arg0", exitCode)
                             writer.appendLine("[$message]")
                             outcome = LogSectionOutcome(
                                 endState = DeviceLogCaptureEndState.STOPPED,
                                 message = message,
                             )
                         } else {
-                            val message = localized("auto.logcat_stopped_unexpectedly_possibly_because_the_dev.d9b1baa5", exitCode)
+                            val message = localized("log.capture.interrupted_exit_code", exitCode)
                             writer.appendLine("[$message]")
                             sectionFailureMessage = commandStatus(message)
                             outcome = LogSectionOutcome(
@@ -157,21 +157,21 @@ private class JvmDeviceLogAdb : DeviceLogAdb {
                     process.destroyForcibly()
                     outputReader.cancel()
                     writer.appendLine()
-                    writer.appendLine("[${localized("auto.capture_stopped.4833feb5")}]")
+                    writer.appendLine("[${localized("log.capture_stopped")}]")
                     throw error
                 } catch (error: Throwable) {
                     process.destroyForcibly()
                     outputReader.cancel()
                     writer.appendLine()
                     if (stopRequested) {
-                        val message = localized("auto.user_stopped_capture.67a4fd80")
+                        val message = localized("log.user_stopped_capture")
                         writer.appendLine("[$message]")
                         outcome = LogSectionOutcome(
                             endState = DeviceLogCaptureEndState.STOPPED,
                             message = message,
                         )
                     } else {
-                        val message = localized("auto.logcat_stopped_unexpectedly.2184fdb9") + ": ${error.message ?: unknownError()}"
+                        val message = localized("log.logcat_stopped_unexpectedly") + ": ${error.message ?: unknownError()}"
                         writer.appendLine("[$message]")
                         sectionFailureMessage = commandStatus(message)
                         outcome = LogSectionOutcome(
@@ -215,7 +215,7 @@ private fun buildLogSections(deviceSerial: String): List<LogSection> {
 
     return listOf(
         adb(
-            localized("auto.logcat_all_buffers.d7023d5b"),
+            localized("log.logcat_all_buffers"),
             "shell",
             "logcat",
             "-b",

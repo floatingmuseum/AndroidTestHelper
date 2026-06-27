@@ -83,13 +83,13 @@ enum class ApplicationDetailSection(val pluginKey: String) {
 }
 
 fun ApplicationDetailSection.displayTitle(): String = when (this) {
-    ApplicationDetailSection.BASIC -> localized("auto.basic.7d4cfb3b")
-    ApplicationDetailSection.PERMISSIONS -> localized("auto.permissions.bb6110a3")
+    ApplicationDetailSection.BASIC -> localized("app.detail.basic")
+    ApplicationDetailSection.PERMISSIONS -> localized("app.permissions")
     ApplicationDetailSection.ACTIVITIES -> "Activity"
     ApplicationDetailSection.SERVICES -> "Service"
     ApplicationDetailSection.BROADCAST_RECEIVERS -> "BroadcastReceiver"
     ApplicationDetailSection.CONTENT_PROVIDERS -> "ContentProvider"
-    ApplicationDetailSection.SIGNATURES -> localized("auto.signatures.261a371b")
+    ApplicationDetailSection.SIGNATURES -> localized("app.signatures")
 }
 
 enum class ApplicationDetailSource(val title: String) {
@@ -113,15 +113,15 @@ object ApplicationAction {
 }
 
 fun applicationActionLabel(action: String): String = when (action) {
-    ApplicationAction.LAUNCH -> localized("auto.launch.bad3e4bd")
-    ApplicationAction.STOP -> localized("auto.force_stop.f127341b")
-    ApplicationAction.CLEAR_DATA -> localized("auto.clear_data.95417e20")
-    ApplicationAction.DISABLE -> localized("auto.disable.07a14f3a")
-    ApplicationAction.ENABLE -> localized("auto.enable.89d12335")
-    ApplicationAction.EXPORT_APK -> localized("auto.export_apk.3f84060c")
-    ApplicationAction.UNINSTALL -> localized("auto.uninstall.c0bce4cd")
-    ApplicationAction.SAVE_ICON -> localized("auto.save_icon.9bb9af23")
-    else -> localized("auto.unknown_app_action.c607f53c")
+    ApplicationAction.LAUNCH -> localized("app.launch")
+    ApplicationAction.STOP -> localized("app.force_stop")
+    ApplicationAction.CLEAR_DATA -> localized("app.clear_data")
+    ApplicationAction.DISABLE -> localized("app.disable")
+    ApplicationAction.ENABLE -> localized("app.enable")
+    ApplicationAction.EXPORT_APK -> localized("app.export_apk")
+    ApplicationAction.UNINSTALL -> localized("app.uninstall")
+    ApplicationAction.SAVE_ICON -> localized("app.save_icon")
+    else -> localized("app.unknown_app_action")
 }
 
 @Serializable

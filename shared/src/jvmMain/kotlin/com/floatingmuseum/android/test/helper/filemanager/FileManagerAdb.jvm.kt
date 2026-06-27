@@ -62,7 +62,7 @@ private class JvmFileManagerAdb : FileManagerAdb {
             .map { File(it).absoluteFile }
             .filter { it.exists() }
         if (localFiles.isEmpty()) {
-            throw IllegalArgumentException(localized("auto.no_local_files_available_to_upload.cf8e2dbb"))
+            throw IllegalArgumentException(localized("file_manager.no_local_files_available_to_upload"))
         }
         val totalBytes = localFiles.sumOf { uploadSourceSizeBytes(it) }
         var completedBytes = 0L
@@ -116,7 +116,7 @@ private class JvmFileManagerAdb : FileManagerAdb {
         logCommand: (String) -> Unit,
     ) {
         val normalizedPath = normalizeRemotePath(remotePath)
-        require(normalizedPath != "/") { localized("auto.cannot_delete_the_device_root_directory.ac7c0675") }
+        require(normalizedPath != "/") { localized("file_manager.cannot_delete_the_device_root_directory") }
         AdbShell.executeAdb(
             args = listOf("-s", deviceSerial, "shell", "rm", "-rf", shellQuote(normalizedPath)),
             displayCommand = "adb -s $deviceSerial shell rm -rf ${shellQuote(normalizedPath)}",
@@ -217,7 +217,7 @@ private suspend fun executeAdbPushWithProgress(
             }
             if (AppSettingsShared.currentSettings.showCommandDuration) {
                 val duration = System.currentTimeMillis() - startTime
-                logCommand(commandStatus(localized("auto.command_duration_0_ms.59b9b474", duration)))
+                logCommand(commandStatus(localized("shell.command_duration_arg0_ms", duration)))
             }
         } catch (error: CancellationException) {
             process.destroyForcibly()

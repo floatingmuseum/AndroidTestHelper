@@ -64,7 +64,7 @@ fun LogCaptureFloatingButton(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    text = strings.t("auto.capturing_logcat.fbada554"),
+                    text = strings.t("log.capture.capturing_title"),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -81,7 +81,7 @@ fun LogCaptureFloatingButton(
                     contentColor = MaterialTheme.colorScheme.onError,
                 ),
             ) {
-                Text(strings.t("auto.stop.83cc81af"))
+                Text(strings.t("common.action.stop"))
             }
         }
     }

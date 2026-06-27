@@ -93,7 +93,7 @@ fun DeviceTestPanel(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = strings.t("auto.select_a_connected_device_in_device_state_from_the_b.cc929da4"),
+                    text = strings.t("common.device.select_from_bottom_panel"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -110,7 +110,7 @@ fun DeviceTestPanel(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        text = strings.t("auto.device_system_info.d1a713da"),
+                        text = strings.t("device.system_info"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -123,11 +123,11 @@ fun DeviceTestPanel(
                         InfoSection.values().forEach { section ->
                             val isSelected = selectedSection == section
                             val title = when (section) {
-                                InfoSection.BASIC -> strings.t("auto.basic.0c39f352")
-                                InfoSection.HARDWARE -> strings.t("auto.hardware.d0b7f811")
-                                InfoSection.SCREEN -> strings.t("auto.display.d27e495a")
-                                InfoSection.BATTERY -> strings.t("auto.battery.d9ec8cf9")
-                                InfoSection.PROPERTIES -> strings.t("auto.properties.73ceec76")
+                                InfoSection.BASIC -> strings.t("device.info.basic")
+                                InfoSection.HARDWARE -> strings.t("device.info.hardware_label")
+                                InfoSection.SCREEN -> strings.t("device.display")
+                                InfoSection.BATTERY -> strings.t("device.battery")
+                                InfoSection.PROPERTIES -> strings.t("device.properties")
                             }
                             
                             val isSecProperties = section == InfoSection.PROPERTIES
@@ -216,14 +216,14 @@ fun DeviceTestPanel(
                                                 .verticalScroll(rememberScrollState()),
                                             verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
-                                            InfoRow(strings.t("auto.serial_number_sn.40aab042"), selectedDevice.serialNumber)
-                                            InfoRow(strings.t("auto.brand.6f078946"), systemInfo.brand)
-                                            InfoRow(strings.t("auto.model.075ee47c"), systemInfo.model)
-                                            InfoRow(strings.t("auto.rom_version.8ad66e7b"), systemInfo.romVersion)
-                                            InfoRow(strings.t("auto.android_version.f996a9e2"), "Android ${systemInfo.androidVersion}")
-                                            InfoRow(strings.t("auto.sdk_version.de747d51"), "API ${systemInfo.sdkVersion}")
-                                            InfoRow(strings.t("auto.cpu_abi.83639c12"), systemInfo.cpuAbi)
-                                            InfoRow(strings.t("auto.ip_address.d7440b41"), systemInfo.ipAddress)
+                                            InfoRow(strings.t("device.serial_number_sn"), selectedDevice.serialNumber)
+                                            InfoRow(strings.t("device.brand"), systemInfo.brand)
+                                            InfoRow(strings.t("device.info.model"), systemInfo.model)
+                                            InfoRow(strings.t("device.rom_version"), systemInfo.romVersion)
+                                            InfoRow(strings.t("device.android_version"), "Android ${systemInfo.androidVersion}")
+                                            InfoRow(strings.t("device.sdk_version"), "API ${systemInfo.sdkVersion}")
+                                            InfoRow(strings.t("device.cpu_abi"), systemInfo.cpuAbi)
+                                            InfoRow(strings.t("device.ip_address"), systemInfo.ipAddress)
                                         }
                                     } else {
                                         Box(
@@ -231,7 +231,7 @@ fun DeviceTestPanel(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = strings.t("auto.no_data_click_the_tab_above_to_refresh.66509312"),
+                                                text = strings.t("device.no_data_click_the_tab_above_to_refresh"),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
@@ -257,17 +257,17 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = strings.t("auto.cpu_info_proc_cpuinfo.94d19a44"),
+                                                        text = strings.t("device.cpu_info_proc_cpuinfo"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow(strings.t("auto.cpu_abi.83639c12"), systemInfo.cpuAbi)
-                                                    InfoRow(strings.t("auto.processor.6e51e73d"), systemInfo.cpuProcessor)
-                                                    InfoRow(strings.t("auto.hardware.72c25591"), systemInfo.cpuHardware)
-                                                    InfoRow(strings.t("auto.cpu_architecture.ef8462da"), systemInfo.cpuArchitecture)
-                                                    InfoRow(strings.t("auto.core_count.2d95c453"), systemInfo.cpuCoreCount)
-                                                    InfoTextBlock(strings.t("auto.features.2f092021"), systemInfo.cpuFeatures)
+                                                    InfoRow(strings.t("device.cpu_abi"), systemInfo.cpuAbi)
+                                                    InfoRow(strings.t("device.processor"), systemInfo.cpuProcessor)
+                                                    InfoRow(strings.t("device.info.hardware_section"), systemInfo.cpuHardware)
+                                                    InfoRow(strings.t("device.cpu_architecture"), systemInfo.cpuArchitecture)
+                                                    InfoRow(strings.t("device.core_count"), systemInfo.cpuCoreCount)
+                                                    InfoTextBlock(strings.t("device.features"), systemInfo.cpuFeatures)
                                                 }
                                             }
 
@@ -282,18 +282,18 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = strings.t("auto.memory_info_proc_meminfo.019a0fab"),
+                                                        text = strings.t("device.memory_info_proc_meminfo"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow(strings.t("auto.total_memory_memtotal.ffda36cd"), systemInfo.memoryTotal)
-                                                    InfoRow(strings.t("auto.available_memory_memavailable.6802331e"), systemInfo.memoryAvailable)
-                                                    InfoRow(strings.t("auto.free_memory_memfree.50518212"), systemInfo.memoryFree)
-                                                    InfoRow(strings.t("auto.buffers.d8615be7"), systemInfo.memoryBuffers)
-                                                    InfoRow(strings.t("auto.page_cache_cached.68cc0b6f"), systemInfo.memoryCached)
-                                                    InfoRow(strings.t("auto.swap_total.eee9203a"), systemInfo.memorySwapTotal)
-                                                    InfoRow(strings.t("auto.swap_free.043d2880"), systemInfo.memorySwapFree)
+                                                    InfoRow(strings.t("device.total_memory_memtotal"), systemInfo.memoryTotal)
+                                                    InfoRow(strings.t("device.available_memory_memavailable"), systemInfo.memoryAvailable)
+                                                    InfoRow(strings.t("device.free_memory_memfree"), systemInfo.memoryFree)
+                                                    InfoRow(strings.t("device.buffers"), systemInfo.memoryBuffers)
+                                                    InfoRow(strings.t("device.page_cache_cached"), systemInfo.memoryCached)
+                                                    InfoRow(strings.t("device.swap_total"), systemInfo.memorySwapTotal)
+                                                    InfoRow(strings.t("device.swap_free"), systemInfo.memorySwapFree)
                                                 }
                                             }
                                         }
@@ -303,7 +303,7 @@ fun DeviceTestPanel(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = strings.t("auto.no_data_click_the_tab_above_to_refresh.66509312"),
+                                                text = strings.t("device.no_data_click_the_tab_above_to_refresh"),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
@@ -329,14 +329,14 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = strings.t("auto.display_basics.34f61660"),
+                                                        text = strings.t("device.display_basics"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow(strings.t("auto.resolution.9ac821bf"), systemInfo.screenSize)
-                                                    InfoRow(strings.t("auto.density.ed216e02"), systemInfo.screenDensity)
-                                                    InfoRow(strings.t("auto.refresh_rate.19cef23c"), systemInfo.displayRefreshRate)
+                                                    InfoRow(strings.t("device.resolution"), systemInfo.screenSize)
+                                                    InfoRow(strings.t("device.density"), systemInfo.screenDensity)
+                                                    InfoRow(strings.t("device.refresh_rate"), systemInfo.displayRefreshRate)
                                                 }
                                             }
 
@@ -351,15 +351,15 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = strings.t("auto.display_details_dumpsys.0cd4784c"),
+                                                        text = strings.t("device.display_details_dumpsys"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow(strings.t("auto.display_id_mdisplayid.e644ddad"), systemInfo.displayId)
-                                                    InfoRow(strings.t("auto.initial_config_init.363a60c0"), systemInfo.displayInit)
-                                                    InfoRow(strings.t("auto.current_config_cur.fc1723b4"), systemInfo.displayCur)
-                                                    InfoRow(strings.t("auto.app_bounds_app.ba35a79a"), systemInfo.displayApp)
+                                                    InfoRow(strings.t("device.display_id_mdisplayid"), systemInfo.displayId)
+                                                    InfoRow(strings.t("device.initial_config_init"), systemInfo.displayInit)
+                                                    InfoRow(strings.t("device.current_config_cur"), systemInfo.displayCur)
+                                                    InfoRow(strings.t("device.app_bounds_app"), systemInfo.displayApp)
                                                 }
                                             }
 
@@ -375,7 +375,7 @@ fun DeviceTestPanel(
                                                         verticalArrangement = Arrangement.spacedBy(12.dp)
                                                     ) {
                                                         Text(
-                                                            text = strings.t("auto.display_simulation_and_debug_testing_only.870fad5f"),
+                                                            text = strings.t("device.display_simulation_and_debug_testing_only"),
                                                             style = MaterialTheme.typography.titleSmall,
                                                             fontWeight = FontWeight.Bold,
                                                             color = MaterialTheme.colorScheme.error
@@ -388,7 +388,7 @@ fun DeviceTestPanel(
                                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                                 verticalAlignment = Alignment.CenterVertically
                                                             ) {
-                                                                Text(strings.t("auto.set_resolution_for_example_1080x1920.18f9e905"), style = MaterialTheme.typography.bodyMedium)
+                                                                Text(strings.t("device.set_resolution_for_example_1080x1920"), style = MaterialTheme.typography.bodyMedium)
                                                                 Row(
                                                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                                     verticalAlignment = Alignment.CenterVertically
@@ -398,7 +398,7 @@ fun DeviceTestPanel(
                                                                         onValueChange = { mockSizeText = it },
                                                                         modifier = Modifier.width(150.dp),
                                                                         singleLine = true,
-                                                                        placeholder = { Text(strings.t("auto.wxh.54a58df4")) }
+                                                                        placeholder = { Text(strings.t("device.wxh")) }
                                                                     )
                                                                     Button(
                                                                         onClick = {
@@ -409,7 +409,7 @@ fun DeviceTestPanel(
                                                                         enabled = !isRunning && mockSizeText.isNotEmpty(),
                                                                         modifier = Modifier.height(36.dp)
                                                                     ) {
-                                                                        Text(strings.t("auto.change.8df5aec0"))
+                                                                        Text(strings.t("common.change"))
                                                                     }
                                                                 }
                                                             }
@@ -419,7 +419,7 @@ fun DeviceTestPanel(
                                                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                                                 modifier = Modifier.fillMaxWidth().height(40.dp)
                                                             ) {
-                                                                Text(strings.t("auto.reset_resolution.4c2e59c1"))
+                                                                Text(strings.t("device.reset_resolution"))
                                                             }
                                                         }
 
@@ -431,7 +431,7 @@ fun DeviceTestPanel(
                                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                                 verticalAlignment = Alignment.CenterVertically
                                                             ) {
-                                                                Text(strings.t("auto.set_density_for_example_480.b4f52d08"), style = MaterialTheme.typography.bodyMedium)
+                                                                Text(strings.t("device.set_density_for_example_480"), style = MaterialTheme.typography.bodyMedium)
                                                                 Row(
                                                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                                     verticalAlignment = Alignment.CenterVertically
@@ -452,7 +452,7 @@ fun DeviceTestPanel(
                                                                         enabled = !isRunning && mockDensityText.isNotEmpty(),
                                                                         modifier = Modifier.height(36.dp)
                                                                     ) {
-                                                                        Text(strings.t("auto.change.8df5aec0"))
+                                                                        Text(strings.t("common.change"))
                                                                     }
                                                                 }
                                                             }
@@ -462,7 +462,7 @@ fun DeviceTestPanel(
                                                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                                                 modifier = Modifier.fillMaxWidth().height(40.dp)
                                                             ) {
-                                                                Text(strings.t("auto.reset_density.19e95dc1"))
+                                                                Text(strings.t("device.reset_density"))
                                                             }
                                                         }
                                                     }
@@ -475,7 +475,7 @@ fun DeviceTestPanel(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = strings.t("auto.no_data_click_the_tab_above_to_refresh.66509312"),
+                                                text = strings.t("device.no_data_click_the_tab_above_to_refresh"),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
@@ -501,18 +501,18 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = strings.t("auto.battery_basics.e38715b8"),
+                                                        text = strings.t("device.battery_basics"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow(strings.t("auto.battery_level.b0f37339"), systemInfo.batteryLevel?.let { "$it%" } ?: localized("auto.unknown.54dfee5a"))
-                                                    InfoRow(strings.t("auto.battery_status.d609a438"), systemInfo.batteryStatus)
-                                                    InfoRow(strings.t("auto.battery_health.8191d436"), systemInfo.batteryHealth)
-                                                    InfoRow(strings.t("auto.battery_temperature.0c6d3606"), systemInfo.batteryTemp)
-                                                    InfoRow(strings.t("auto.battery_voltage.4bc0ea51"), systemInfo.batteryVoltage)
-                                                    InfoRow(strings.t("auto.battery_present.a1891aa6"), systemInfo.batteryPresent)
-                                                    InfoRow(strings.t("auto.battery_technology.2c6e4682"), systemInfo.batteryTechnology)
+                                                    InfoRow(strings.t("device.battery_level"), systemInfo.batteryLevel?.let { "$it%" } ?: localized("device.unknown"))
+                                                    InfoRow(strings.t("device.battery_status"), systemInfo.batteryStatus)
+                                                    InfoRow(strings.t("device.battery_health"), systemInfo.batteryHealth)
+                                                    InfoRow(strings.t("device.battery_temperature"), systemInfo.batteryTemp)
+                                                    InfoRow(strings.t("device.battery_voltage"), systemInfo.batteryVoltage)
+                                                    InfoRow(strings.t("device.battery_present"), systemInfo.batteryPresent)
+                                                    InfoRow(strings.t("device.battery_technology"), systemInfo.batteryTechnology)
                                                 }
                                             }
 
@@ -527,17 +527,17 @@ fun DeviceTestPanel(
                                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     Text(
-                                                        text = strings.t("auto.power_and_charging.160c9e6c"),
+                                                        text = strings.t("device.power_and_charging"),
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
-                                                    InfoRow(strings.t("auto.ac_powered.d9bd01e2"), systemInfo.batteryACPowered)
-                                                    InfoRow(strings.t("auto.usb_powered.5c1aacb2"), systemInfo.batteryUSBPowered)
-                                                    InfoRow(strings.t("auto.wireless_powered.0df00564"), systemInfo.batteryWirelessPowered)
-                                                    InfoRow(strings.t("auto.max_charging_current.68c1dbea"), systemInfo.batteryMaxChargingCurrent)
-                                                    InfoRow(strings.t("auto.max_charging_voltage.d1c313fc"), systemInfo.batteryMaxChargingVoltage)
-                                                    InfoRow(strings.t("auto.charge_counter.059e5794"), systemInfo.batteryChargeCounter)
+                                                    InfoRow(strings.t("device.ac_powered"), systemInfo.batteryACPowered)
+                                                    InfoRow(strings.t("device.usb_powered"), systemInfo.batteryUSBPowered)
+                                                    InfoRow(strings.t("device.wireless_powered"), systemInfo.batteryWirelessPowered)
+                                                    InfoRow(strings.t("device.max_charging_current"), systemInfo.batteryMaxChargingCurrent)
+                                                    InfoRow(strings.t("device.max_charging_voltage"), systemInfo.batteryMaxChargingVoltage)
+                                                    InfoRow(strings.t("device.charge_counter"), systemInfo.batteryChargeCounter)
                                                 }
                                             }
 
@@ -553,7 +553,7 @@ fun DeviceTestPanel(
                                                         verticalArrangement = Arrangement.spacedBy(12.dp)
                                                     ) {
                                                         Text(
-                                                            text = strings.t("auto.battery_simulation_debug_testing_only.7d1d178b"),
+                                                            text = strings.t("device.battery_simulation_debug_testing_only"),
                                                             style = MaterialTheme.typography.titleSmall,
                                                             fontWeight = FontWeight.Bold,
                                                             color = MaterialTheme.colorScheme.error
@@ -564,13 +564,13 @@ fun DeviceTestPanel(
                                                             horizontalArrangement = Arrangement.SpaceBetween,
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            Text(strings.t("auto.simulate_unplug_charger.dcd73478"), style = MaterialTheme.typography.bodyMedium)
+                                                            Text(strings.t("device.simulate_unplug_charger"), style = MaterialTheme.typography.bodyMedium)
                                                             Button(
                                                                 onClick = { onBatteryControl(listOf("unplug")) },
                                                                 enabled = !isRunning,
                                                                 modifier = Modifier.height(36.dp)
                                                             ) {
-                                                                Text(strings.t("auto.unplug.9446fbf6"))
+                                                                Text(strings.t("device.unplug"))
                                                             }
                                                         }
 
@@ -580,7 +580,7 @@ fun DeviceTestPanel(
                                                             horizontalArrangement = Arrangement.SpaceBetween,
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            Text(strings.t("auto.simulate_battery_level.d7b0d914"), style = MaterialTheme.typography.bodyMedium)
+                                                            Text(strings.t("device.simulate_battery_level"), style = MaterialTheme.typography.bodyMedium)
                                                             Row(
                                                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                                 verticalAlignment = Alignment.CenterVertically
@@ -602,7 +602,7 @@ fun DeviceTestPanel(
                                                                     enabled = !isRunning && mockLevelText.isNotEmpty(),
                                                                     modifier = Modifier.height(36.dp)
                                                                 ) {
-                                                                    Text(strings.t("auto.set.e5416817"))
+                                                                    Text(strings.t("device.set"))
                                                                 }
                                                             }
                                                         }
@@ -613,7 +613,7 @@ fun DeviceTestPanel(
                                                             horizontalArrangement = Arrangement.SpaceBetween,
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            Text(strings.t("auto.simulate_temperature_c.2ab4fc6e"), style = MaterialTheme.typography.bodyMedium)
+                                                            Text(strings.t("device.simulate_temperature_c"), style = MaterialTheme.typography.bodyMedium)
                                                             Row(
                                                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                                 verticalAlignment = Alignment.CenterVertically
@@ -623,7 +623,7 @@ fun DeviceTestPanel(
                                                                     onValueChange = { mockTempText = it },
                                                                     modifier = Modifier.width(100.dp),
                                                                     singleLine = true,
-                                                                    placeholder = { Text(strings.t("auto.example_32.0d7fd982")) }
+                                                                    placeholder = { Text(strings.t("device.example_32")) }
                                                                 )
                                                                 Button(
                                                                     onClick = {
@@ -636,7 +636,7 @@ fun DeviceTestPanel(
                                                                     enabled = !isRunning && mockTempText.isNotEmpty(),
                                                                     modifier = Modifier.height(36.dp)
                                                                 ) {
-                                                                    Text(strings.t("auto.set.e5416817"))
+                                                                    Text(strings.t("device.set"))
                                                                 }
                                                             }
                                                         }
@@ -646,7 +646,7 @@ fun DeviceTestPanel(
                                                             horizontalArrangement = Arrangement.SpaceBetween,
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            Text(strings.t("auto.simulate_charging_status.4e59822f"), style = MaterialTheme.typography.bodyMedium)
+                                                            Text(strings.t("device.simulate_charging_status"), style = MaterialTheme.typography.bodyMedium)
                                                             Row(
                                                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                                 verticalAlignment = Alignment.CenterVertically
@@ -657,7 +657,7 @@ fun DeviceTestPanel(
                                                                     modifier = Modifier.height(32.dp),
                                                                     contentPadding = ButtonDefaults.ContentPadding
                                                                 ) {
-                                                                    Text(strings.t("auto.charging.ba3a87b7"), style = MaterialTheme.typography.labelMedium)
+                                                                    Text(strings.t("device.battery.action.charging"), style = MaterialTheme.typography.labelMedium)
                                                                 }
                                                                 Button(
                                                                     onClick = { onBatteryControl(listOf("set", "status", "3")) },
@@ -665,7 +665,7 @@ fun DeviceTestPanel(
                                                                     modifier = Modifier.height(32.dp),
                                                                     contentPadding = ButtonDefaults.ContentPadding
                                                                 ) {
-                                                                    Text(strings.t("auto.discharging.5ffc49ce"), style = MaterialTheme.typography.labelMedium)
+                                                                    Text(strings.t("device.battery.action.discharging"), style = MaterialTheme.typography.labelMedium)
                                                                 }
                                                                 Button(
                                                                     onClick = { onBatteryControl(listOf("set", "status", "5")) },
@@ -673,7 +673,7 @@ fun DeviceTestPanel(
                                                                     modifier = Modifier.height(32.dp),
                                                                     contentPadding = ButtonDefaults.ContentPadding
                                                                 ) {
-                                                                    Text(strings.t("auto.full.d0c02083"), style = MaterialTheme.typography.labelMedium)
+                                                                    Text(strings.t("device.battery.action.full"), style = MaterialTheme.typography.labelMedium)
                                                                 }
                                                             }
                                                         }
@@ -686,7 +686,7 @@ fun DeviceTestPanel(
                                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                                             modifier = Modifier.fillMaxWidth().height(40.dp)
                                                         ) {
-                                                            Text(strings.t("auto.reset_battery_state.445e086a"))
+                                                            Text(strings.t("device.reset_battery_state"))
                                                         }
                                                     }
                                                 }
@@ -698,7 +698,7 @@ fun DeviceTestPanel(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = strings.t("auto.no_data_click_the_tab_above_to_refresh.66509312"),
+                                                text = strings.t("device.no_data_click_the_tab_above_to_refresh"),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
@@ -713,7 +713,7 @@ fun DeviceTestPanel(
                                         OutlinedTextField(
                                             value = searchQuery,
                                             onValueChange = { searchQuery = it },
-                                            label = { Text(strings.t("auto.search_properties_for_example_ro_product.cedb8dec")) },
+                                            label = { Text(strings.t("device.search_properties_for_example_ro_product")) },
                                             modifier = Modifier.fillMaxWidth(),
                                             singleLine = true
                                         )
@@ -725,14 +725,14 @@ fun DeviceTestPanel(
                                         ) {
                                             if (systemProperties.isEmpty()) {
                                                 Text(
-                                                    text = strings.t("auto.no_property_data_click_the_tab_above_to_reload.4ce8ae8f"),
+                                                    text = strings.t("device.no_property_data_click_the_tab_above_to_reload"),
                                                     modifier = Modifier.align(Alignment.Center),
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             } else if (filteredProperties.isEmpty()) {
                                                 Text(
-                                                    text = strings.t("auto.no_matching_property_values.c9f81559"),
+                                                    text = strings.t("device.no_matching_property_values"),
                                                     modifier = Modifier.align(Alignment.Center),
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -799,19 +799,19 @@ fun DeviceTestPanel(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = strings.t("auto.device_shortcuts.879e2961"),
+                        text = strings.t("device.shortcuts"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
 
                     val shortcutActions = listOf(
                         DeviceShortcutAction(DeviceQuickAction.SHUTDOWN.displayLabel(), true) { onQuickAction(DeviceQuickAction.SHUTDOWN) },
-                        DeviceShortcutAction(strings.t("auto.reboot.dface16c"), true, onReboot),
+                        DeviceShortcutAction(strings.t("device.reboot"), true, onReboot),
                         DeviceShortcutAction(DeviceQuickAction.REBOOT_RECOVERY.displayLabel(), true) { onQuickAction(DeviceQuickAction.REBOOT_RECOVERY) },
                         DeviceShortcutAction(DeviceQuickAction.REBOOT_FASTBOOT.displayLabel(), true) { onQuickAction(DeviceQuickAction.REBOOT_FASTBOOT) },
                         DeviceShortcutAction(DeviceQuickAction.CURRENT_ACTIVITY.displayLabel(), false) { onQuickAction(DeviceQuickAction.CURRENT_ACTIVITY) },
-                        DeviceShortcutAction(strings.t("auto.screenshot.970a0cf1"), false, onTakeScreenshot),
-                        DeviceShortcutAction(strings.t("auto.install_apk.769a503b"), false, onInstallApplications),
+                        DeviceShortcutAction(strings.t("device.screenshot"), false, onTakeScreenshot),
+                        DeviceShortcutAction(strings.t("device.install_apk"), false, onInstallApplications),
                         DeviceShortcutAction(DeviceQuickAction.POWER.displayLabel(), false) { onQuickAction(DeviceQuickAction.POWER) },
                         DeviceShortcutAction(DeviceQuickAction.MENU.displayLabel(), false) { onQuickAction(DeviceQuickAction.MENU) },
                         DeviceShortcutAction(DeviceQuickAction.HOME.displayLabel(), false) { onQuickAction(DeviceQuickAction.HOME) },
@@ -965,27 +965,27 @@ private fun InfoTextBlock(label: String, value: String) {
 
 private fun localizedDeviceInfoValue(value: String): String {
     val exact = when (value) {
-        "未知" -> localized("auto.unknown.54dfee5a")
-        "未知型号" -> localized("auto.unknown_model.5dd7a8ba")
-        "是" -> localized("auto.yes.7b0a458c")
-        "否" -> localized("auto.no.787e69b1")
-        "充电中" -> localized("auto.charging.e9731331")
-        "放电中" -> localized("auto.discharging.05a399cd")
-        "未充电" -> localized("auto.not_charging.f5b3b4ef")
-        "已充满" -> localized("auto.full.2fe76bfb")
-        "良好" -> localized("auto.good.792f7d68")
-        "过热" -> localized("auto.overheated.a38f47c3")
-        "损坏" -> localized("auto.damaged.76620589")
-        "过压" -> localized("auto.over_voltage.8f51bb17")
-        "未知故障" -> localized("auto.unknown_failure.0fe42e25")
-        "过冷" -> localized("auto.cold.becb7a06")
+        "未知" -> localized("device.unknown")
+        "未知型号" -> localized("device.unknown_model")
+        "是" -> localized("device.yes")
+        "否" -> localized("device.no")
+        "充电中" -> localized("device.battery.status.charging")
+        "放电中" -> localized("device.battery.status.discharging")
+        "未充电" -> localized("device.not_charging")
+        "已充满" -> localized("device.battery.status.full")
+        "良好" -> localized("device.good")
+        "过热" -> localized("device.overheated")
+        "损坏" -> localized("device.damaged")
+        "过压" -> localized("device.over_voltage")
+        "未知故障" -> localized("device.unknown_failure")
+        "过冷" -> localized("device.cold")
         else -> null
     }
     if (exact != null) return exact
 
     return value
-        .replace("未知型号", localized("auto.unknown_model.5dd7a8ba"))
-        .replace("未知故障", localized("auto.unknown_failure.0fe42e25"))
-        .replace("未知", localized("auto.unknown.54dfee5a"))
-        .replace("物理:", localized("auto.physical.ae8ea9ac"))
+        .replace("未知型号", localized("device.unknown_model"))
+        .replace("未知故障", localized("device.unknown_failure"))
+        .replace("未知", localized("device.unknown"))
+        .replace("物理:", localized("device.physical"))
 }

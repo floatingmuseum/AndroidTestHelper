@@ -183,17 +183,17 @@ internal fun DevicePanel(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = strings.t("auto.connected_devices.940d2f7e"),
+                    text = strings.t("shell.connected_devices"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Button(onClick = onRefresh, enabled = !isRunning) {
-                    Text(strings.t("auto.refresh.924834a3"))
+                    Text(strings.t("shell.device.refresh"))
                 }
             }
 
             if (devices.isEmpty()) {
-                Text(strings.t("auto.no_devices_found_connect_usb_and_refresh.e1d05c7c"))
+                Text(strings.t("shell.no_devices_found_connect_usb_and_refresh"))
             } else {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -223,7 +223,7 @@ internal fun DevicePanel(
                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 Text("SN: ${device.serialNumber}")
-                                Text("${strings.t("auto.model.40c5ec06")}: ${device.model}")
+                                Text("${strings.t("shell.device.model")}: ${device.model}")
                             }
                         }
                     }
@@ -257,7 +257,7 @@ internal fun CommandLogPanel(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = strings.t("auto.command_log.fcf54fbf"),
+                    text = strings.t("shell.command_log"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -266,7 +266,7 @@ internal fun CommandLogPanel(
                     onClick = onClearCommandLog,
                     enabled = commandLog.isNotEmpty(),
                 ) {
-                    Text(strings.t("auto.clear.d6250e3f"))
+                    Text(strings.t("shell.clear"))
                 }
             }
             Box(
@@ -278,7 +278,7 @@ internal fun CommandLogPanel(
             ) {
                 SelectionContainer {
                     if (commandLog.isEmpty()) {
-                        Text(strings.t("auto.no_commands.95169f8a"))
+                        Text(strings.t("shell.no_commands"))
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             commandLog.forEach { command ->

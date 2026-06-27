@@ -124,7 +124,7 @@ fun ApplicationTestPanel(
 
             when {
                 selectedDevice == null -> {
-                    Text(strings.t("auto.select_a_device_in_device_state_first.4a4eaa6d"))
+                    Text(strings.t("common.device.select_device_first_with_period"))
                 }
 
                 selectedApp != null -> {
@@ -153,7 +153,7 @@ fun ApplicationTestPanel(
                             span = { GridItemSpan(maxLineSpan) },
                         ) {
                             ApplicationSectionHeader(
-                                title = strings.t("auto.third_party_apps.68c500c0"),
+                                title = strings.t("app.third_party_apps"),
                                 count = if (thirdPartyApps.isNotEmpty()) filteredThirdPartyApps.size else null,
                                 isLoading = isLoadingThirdParty,
                                 isExpanded = isThirdPartyExpanded,
@@ -179,14 +179,14 @@ fun ApplicationTestPanel(
                                                 modifier = Modifier.width(200.dp)
                                             )
                                             Text(
-                                                text = strings.t("auto.loading_0_1_2.0b53d329", thirdPartyProgressCurrent, thirdPartyProgressTotal, (progress * 100).toInt()),
+                                                text = strings.t("app.loading_arg0_arg1_arg2", thirdPartyProgressCurrent, thirdPartyProgressTotal, (progress * 100).toInt()),
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         } else {
                                             LinearProgressIndicator(modifier = Modifier.width(200.dp))
                                             Text(
-                                                text = strings.t("auto.initializing_app_list.de60b730"),
+                                                text = strings.t("app.initializing_app_list"),
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -199,7 +199,7 @@ fun ApplicationTestPanel(
                                     span = { GridItemSpan(maxLineSpan) }
                                 ) {
                                     Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                        Text(strings.t("auto.no_data_refresh_to_load_third_party_apps.373fa94c"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                        Text(strings.t("app.no_data_refresh_to_load_third_party_apps"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
                             } else if (filteredThirdPartyApps.isEmpty()) {
@@ -208,7 +208,7 @@ fun ApplicationTestPanel(
                                     span = { GridItemSpan(maxLineSpan) }
                                 ) {
                                     Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                        Text(strings.t("auto.no_matching_third_party_apps.d7a62a0b"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                        Text(strings.t("app.no_matching_third_party_apps"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
                             } else {
@@ -230,7 +230,7 @@ fun ApplicationTestPanel(
                             span = { GridItemSpan(maxLineSpan) },
                         ) {
                             ApplicationSectionHeader(
-                                title = strings.t("auto.system_apps.dd1c4990"),
+                                title = strings.t("app.system_apps"),
                                 count = if (systemApps.isNotEmpty()) filteredSystemApps.size else null,
                                 isLoading = isLoadingSystem,
                                 isExpanded = isSystemExpanded,
@@ -257,14 +257,14 @@ fun ApplicationTestPanel(
                                                 modifier = Modifier.width(200.dp)
                                             )
                                             Text(
-                                                text = strings.t("auto.loading_0_1_2.0b53d329", systemProgressCurrent, systemProgressTotal, (progress * 100).toInt()),
+                                                text = strings.t("app.loading_arg0_arg1_arg2", systemProgressCurrent, systemProgressTotal, (progress * 100).toInt()),
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         } else {
                                             LinearProgressIndicator(modifier = Modifier.width(200.dp))
                                             Text(
-                                                text = strings.t("auto.initializing_app_list.de60b730"),
+                                                text = strings.t("app.initializing_app_list"),
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -277,7 +277,7 @@ fun ApplicationTestPanel(
                                     span = { GridItemSpan(maxLineSpan) }
                                 ) {
                                     Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                        Text(strings.t("auto.no_data_refresh_to_load_system_apps_and_create_a_loc.7f797a07"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                        Text(strings.t("app.list.empty_system_apps_refresh_hint"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
                             } else if (filteredSystemApps.isEmpty()) {
@@ -286,7 +286,7 @@ fun ApplicationTestPanel(
                                     span = { GridItemSpan(maxLineSpan) }
                                 ) {
                                     Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                        Text(strings.t("auto.no_matching_system_apps.11aa888d"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                        Text(strings.t("app.no_matching_system_apps"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
                             } else {
@@ -337,7 +337,7 @@ private fun ApplicationListHeader(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = strings.t("auto.apps.dfc620ce"),
+                    text = strings.t("common.apps"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -345,7 +345,7 @@ private fun ApplicationListHeader(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     singleLine = true,
-                    label = { Text(strings.t("auto.search_app_name_or_package.a9f7a1a0")) },
+                    label = { Text(strings.t("app.search_app_name_or_package")) },
                     modifier = Modifier.weight(1f),
                 )
                 Button(
@@ -355,7 +355,7 @@ private fun ApplicationListHeader(
                     modifier = Modifier.height(40.dp),
                 ) {
                     Text(
-                        text = strings.t("auto.clear_cache.ceb1a0aa"),
+                        text = strings.t("app.clear_cache"),
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
@@ -383,25 +383,25 @@ private fun applicationListDescription(
     isSearching: Boolean,
 ): String {
     if (thirdPartyApps.isEmpty() && systemApps.isEmpty()) {
-        return localized("auto.refresh_manually_to_load_the_app_list_system_apps_ar.7778d345")
+        return localized("app.list.manual_refresh_cache_hint")
     }
 
     val parts = mutableListOf<String>()
     if (thirdPartyApps.isNotEmpty()) {
         parts.add(
             if (isSearching) {
-                localized("auto.third_party_0_1.92780af2", filteredThirdPartyApps.size, thirdPartyApps.size)
+                localized("app.third_party_arg0_arg1", filteredThirdPartyApps.size, thirdPartyApps.size)
             } else {
-                localized("auto.third_party_0.15f88291", thirdPartyApps.size)
+                localized("app.third_party_arg0", thirdPartyApps.size)
             }
         )
     }
     if (systemApps.isNotEmpty()) {
         parts.add(
             if (isSearching) {
-                localized("auto.system_0_1.33782d8c", filteredSystemApps.size, systemApps.size)
+                localized("app.system_arg0_arg1", filteredSystemApps.size, systemApps.size)
             } else {
-                localized("auto.system_0.c1e13074", systemApps.size)
+                localized("app.system_arg0", systemApps.size)
             }
         )
     }
@@ -411,7 +411,7 @@ private fun applicationListDescription(
         thirdPartyApps + systemApps
     }
     val totalDisabled = visibleApps.count { !it.isEnabled }
-    parts.add(localized("auto.disabled_0.351c6b7f", totalDisabled))
+    parts.add(localized("app.list.disabled_count", totalDisabled))
     return parts.joinToString(" · ")
 }
 
@@ -449,14 +449,14 @@ private fun ApplicationSectionHeader(
                 )
                 if (cacheTime != null) {
                     Text(
-                        text = strings.t("auto.cached_0.152a832e", cacheTime),
+                        text = strings.t("app.cached_arg0", cacheTime),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
-                    text = if (isExpanded) strings.t("auto.collapse.6966cd2e") else strings.t("auto.expand.7c01c464"),
+                    text = if (isExpanded) strings.t("app.collapse") else strings.t("app.expand"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -471,7 +471,7 @@ private fun ApplicationSectionHeader(
                 modifier = Modifier.height(32.dp)
             ) {
                 Text(
-                    text = if (isLoading) strings.t("auto.loading.7d20d2dc") else strings.t("auto.refresh.d44e61bb"),
+                    text = if (isLoading) strings.t("common.loading") else strings.t("common.action.refresh"),
                     style = MaterialTheme.typography.labelMedium
                 )
             }
@@ -637,7 +637,7 @@ private fun ApplicationDetailPanel(
                         }
                     }
                     Button(onClick = onBack) {
-                        Text(strings.t("auto.back.40f454f4"))
+                        Text(strings.t("app.detail.back"))
                     }
                 }
             }
@@ -690,7 +690,7 @@ private fun ApplicationDetailPanel(
             },
             title = {
                 Text(
-                    text = strings.t("auto.confirm_0.4914b71c", pendingAction?.let(::applicationActionLabel) ?: strings.t("app.action.dangerous")),
+                    text = strings.t("app.confirm_arg0", pendingAction?.let(::applicationActionLabel) ?: strings.t("app.action.dangerous")),
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
                 )
@@ -698,9 +698,9 @@ private fun ApplicationDetailPanel(
             text = {
                 Text(
                     text = if (pendingAction == ApplicationAction.UNINSTALL) {
-                        strings.t("auto.this_will_uninstall_0_from_the_current_device_system.923dcd39", app.packageName)
+                        strings.t("app.this_will_uninstall_arg0_from_the_current_device_system", app.packageName)
                     } else {
-                        strings.t("auto.this_action_may_seriously_affect_the_device_proceed_.17b1cc77")
+                        strings.t("app.action.dangerous_operation_warning")
                     },
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -717,7 +717,7 @@ private fun ApplicationDetailPanel(
                     }
                 ) {
                     Text(
-                        text = strings.t("auto.confirm.a22a2e1d"),
+                        text = strings.t("app.confirm"),
                         color = if (pendingAction == ApplicationAction.UNINSTALL) {
                             MaterialTheme.colorScheme.error
                         } else {
@@ -733,7 +733,7 @@ private fun ApplicationDetailPanel(
                         pendingAction = null
                     }
                 ) {
-                    Text(strings.t("auto.cancel.7c242c64"))
+                    Text(strings.t("common.cancel"))
                 }
             }
         )
@@ -857,7 +857,7 @@ private fun ApplicationDetailInfoPanel(
                         ) {
                             CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                             Text(
-                                text = strings.t("auto.loading_0_info.86fe8dd7", selectedSection.displayTitle()),
+                                text = strings.t("app.loading_arg0_info", selectedSection.displayTitle()),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -866,9 +866,9 @@ private fun ApplicationDetailInfoPanel(
                     content == null -> {
                         Text(
                             text = if (isRunning) {
-                                strings.t("auto.waiting_for_the_current_task_to_finish.5582c753")
+                                strings.t("app.waiting_for_the_current_task_to_finish")
                             } else {
-                                strings.t("auto.no_data_click_a_tab_above_to_load.417043c0")
+                                strings.t("app.no_data_click_a_tab_above_to_load")
                             },
                             modifier = Modifier.align(Alignment.Center),
                             style = MaterialTheme.typography.bodyMedium,
@@ -877,7 +877,7 @@ private fun ApplicationDetailInfoPanel(
                     }
                     content.items.isEmpty() -> {
                         Text(
-                            text = strings.t("auto.no_displayable_info_in_this_section.b5c65874"),
+                            text = strings.t("app.no_displayable_info_in_this_section"),
                             modifier = Modifier.align(Alignment.Center),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -905,15 +905,15 @@ private fun ApplicationDetailInfoPanel(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                text = strings.t("auto.source_0.f80adb74", content.source.displayTitle()),
+                                text = strings.t("app.source_arg0", content.source.displayTitle()),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 if (isComponentSection) {
                                     val countText = if (detailSearchQuery.isBlank()) {
-                                        strings.t("auto.0_1_total.e8cab256", totalComponentCount, selectedSection.displayTitle())
+                                        strings.t("app.detail.section_total", totalComponentCount, selectedSection.displayTitle())
                                     } else {
-                                        strings.t("auto.matched_0_1_2.eb6aeb27", filteredItems.size, totalComponentCount, selectedSection.displayTitle())
+                                        strings.t("app.matched_arg0_arg1_arg2", filteredItems.size, totalComponentCount, selectedSection.displayTitle())
                                     }
                                     Text(
                                         text = countText,
@@ -929,9 +929,9 @@ private fun ApplicationDetailInfoPanel(
                                     label = {
                                         Text(
                                             if (selectedSection == ApplicationDetailSection.PERMISSIONS) {
-                                                strings.t("auto.search_permission_name.ddf17663")
+                                                strings.t("app.search_permission_name")
                                             } else {
-                                                strings.t("auto.search_name.14bab336")
+                                                strings.t("app.search_name")
                                             }
                                         )
                                     },
@@ -941,7 +941,7 @@ private fun ApplicationDetailInfoPanel(
                             }
                             if (filteredItems.isEmpty()) {
                                 Text(
-                                    text = strings.t("auto.no_matching_info.a768f18f"),
+                                    text = strings.t("app.no_matching_info"),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 24.dp),
@@ -979,7 +979,7 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
             val title = parsedName ?: label
             DisplayApplicationDetailItem(
                 title = title,
-                body = removeDetailAttribute(value, "name").ifBlank { localized("auto.declared.0f1a04af") },
+                body = removeDetailAttribute(value, "name").ifBlank { localized("app.declared") },
                 searchableName = title,
             )
         }
@@ -988,7 +988,7 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
             val (title, body) = if (parsedName != null) {
                 val remaining = removeDetailAttribute(value, "name").ifBlank {
                     if (label.startsWith("权限") || label.equals("Permission", ignoreCase = true)) {
-                        localized("auto.declared.0f1a04af")
+                        localized("app.declared")
                     } else {
                         label
                     }
@@ -1008,7 +1008,7 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
                         name,
                         remaining.ifBlank {
                             if (label.startsWith("权限") || label.equals("Permission", ignoreCase = true)) {
-                                localized("auto.declared.0f1a04af")
+                                localized("app.declared")
                             } else {
                                 label
                             }
@@ -1023,7 +1023,7 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
                     Pair(
                         value.trim(),
                         if (label.startsWith("权限") || label.equals("Permission", ignoreCase = true)) {
-                            localized("auto.declared.0f1a04af")
+                            localized("app.declared")
                         } else {
                             label
                         }
