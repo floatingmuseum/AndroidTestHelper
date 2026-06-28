@@ -14,18 +14,18 @@ class DeviceAdbTest {
         val output = """
             Physical size: 1600x2560
         """.trimIndent()
-        assertEquals("1600x2560", parseScreenSize(output))
+        assertEquals(DeviceInfoValue.Text("1600x2560"), parseScreenSize(output))
 
         val outputWithOverride = """
             Physical size: 1600x2560
             Override size: 1200x1920
         """.trimIndent()
-        assertEquals("1200x1920 (物理: 1600x2560)", parseScreenSize(outputWithOverride))
+        assertEquals(DeviceInfoValue.PhysicalOverride("1200x1920", "1600x2560"), parseScreenSize(outputWithOverride))
 
         val outputUnknown = """
             Something else
         """.trimIndent()
-        assertEquals("未知", parseScreenSize(outputUnknown))
+        assertEquals(DeviceInfoValue.Unknown, parseScreenSize(outputUnknown))
     }
 
     @Test
@@ -57,13 +57,13 @@ class DeviceAdbTest {
                 inet 192.168.1.100/24 brd 192.168.1.255 scope global wlan0
                    valid_lft forever preferred_lft forever
         """.trimIndent()
-        assertEquals("192.168.1.100", parseIpAddress(output))
+        assertEquals(DeviceInfoValue.Text("192.168.1.100"), parseIpAddress(output))
 
         val outputUnknown = """
             loopback only:
             inet 127.0.0.1/8 scope host lo
         """.trimIndent()
-        assertEquals("未知", parseIpAddress(outputUnknown))
+        assertEquals(DeviceInfoValue.Unknown, parseIpAddress(outputUnknown))
     }
 
     @Test
@@ -88,16 +88,16 @@ class DeviceAdbTest {
         val physicalOnly = """
             Physical density: 440
         """.trimIndent()
-        assertEquals("440", parseScreenDensity(physicalOnly))
+        assertEquals(DeviceInfoValue.Text("440"), parseScreenDensity(physicalOnly))
 
         val withOverride = """
             Physical density: 440
             Override density: 400
         """.trimIndent()
-        assertEquals("400 (物理: 440)", parseScreenDensity(withOverride))
+        assertEquals(DeviceInfoValue.PhysicalOverride("400", "440"), parseScreenDensity(withOverride))
 
         val unknown = "something else"
-        assertEquals("未知", parseScreenDensity(unknown))
+        assertEquals(DeviceInfoValue.Unknown, parseScreenDensity(unknown))
     }
 
     @Test
@@ -108,25 +108,25 @@ class DeviceAdbTest {
                 init=1600x2560 320dpi mMinSizeOfResizeableTaskDp=220 cur=2560x1600 app=2560x1600 rng=1600x1600-2560x2560
         """.trimIndent()
 
-        assertEquals("0", parseDisplayId(dumpsysWindowDisplays))
-        assertEquals("1600x2560 320dpi", parseDisplayInit(dumpsysWindowDisplays))
-        assertEquals("2560x1600", parseDisplayCur(dumpsysWindowDisplays))
-        assertEquals("2560x1600", parseDisplayApp(dumpsysWindowDisplays))
+        assertEquals(DeviceInfoValue.Text("0"), parseDisplayId(dumpsysWindowDisplays))
+        assertEquals(DeviceInfoValue.Text("1600x2560 320dpi"), parseDisplayInit(dumpsysWindowDisplays))
+        assertEquals(DeviceInfoValue.Text("2560x1600"), parseDisplayCur(dumpsysWindowDisplays))
+        assertEquals(DeviceInfoValue.Text("2560x1600"), parseDisplayApp(dumpsysWindowDisplays))
 
         val dumpsysDisplayWithFps = """
             mOverrideDisplayInfo=DisplayInfo{"内置屏幕", displayId 0, fps 90.0, vsync 90.0}
         """.trimIndent()
-        assertEquals("90.0 Hz", parseDisplayRefreshRate(dumpsysDisplayWithFps))
+        assertEquals(DeviceInfoValue.Text("90.0 Hz"), parseDisplayRefreshRate(dumpsysDisplayWithFps))
 
         val dumpsysDisplayWithRenderRate = """
             renderFrameRate 120.0
         """.trimIndent()
-        assertEquals("120.0 Hz", parseDisplayRefreshRate(dumpsysDisplayWithRenderRate))
+        assertEquals(DeviceInfoValue.Text("120.0 Hz"), parseDisplayRefreshRate(dumpsysDisplayWithRenderRate))
 
         val dumpsysDisplayWithDefaultRate = """
             mDefaultRefreshRate: 60.0
         """.trimIndent()
-        assertEquals("60.0 Hz", parseDisplayRefreshRate(dumpsysDisplayWithDefaultRate))
+        assertEquals(DeviceInfoValue.Text("60.0 Hz"), parseDisplayRefreshRate(dumpsysDisplayWithDefaultRate))
     }
 
     @Test
@@ -158,11 +158,11 @@ class DeviceAdbTest {
 
         val details = parseCpuInfo(output)
 
-        assertEquals("ARMv7 Processor rev 0 (v7l)", details.processor)
-        assertEquals("Qualcomm MSM 8974 HAMMERHEAD (Flattened Device Tree)", details.hardware)
-        assertEquals("7", details.architecture)
-        assertEquals("4", details.coreCount)
-        assertEquals("swp half thumb fastmult vfp edsp neon vfpv3 tls vfpv4", details.features)
+        assertEquals(DeviceInfoValue.Text("ARMv7 Processor rev 0 (v7l)"), details.processor)
+        assertEquals(DeviceInfoValue.Text("Qualcomm MSM 8974 HAMMERHEAD (Flattened Device Tree)"), details.hardware)
+        assertEquals(DeviceInfoValue.Text("7"), details.architecture)
+        assertEquals(DeviceInfoValue.Text("4"), details.coreCount)
+        assertEquals(DeviceInfoValue.Text("swp half thumb fastmult vfp edsp neon vfpv3 tls vfpv4"), details.features)
     }
 
     @Test
@@ -178,11 +178,11 @@ class DeviceAdbTest {
 
         val details = parseCpuInfo(output)
 
-        assertEquals("Intel(R) Core(TM) i7", details.processor)
-        assertEquals("Intel(R) Core(TM) i7", details.hardware)
-        assertEquals("未知", details.architecture)
-        assertEquals("1", details.coreCount)
-        assertEquals("fpu vme de pse", details.features)
+        assertEquals(DeviceInfoValue.Text("Intel(R) Core(TM) i7"), details.processor)
+        assertEquals(DeviceInfoValue.Text("Intel(R) Core(TM) i7"), details.hardware)
+        assertEquals(DeviceInfoValue.Unknown, details.architecture)
+        assertEquals(DeviceInfoValue.Text("1"), details.coreCount)
+        assertEquals(DeviceInfoValue.Text("fpu vme de pse"), details.features)
     }
 
     @Test
@@ -199,22 +199,22 @@ class DeviceAdbTest {
 
         val details = parseMemoryInfo(output)
 
-        assertEquals("8 GiB (8388608 kB)", details.total)
-        assertEquals("475.2 MiB (486564 kB)", details.free)
-        assertEquals("4 GiB (4194304 kB)", details.available)
-        assertEquals("14.9 MiB (15224 kB)", details.buffers)
-        assertEquals("70.8 MiB (72464 kB)", details.cached)
-        assertEquals("256 MiB (262140 kB)", details.swapTotal)
-        assertEquals("202.7 MiB (207572 kB)", details.swapFree)
+        assertEquals(DeviceInfoValue.Text("8 GiB (8388608 kB)"), details.total)
+        assertEquals(DeviceInfoValue.Text("475.2 MiB (486564 kB)"), details.free)
+        assertEquals(DeviceInfoValue.Text("4 GiB (4194304 kB)"), details.available)
+        assertEquals(DeviceInfoValue.Text("14.9 MiB (15224 kB)"), details.buffers)
+        assertEquals(DeviceInfoValue.Text("70.8 MiB (72464 kB)"), details.cached)
+        assertEquals(DeviceInfoValue.Text("256 MiB (262140 kB)"), details.swapTotal)
+        assertEquals(DeviceInfoValue.Text("202.7 MiB (207572 kB)"), details.swapFree)
     }
 
     @Test
     fun testParseMemoryInfoHandlesMissingValues() {
         val details = parseMemoryInfo("MemTotal:        1024 kB")
 
-        assertEquals("1 MiB (1024 kB)", details.total)
-        assertEquals("未知", details.available)
-        assertEquals("未知", details.free)
+        assertEquals(DeviceInfoValue.Text("1 MiB (1024 kB)"), details.total)
+        assertEquals(DeviceInfoValue.Unknown, details.available)
+        assertEquals(DeviceInfoValue.Unknown, details.free)
     }
 
     @Test
@@ -236,18 +236,18 @@ class DeviceAdbTest {
               voltage: 4123
               technology: Li-poly
         """.trimIndent()
-        assertEquals("充电中", parseBatteryStatus(output))
-        assertEquals("良好", parseBatteryHealth(output))
-        assertEquals("29.0 °C", parseBatteryTemp(output))
-        assertEquals("4123 mV", parseBatteryVoltage(output))
-        assertEquals("否", parseBatteryACPowered(output))
-        assertEquals("是", parseBatteryUSBPowered(output))
-        assertEquals("否", parseBatteryWirelessPowered(output))
-        assertEquals("500 mA (500000 μA)", parseBatteryMaxChargingCurrent(output))
-        assertEquals("5.0 V (5000 mV)", parseBatteryMaxChargingVoltage(output))
-        assertEquals("2841 mAh (2841000 μAh)", parseBatteryChargeCounter(output))
-        assertEquals("是", parseBatteryPresent(output))
-        assertEquals("Li-poly", parseBatteryTechnology(output))
+        assertEquals(DeviceInfoValue.Localized(DeviceInfoToken.BatteryStatusCharging), parseBatteryStatus(output))
+        assertEquals(DeviceInfoValue.Localized(DeviceInfoToken.BatteryHealthGood), parseBatteryHealth(output))
+        assertEquals(DeviceInfoValue.Text("29.0 °C"), parseBatteryTemp(output))
+        assertEquals(DeviceInfoValue.Text("4123 mV"), parseBatteryVoltage(output))
+        assertEquals(DeviceInfoValue.BooleanValue(false), parseBatteryACPowered(output))
+        assertEquals(DeviceInfoValue.BooleanValue(true), parseBatteryUSBPowered(output))
+        assertEquals(DeviceInfoValue.BooleanValue(false), parseBatteryWirelessPowered(output))
+        assertEquals(DeviceInfoValue.Text("500 mA (500000 μA)"), parseBatteryMaxChargingCurrent(output))
+        assertEquals(DeviceInfoValue.Text("5.0 V (5000 mV)"), parseBatteryMaxChargingVoltage(output))
+        assertEquals(DeviceInfoValue.Text("2841 mAh (2841000 μAh)"), parseBatteryChargeCounter(output))
+        assertEquals(DeviceInfoValue.BooleanValue(true), parseBatteryPresent(output))
+        assertEquals(DeviceInfoValue.Text("Li-poly"), parseBatteryTechnology(output))
 
         val unknownOutput = """
               status: 9
@@ -255,18 +255,18 @@ class DeviceAdbTest {
               temp: unknown
               voltage: unknown
         """.trimIndent()
-        assertEquals("未知", parseBatteryStatus(unknownOutput))
-        assertEquals("未知", parseBatteryHealth(unknownOutput))
-        assertEquals("未知", parseBatteryTemp(unknownOutput))
-        assertEquals("未知", parseBatteryVoltage(unknownOutput))
-        assertEquals("未知", parseBatteryACPowered(unknownOutput))
-        assertEquals("未知", parseBatteryUSBPowered(unknownOutput))
-        assertEquals("未知", parseBatteryWirelessPowered(unknownOutput))
-        assertEquals("未知", parseBatteryMaxChargingCurrent(unknownOutput))
-        assertEquals("未知", parseBatteryMaxChargingVoltage(unknownOutput))
-        assertEquals("未知", parseBatteryChargeCounter(unknownOutput))
-        assertEquals("未知", parseBatteryPresent(unknownOutput))
-        assertEquals("未知", parseBatteryTechnology(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryStatus(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryHealth(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryTemp(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryVoltage(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryACPowered(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryUSBPowered(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryWirelessPowered(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryMaxChargingCurrent(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryMaxChargingVoltage(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryChargeCounter(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryPresent(unknownOutput))
+        assertEquals(DeviceInfoValue.Unknown, parseBatteryTechnology(unknownOutput))
     }
 
     @Test

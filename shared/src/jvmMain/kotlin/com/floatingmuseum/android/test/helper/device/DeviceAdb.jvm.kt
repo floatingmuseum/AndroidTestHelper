@@ -422,7 +422,7 @@ private class JvmDeviceAdb : DeviceAdb {
         deviceSerial: String,
         propKey: String,
         logCommand: (String) -> Unit,
-    ): String {
+    ): DeviceInfoValue {
         return try {
             AdbShell.executeAdb(
                 args = listOf("-s", deviceSerial, "shell", "getprop", propKey),
@@ -430,70 +430,74 @@ private class JvmDeviceAdb : DeviceAdb {
                 logCommand = logCommand
             ).trim()
         } catch (e: Throwable) {
-            "未知"
-        }.takeIf { it.isNotEmpty() } ?: "未知"
+            null
+        }.toDeviceInfoValue()
     }
 }
 
-internal fun parseScreenSize(output: String): String {
+private fun String?.toDeviceInfoValue(): DeviceInfoValue {
+    return this?.takeIf { it.isNotBlank() }?.let { DeviceInfoValue.Text(it) } ?: DeviceInfoValue.Unknown
+}
+
+internal fun parseScreenSize(output: String): DeviceInfoValue {
     val overrideRegex = Regex("""Override size:\s*(\d+x\d+)""")
     val physicalRegex = Regex("""Physical size:\s*(\d+x\d+)""")
     val overrideMatch = overrideRegex.find(output)?.groupValues?.get(1)
     val physicalMatch = physicalRegex.find(output)?.groupValues?.get(1)
     return when {
-        overrideMatch != null && physicalMatch != null -> "$overrideMatch (物理: $physicalMatch)"
-        overrideMatch != null -> overrideMatch
-        physicalMatch != null -> physicalMatch
-        else -> "未知"
+        overrideMatch != null && physicalMatch != null -> DeviceInfoValue.PhysicalOverride(overrideMatch, physicalMatch)
+        overrideMatch != null -> DeviceInfoValue.Text(overrideMatch)
+        physicalMatch != null -> DeviceInfoValue.Text(physicalMatch)
+        else -> DeviceInfoValue.Unknown
     }
 }
 
-internal fun parseDisplayId(output: String): String {
+internal fun parseDisplayId(output: String): DeviceInfoValue {
     val regex = Regex("""Display:\s+mDisplayId=(\d+)""")
-    return regex.find(output)?.groupValues?.get(1) ?: "未知"
+    return regex.find(output)?.groupValues?.get(1).toDeviceInfoValue()
 }
 
-internal fun parseDisplayInit(output: String): String {
+internal fun parseDisplayInit(output: String): DeviceInfoValue {
     val regex = Regex("""\binit=(\d+x\d+\s+\d+dpi|\d+x\d+)""")
-    return regex.find(output)?.groupValues?.get(1) ?: "未知"
+    return regex.find(output)?.groupValues?.get(1).toDeviceInfoValue()
 }
 
-internal fun parseDisplayCur(output: String): String {
+internal fun parseDisplayCur(output: String): DeviceInfoValue {
     val regex = Regex("""\bcur=(\d+x\d+)""")
-    return regex.find(output)?.groupValues?.get(1) ?: "未知"
+    return regex.find(output)?.groupValues?.get(1).toDeviceInfoValue()
 }
 
-internal fun parseDisplayApp(output: String): String {
+internal fun parseDisplayApp(output: String): DeviceInfoValue {
     val regex = Regex("""\bapp=(\d+x\d+)""")
-    return regex.find(output)?.groupValues?.get(1) ?: "未知"
+    return regex.find(output)?.groupValues?.get(1).toDeviceInfoValue()
 }
 
-internal fun parseDisplayRefreshRate(output: String): String {
+internal fun parseDisplayRefreshRate(output: String): DeviceInfoValue {
     val fpsRegex = Regex("""fps\s*[=:\s]\s*(\d+(?:\.\d+)?)""")
     val fpsMatch = fpsRegex.find(output)?.groupValues?.get(1)
-    if (fpsMatch != null) return "$fpsMatch Hz"
+    if (fpsMatch != null) return DeviceInfoValue.Text("$fpsMatch Hz")
 
     val renderRateRegex = Regex("""renderFrameRate\s+(\d+(?:\.\d+)?)""")
     val renderRateMatch = renderRateRegex.find(output)?.groupValues?.get(1)
-    if (renderRateMatch != null) return "$renderRateMatch Hz"
+    if (renderRateMatch != null) return DeviceInfoValue.Text("$renderRateMatch Hz")
 
     val defaultRateRegex = Regex("""mDefaultRefreshRate:\s*(\d+(?:\.\d+)?)""")
     val defaultRateMatch = defaultRateRegex.find(output)?.groupValues?.get(1)
-    if (defaultRateMatch != null) return "$defaultRateMatch Hz"
+    if (defaultRateMatch != null) return DeviceInfoValue.Text("$defaultRateMatch Hz")
 
     val refreshRateRegex = Regex("""\b(?:mRefreshRate|refreshRate|fps)\b\s*[=:\s]\s*(\d+(?:\.\d+)?)""", RegexOption.IGNORE_CASE)
     val refreshRateMatch = refreshRateRegex.find(output)?.groupValues?.get(1)
-    if (refreshRateMatch != null) return "$refreshRateMatch Hz"
+    if (refreshRateMatch != null) return DeviceInfoValue.Text("$refreshRateMatch Hz")
 
-    return "未知"
+    return DeviceInfoValue.Unknown
 }
 
 internal data class CpuInfoDetails(
-    val processor: String = "未知",
-    val hardware: String = "未知",
-    val architecture: String = "未知",
-    val coreCount: String = "未知",
-    val features: String = "未知",
+    val processor: DeviceInfoValue = DeviceInfoValue.Unknown,
+    val hardware: DeviceInfoValue = DeviceInfoValue.Unknown,
+    val architecture: DeviceInfoValue = DeviceInfoValue.Unknown,
+    val coreCount: DeviceInfoValue = DeviceInfoValue.Unknown,
+    val features: DeviceInfoValue = DeviceInfoValue.Unknown,
 )
 
 internal fun parseCpuInfo(output: String): CpuInfoDetails {
@@ -506,37 +510,33 @@ internal fun parseCpuInfo(output: String): CpuInfoDetails {
         .toSet()
     val cpuCores = values.firstValue("cpu cores")?.toIntOrNull()
     val coreCount = when {
-        indexedProcessors.isNotEmpty() -> indexedProcessors.size.toString()
-        cpuCores != null -> cpuCores.toString()
-        else -> "未知"
+        indexedProcessors.isNotEmpty() -> DeviceInfoValue.Text(indexedProcessors.size.toString())
+        cpuCores != null -> DeviceInfoValue.Text(cpuCores.toString())
+        else -> DeviceInfoValue.Unknown
     }
     return CpuInfoDetails(
-        processor = values.firstExactValue("Processor")
+        processor = (values.firstExactValue("Processor")
             ?: values.firstValue("model name")
-            ?: values.firstValue("Hardware")
-            ?: "未知",
-        hardware = values.firstValue("Hardware")
+            ?: values.firstValue("Hardware")).toDeviceInfoValue(),
+        hardware = (values.firstValue("Hardware")
             ?: values.firstValue("model name")
-            ?: values.firstExactValue("Processor")
-            ?: "未知",
-        architecture = values.firstValue("CPU architecture")
-            ?: values.firstValue("cpu architecture")
-            ?: "未知",
+            ?: values.firstExactValue("Processor")).toDeviceInfoValue(),
+        architecture = (values.firstValue("CPU architecture")
+            ?: values.firstValue("cpu architecture")).toDeviceInfoValue(),
         coreCount = coreCount,
-        features = values.firstValue("Features")
-            ?: values.firstValue("flags")
-            ?: "未知",
+        features = (values.firstValue("Features")
+            ?: values.firstValue("flags")).toDeviceInfoValue(),
     )
 }
 
 internal data class MemoryInfoDetails(
-    val total: String = "未知",
-    val free: String = "未知",
-    val available: String = "未知",
-    val buffers: String = "未知",
-    val cached: String = "未知",
-    val swapTotal: String = "未知",
-    val swapFree: String = "未知",
+    val total: DeviceInfoValue = DeviceInfoValue.Unknown,
+    val free: DeviceInfoValue = DeviceInfoValue.Unknown,
+    val available: DeviceInfoValue = DeviceInfoValue.Unknown,
+    val buffers: DeviceInfoValue = DeviceInfoValue.Unknown,
+    val cached: DeviceInfoValue = DeviceInfoValue.Unknown,
+    val swapTotal: DeviceInfoValue = DeviceInfoValue.Unknown,
+    val swapFree: DeviceInfoValue = DeviceInfoValue.Unknown,
 )
 
 internal fun parseMemoryInfo(output: String): MemoryInfoDetails {
@@ -573,15 +573,15 @@ private fun Map<String, List<String>>.firstExactValue(key: String): String? {
     return this[key]?.firstOrNull()?.takeIf { it.isNotBlank() }
 }
 
-private fun Map<String, List<String>>.firstMemoryValue(key: String): String {
-    val rawValue = firstValue(key) ?: return "未知"
+private fun Map<String, List<String>>.firstMemoryValue(key: String): DeviceInfoValue {
+    val rawValue = firstValue(key) ?: return DeviceInfoValue.Unknown
     val kb = Regex("""(\d+)\s*kB""", RegexOption.IGNORE_CASE)
         .find(rawValue)
         ?.groupValues
         ?.get(1)
         ?.toLongOrNull()
-        ?: return rawValue.ifBlank { "未知" }
-    return formatMemoryKilobytes(kb)
+        ?: return rawValue.toDeviceInfoValue()
+    return DeviceInfoValue.Text(formatMemoryKilobytes(kb))
 }
 
 internal fun formatMemoryKilobytes(kilobytes: Long): String {
@@ -603,16 +603,16 @@ private fun formatDecimal(value: Double): String {
     }
 }
 
-internal fun parseScreenDensity(output: String): String {
+internal fun parseScreenDensity(output: String): DeviceInfoValue {
     val overrideRegex = Regex("""Override density:\s*(\d+)""")
     val physicalRegex = Regex("""Physical density:\s*(\d+)""")
     val overrideMatch = overrideRegex.find(output)?.groupValues?.get(1)
     val physicalMatch = physicalRegex.find(output)?.groupValues?.get(1)
     return when {
-        overrideMatch != null && physicalMatch != null -> "$overrideMatch (物理: $physicalMatch)"
-        overrideMatch != null -> overrideMatch
-        physicalMatch != null -> physicalMatch
-        else -> "未知"
+        overrideMatch != null && physicalMatch != null -> DeviceInfoValue.PhysicalOverride(overrideMatch, physicalMatch)
+        overrideMatch != null -> DeviceInfoValue.Text(overrideMatch)
+        physicalMatch != null -> DeviceInfoValue.Text(physicalMatch)
+        else -> DeviceInfoValue.Unknown
     }
 }
 
@@ -621,105 +621,103 @@ internal fun parseBatteryLevel(output: String): Int? {
     return regex.find(output)?.groupValues?.get(1)?.toIntOrNull()
 }
 
-internal fun parseBatteryStatus(output: String): String {
+internal fun parseBatteryStatus(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*status:\\s*(\\d+)")
-    val statusInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return "未知"
+    val statusInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return DeviceInfoValue.Unknown
     return when (statusInt) {
-        1 -> "未知"
-        2 -> "充电中"
-        3 -> "放电中"
-        4 -> "未充电"
-        5 -> "已充满"
-        else -> "未知"
+        2 -> DeviceInfoValue.Localized(DeviceInfoToken.BatteryStatusCharging)
+        3 -> DeviceInfoValue.Localized(DeviceInfoToken.BatteryStatusDischarging)
+        4 -> DeviceInfoValue.Localized(DeviceInfoToken.BatteryStatusNotCharging)
+        5 -> DeviceInfoValue.Localized(DeviceInfoToken.BatteryStatusFull)
+        else -> DeviceInfoValue.Unknown
     }
 }
 
-internal fun parseBatteryHealth(output: String): String {
+internal fun parseBatteryHealth(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*health:\\s*(\\d+)")
-    val healthInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return "未知"
+    val healthInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return DeviceInfoValue.Unknown
     return when (healthInt) {
-        1 -> "未知"
-        2 -> "良好"
-        3 -> "过热"
-        4 -> "损坏"
-        5 -> "过压"
-        6 -> "未知故障"
-        7 -> "过冷"
-        else -> "未知"
+        2 -> DeviceInfoValue.Localized(DeviceInfoToken.BatteryHealthGood)
+        3 -> DeviceInfoValue.Localized(DeviceInfoToken.BatteryHealthOverheated)
+        4 -> DeviceInfoValue.Localized(DeviceInfoToken.BatteryHealthDamaged)
+        5 -> DeviceInfoValue.Localized(DeviceInfoToken.BatteryHealthOverVoltage)
+        6 -> DeviceInfoValue.Localized(DeviceInfoToken.BatteryHealthUnknownFailure)
+        7 -> DeviceInfoValue.Localized(DeviceInfoToken.BatteryHealthCold)
+        else -> DeviceInfoValue.Unknown
     }
 }
 
-internal fun parseBatteryTemp(output: String): String {
+internal fun parseBatteryTemp(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*temp:\\s*(\\d+)")
-    val tempInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return "未知"
-    return "${tempInt / 10.0} °C"
+    val tempInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return DeviceInfoValue.Unknown
+    return DeviceInfoValue.Text("${tempInt / 10.0} °C")
 }
 
-internal fun parseBatteryVoltage(output: String): String {
+internal fun parseBatteryVoltage(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*voltage:\\s*(\\d+)")
-    val voltageInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return "未知"
-    return "$voltageInt mV"
+    val voltageInt = regex.find(output)?.groupValues?.get(1)?.toIntOrNull() ?: return DeviceInfoValue.Unknown
+    return DeviceInfoValue.Text("$voltageInt mV")
 }
 
-internal fun parseBatteryACPowered(output: String): String {
+internal fun parseBatteryACPowered(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*AC powered:\\s*(\\w+)")
-    val match = regex.find(output)?.groupValues?.get(1) ?: return "未知"
-    return if (match.equals("true", ignoreCase = true)) "是" else "否"
+    val match = regex.find(output)?.groupValues?.get(1) ?: return DeviceInfoValue.Unknown
+    return DeviceInfoValue.BooleanValue(match.equals("true", ignoreCase = true))
 }
 
-internal fun parseBatteryUSBPowered(output: String): String {
+internal fun parseBatteryUSBPowered(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*USB powered:\\s*(\\w+)")
-    val match = regex.find(output)?.groupValues?.get(1) ?: return "未知"
-    return if (match.equals("true", ignoreCase = true)) "是" else "否"
+    val match = regex.find(output)?.groupValues?.get(1) ?: return DeviceInfoValue.Unknown
+    return DeviceInfoValue.BooleanValue(match.equals("true", ignoreCase = true))
 }
 
-internal fun parseBatteryWirelessPowered(output: String): String {
+internal fun parseBatteryWirelessPowered(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*Wireless powered:\\s*(\\w+)")
-    val match = regex.find(output)?.groupValues?.get(1) ?: return "未知"
-    return if (match.equals("true", ignoreCase = true)) "是" else "否"
+    val match = regex.find(output)?.groupValues?.get(1) ?: return DeviceInfoValue.Unknown
+    return DeviceInfoValue.BooleanValue(match.equals("true", ignoreCase = true))
 }
 
-internal fun parseBatteryMaxChargingCurrent(output: String): String {
+internal fun parseBatteryMaxChargingCurrent(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*Max charging current:\\s*(\\d+)")
-    val currentInt = regex.find(output)?.groupValues?.get(1)?.toLongOrNull() ?: return "未知"
+    val currentInt = regex.find(output)?.groupValues?.get(1)?.toLongOrNull() ?: return DeviceInfoValue.Unknown
     val mA = currentInt / 1000
-    return "$mA mA (${currentInt} μA)"
+    return DeviceInfoValue.Text("$mA mA (${currentInt} μA)")
 }
 
-internal fun parseBatteryMaxChargingVoltage(output: String): String {
+internal fun parseBatteryMaxChargingVoltage(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*Max charging voltage:\\s*(\\d+)")
-    val voltageInt = regex.find(output)?.groupValues?.get(1)?.toLongOrNull() ?: return "未知"
+    val voltageInt = regex.find(output)?.groupValues?.get(1)?.toLongOrNull() ?: return DeviceInfoValue.Unknown
     val mV = voltageInt / 1000
     val V = voltageInt / 1000000.0
-    return "$V V ($mV mV)"
+    return DeviceInfoValue.Text("$V V ($mV mV)")
 }
 
-internal fun parseBatteryChargeCounter(output: String): String {
+internal fun parseBatteryChargeCounter(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*Charge counter:\\s*(\\d+)")
-    val counterInt = regex.find(output)?.groupValues?.get(1)?.toLongOrNull() ?: return "未知"
+    val counterInt = regex.find(output)?.groupValues?.get(1)?.toLongOrNull() ?: return DeviceInfoValue.Unknown
     val mAh = counterInt / 1000
-    return "$mAh mAh (${counterInt} μAh)"
+    return DeviceInfoValue.Text("$mAh mAh (${counterInt} μAh)")
 }
 
-internal fun parseBatteryPresent(output: String): String {
+internal fun parseBatteryPresent(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*present:\\s*(\\w+)")
-    val match = regex.find(output)?.groupValues?.get(1) ?: return "未知"
-    return if (match.equals("true", ignoreCase = true)) "是" else "否"
+    val match = regex.find(output)?.groupValues?.get(1) ?: return DeviceInfoValue.Unknown
+    return DeviceInfoValue.BooleanValue(match.equals("true", ignoreCase = true))
 }
 
-internal fun parseBatteryTechnology(output: String): String {
+internal fun parseBatteryTechnology(output: String): DeviceInfoValue {
     val regex = Regex("(?m)^\\s*technology:\\s*(.+)")
-    return regex.find(output)?.groupValues?.get(1)?.trim() ?: "未知"
+    return regex.find(output)?.groupValues?.get(1)?.trim().toDeviceInfoValue()
 }
 
-internal fun parseIpAddress(output: String): String {
+internal fun parseIpAddress(output: String): DeviceInfoValue {
     val ipRegex = Regex("""inet\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})""")
     return output.lineSequence()
         .mapNotNull { line ->
             ipRegex.find(line)?.groupValues?.get(1)
         }
         .firstOrNull { it != "127.0.0.1" }
-        ?: "未知"
+        .toDeviceInfoValue()
 }
 
 internal fun parseSystemProperties(output: String): List<SystemProperty> {

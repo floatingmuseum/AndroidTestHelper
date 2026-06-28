@@ -220,8 +220,8 @@ fun DeviceTestPanel(
                                             InfoRow(strings.t("device.brand"), systemInfo.brand)
                                             InfoRow(strings.t("device.info.model"), systemInfo.model)
                                             InfoRow(strings.t("device.rom_version"), systemInfo.romVersion)
-                                            InfoRow(strings.t("device.android_version"), "Android ${systemInfo.androidVersion}")
-                                            InfoRow(strings.t("device.sdk_version"), "API ${systemInfo.sdkVersion}")
+                                            InfoRow(strings.t("device.android_version"), systemInfo.androidVersion.withTextPrefix("Android "))
+                                            InfoRow(strings.t("device.sdk_version"), systemInfo.sdkVersion.withTextPrefix("API "))
                                             InfoRow(strings.t("device.cpu_abi"), systemInfo.cpuAbi)
                                             InfoRow(strings.t("device.ip_address"), systemInfo.ipAddress)
                                         }
@@ -902,7 +902,6 @@ private fun DeviceShortcutButton(
 
 @Composable
 private fun InfoRow(label: String, value: String) {
-    val displayValue = localizedDeviceInfoValue(value)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -917,7 +916,7 @@ private fun InfoRow(label: String, value: String) {
         Spacer(modifier = Modifier.width(16.dp))
         SelectionContainer {
             Text(
-                text = displayValue,
+                text = value,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
@@ -928,8 +927,12 @@ private fun InfoRow(label: String, value: String) {
 }
 
 @Composable
+private fun InfoRow(label: String, value: DeviceInfoValue) {
+    InfoRow(label, value.displayText())
+}
+
+@Composable
 private fun InfoTextBlock(label: String, value: String) {
-    val displayValue = localizedDeviceInfoValue(value)
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -942,7 +945,7 @@ private fun InfoTextBlock(label: String, value: String) {
         )
         SelectionContainer {
             Text(
-                text = displayValue,
+                text = value,
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(
@@ -963,29 +966,38 @@ private fun InfoTextBlock(label: String, value: String) {
     }
 }
 
-private fun localizedDeviceInfoValue(value: String): String {
-    val exact = when (value) {
-        "未知" -> localized("device.unknown")
-        "未知型号" -> localized("device.unknown_model")
-        "是" -> localized("device.yes")
-        "否" -> localized("device.no")
-        "充电中" -> localized("device.battery.status.charging")
-        "放电中" -> localized("device.battery.status.discharging")
-        "未充电" -> localized("device.not_charging")
-        "已充满" -> localized("device.battery.status.full")
-        "良好" -> localized("device.good")
-        "过热" -> localized("device.overheated")
-        "损坏" -> localized("device.damaged")
-        "过压" -> localized("device.over_voltage")
-        "未知故障" -> localized("device.unknown_failure")
-        "过冷" -> localized("device.cold")
-        else -> null
-    }
-    if (exact != null) return exact
-
-    return value
-        .replace("未知型号", localized("device.unknown_model"))
-        .replace("未知故障", localized("device.unknown_failure"))
-        .replace("未知", localized("device.unknown"))
-        .replace("物理:", localized("device.physical"))
+@Composable
+private fun InfoTextBlock(label: String, value: DeviceInfoValue) {
+    InfoTextBlock(label, value.displayText())
 }
+
+private fun DeviceInfoValue.withTextPrefix(prefix: String): DeviceInfoValue {
+    return when (this) {
+        is DeviceInfoValue.Text -> DeviceInfoValue.Text(prefix + value)
+        else -> this
+    }
+}
+
+private fun DeviceInfoValue.displayText(): String {
+    return when (this) {
+        DeviceInfoValue.Unknown -> localized("device.unknown")
+        is DeviceInfoValue.Text -> value
+        is DeviceInfoValue.BooleanValue -> localized(if (value) "device.yes" else "device.no")
+        is DeviceInfoValue.Localized -> localized(token.localizationKey)
+        is DeviceInfoValue.PhysicalOverride -> "$overrideValue (${localized("device.physical")} $physicalValue)"
+    }
+}
+
+private val DeviceInfoToken.localizationKey: String
+    get() = when (this) {
+        DeviceInfoToken.BatteryStatusCharging -> "device.battery.status.charging"
+        DeviceInfoToken.BatteryStatusDischarging -> "device.battery.status.discharging"
+        DeviceInfoToken.BatteryStatusNotCharging -> "device.not_charging"
+        DeviceInfoToken.BatteryStatusFull -> "device.battery.status.full"
+        DeviceInfoToken.BatteryHealthGood -> "device.good"
+        DeviceInfoToken.BatteryHealthOverheated -> "device.overheated"
+        DeviceInfoToken.BatteryHealthDamaged -> "device.damaged"
+        DeviceInfoToken.BatteryHealthOverVoltage -> "device.over_voltage"
+        DeviceInfoToken.BatteryHealthUnknownFailure -> "device.unknown_failure"
+        DeviceInfoToken.BatteryHealthCold -> "device.cold"
+    }
