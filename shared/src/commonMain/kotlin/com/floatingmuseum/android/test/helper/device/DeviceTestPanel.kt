@@ -63,9 +63,14 @@ fun DeviceTestPanel(
     onRefreshProperties: () -> Unit,
     onReboot: () -> Unit,
     onTakeScreenshot: () -> Unit,
+    onStartScreenRecording: () -> Unit,
+    onStopScreenRecording: () -> Unit,
     onInstallApplications: () -> Unit,
     onQuickAction: (DeviceQuickAction) -> Unit,
     isRunning: Boolean,
+    isScreenRecording: Boolean,
+    isScreenRecordingThisDevice: Boolean,
+    lastScreenRecordResult: ScreenRecordResult?,
     onBatteryControl: ((args: List<String>) -> Unit)? = null,
     onScreenSizeControl: ((String) -> Unit)? = null,
     onScreenDensityControl: ((String) -> Unit)? = null,
@@ -808,23 +813,86 @@ fun DeviceTestPanel(
                         fontWeight = FontWeight.SemiBold
                     )
 
+                    if (isScreenRecordingThisDevice) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = strings.t("device.screen_record.recording_hint"),
+                                modifier = Modifier.padding(12.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                    } else if (lastScreenRecordResult != null) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = strings.t("device.screen_record.last_result"),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                SelectionContainer {
+                                    Text(
+                                        text = lastScreenRecordResult.localPath,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    val canRunDeviceShortcut = !isRunning && !isScreenRecording && hasReadyDevice
                     val shortcutActions = listOf(
-                        DeviceShortcutAction(DeviceQuickAction.SHUTDOWN.displayLabel(), true) { onQuickAction(DeviceQuickAction.SHUTDOWN) },
-                        DeviceShortcutAction(strings.t("device.reboot"), true, onReboot),
-                        DeviceShortcutAction(DeviceQuickAction.REBOOT_RECOVERY.displayLabel(), true) { onQuickAction(DeviceQuickAction.REBOOT_RECOVERY) },
-                        DeviceShortcutAction(DeviceQuickAction.REBOOT_FASTBOOT.displayLabel(), true) { onQuickAction(DeviceQuickAction.REBOOT_FASTBOOT) },
-                        DeviceShortcutAction(DeviceQuickAction.CURRENT_ACTIVITY.displayLabel(), false) { onQuickAction(DeviceQuickAction.CURRENT_ACTIVITY) },
-                        DeviceShortcutAction(strings.t("device.screenshot"), false, onTakeScreenshot),
-                        DeviceShortcutAction(strings.t("device.install_apk"), false, onInstallApplications),
-                        DeviceShortcutAction(DeviceQuickAction.POWER.displayLabel(), false) { onQuickAction(DeviceQuickAction.POWER) },
-                        DeviceShortcutAction(DeviceQuickAction.MENU.displayLabel(), false) { onQuickAction(DeviceQuickAction.MENU) },
-                        DeviceShortcutAction(DeviceQuickAction.HOME.displayLabel(), false) { onQuickAction(DeviceQuickAction.HOME) },
-                        DeviceShortcutAction(DeviceQuickAction.BACK.displayLabel(), false) { onQuickAction(DeviceQuickAction.BACK) },
-                        DeviceShortcutAction(DeviceQuickAction.VOLUME_UP.displayLabel(), false) { onQuickAction(DeviceQuickAction.VOLUME_UP) },
-                        DeviceShortcutAction(DeviceQuickAction.VOLUME_DOWN.displayLabel(), false) { onQuickAction(DeviceQuickAction.VOLUME_DOWN) },
-                        DeviceShortcutAction(DeviceQuickAction.MUTE.displayLabel(), false) { onQuickAction(DeviceQuickAction.MUTE) },
-                        DeviceShortcutAction(DeviceQuickAction.WAKE.displayLabel(), false) { onQuickAction(DeviceQuickAction.WAKE) },
-                        DeviceShortcutAction(DeviceQuickAction.SLEEP.displayLabel(), false) { onQuickAction(DeviceQuickAction.SLEEP) },
+                        DeviceShortcutAction(DeviceQuickAction.SHUTDOWN.displayLabel(), true, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.SHUTDOWN) },
+                        DeviceShortcutAction(strings.t("device.reboot"), true, canRunDeviceShortcut, onReboot),
+                        DeviceShortcutAction(DeviceQuickAction.REBOOT_RECOVERY.displayLabel(), true, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.REBOOT_RECOVERY) },
+                        DeviceShortcutAction(DeviceQuickAction.REBOOT_FASTBOOT.displayLabel(), true, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.REBOOT_FASTBOOT) },
+                        DeviceShortcutAction(DeviceQuickAction.CURRENT_ACTIVITY.displayLabel(), false, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.CURRENT_ACTIVITY) },
+                        DeviceShortcutAction(strings.t("device.screenshot"), false, canRunDeviceShortcut, onTakeScreenshot),
+                        DeviceShortcutAction(
+                            label = if (isScreenRecordingThisDevice) {
+                                strings.t("device.screen_record.stop")
+                            } else {
+                                strings.t("device.screen_record.start")
+                            },
+                            isDanger = isScreenRecordingThisDevice,
+                            enabled = if (isScreenRecordingThisDevice) !isRunning else canRunDeviceShortcut,
+                        ) {
+                            if (isScreenRecordingThisDevice) {
+                                onStopScreenRecording()
+                            } else {
+                                onStartScreenRecording()
+                            }
+                        },
+                        DeviceShortcutAction(strings.t("device.install_apk"), false, canRunDeviceShortcut, onInstallApplications),
+                        DeviceShortcutAction(DeviceQuickAction.POWER.displayLabel(), false, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.POWER) },
+                        DeviceShortcutAction(DeviceQuickAction.MENU.displayLabel(), false, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.MENU) },
+                        DeviceShortcutAction(DeviceQuickAction.HOME.displayLabel(), false, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.HOME) },
+                        DeviceShortcutAction(DeviceQuickAction.BACK.displayLabel(), false, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.BACK) },
+                        DeviceShortcutAction(DeviceQuickAction.VOLUME_UP.displayLabel(), false, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.VOLUME_UP) },
+                        DeviceShortcutAction(DeviceQuickAction.VOLUME_DOWN.displayLabel(), false, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.VOLUME_DOWN) },
+                        DeviceShortcutAction(DeviceQuickAction.MUTE.displayLabel(), false, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.MUTE) },
+                        DeviceShortcutAction(DeviceQuickAction.WAKE.displayLabel(), false, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.WAKE) },
+                        DeviceShortcutAction(DeviceQuickAction.SLEEP.displayLabel(), false, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.SLEEP) },
                     )
 
                     Column(
@@ -852,7 +920,7 @@ fun DeviceTestPanel(
                                 rowActions.forEach { action ->
                                     DeviceShortcutButton(
                                         action = action,
-                                        enabled = !isRunning && hasReadyDevice,
+                                        enabled = action.enabled,
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
@@ -871,6 +939,7 @@ fun DeviceTestPanel(
 private data class DeviceShortcutAction(
     val label: String,
     val isDanger: Boolean,
+    val enabled: Boolean,
     val onClick: () -> Unit,
 )
 

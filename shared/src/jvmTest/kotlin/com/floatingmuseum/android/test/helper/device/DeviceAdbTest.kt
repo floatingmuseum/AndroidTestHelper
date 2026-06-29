@@ -303,6 +303,65 @@ class DeviceAdbTest {
     }
 
     @Test
+    fun testBuildScreenRecordFileNameIncludesSafeSerialAndTimestamp() {
+        val capturedAt = LocalDateTime.of(2026, 6, 17, 9, 8, 7)
+
+        assertEquals(
+            "screenrecord_R58M123ABC_20260617_090807.mp4",
+            buildScreenRecordFileName("R58M123ABC", capturedAt)
+        )
+        assertEquals(
+            "screenrecord_192.168.1.5_5555_20260617_090807.mp4",
+            buildScreenRecordFileName("192.168.1.5:5555", capturedAt)
+        )
+    }
+
+    @Test
+    fun testBuildScreenRecordTransferPlanUsesRemoteAndLocalTargets() {
+        val capturedAt = LocalDateTime.of(2026, 6, 17, 9, 8, 7)
+        val outputDirectory = File("recordings").absolutePath
+
+        val plan = buildScreenRecordTransferPlan(
+            deviceSerial = "serial/with:bad chars",
+            outputDirectoryPath = outputDirectory,
+            capturedAt = capturedAt,
+        )
+
+        assertEquals("screenrecord_serial_with_bad_chars_20260617_090807.mp4", plan.fileName)
+        assertEquals(
+            "/sdcard/Movies/screenrecord_serial_with_bad_chars_20260617_090807.mp4",
+            plan.remotePath
+        )
+        assertEquals(
+            listOf(
+                "/sdcard/Movies/screenrecord_serial_with_bad_chars_20260617_090807.mp4",
+                "/sdcard/Download/screenrecord_serial_with_bad_chars_20260617_090807.mp4",
+                "/sdcard/screenrecord_serial_with_bad_chars_20260617_090807.mp4",
+                "/data/local/tmp/screenrecord_serial_with_bad_chars_20260617_090807.mp4",
+            ),
+            plan.remotePaths,
+        )
+        assertEquals(File(outputDirectory, plan.fileName).absolutePath, plan.localPath)
+    }
+
+    @Test
+    fun testBuildScreenRecordCommandUsesExplicitDeviceAndRemotePath() {
+        val command = buildScreenRecordCommand(
+            deviceSerial = "R58M123ABC",
+            remotePath = "/sdcard/Movies/demo.mp4",
+        )
+
+        assertEquals(
+            listOf("-s", "R58M123ABC", "shell", "screenrecord", "/sdcard/Movies/demo.mp4"),
+            command.args,
+        )
+        assertEquals(
+            "adb -s R58M123ABC shell screenrecord /sdcard/Movies/demo.mp4",
+            command.displayCommand,
+        )
+    }
+
+    @Test
     fun testBuildInstallApplicationCommandUsesExplicitDeviceAndApkPath() {
         val apkFile = File("local apps/demo.apk").absoluteFile
 

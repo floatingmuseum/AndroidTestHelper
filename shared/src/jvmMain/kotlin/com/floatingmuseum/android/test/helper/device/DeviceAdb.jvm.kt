@@ -9,17 +9,35 @@ import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipFile
 
 actual fun createDeviceAdb(): DeviceAdb = JvmDeviceAdb()
 
 private const val ScreenshotRemoteDirectory = "/sdcard/AndroidTestHelperScreenshots"
+private val ScreenRecordRemoteDirectories = listOf(
+    "/sdcard/Movies",
+    "/sdcard/Download",
+    "/sdcard",
+    "/data/local/tmp",
+)
 private val ScreenshotTimestampFormatter = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
 
 private class JvmDeviceAdb : DeviceAdb {
+    @Volatile
+    private var activeScreenRecordProcess: Process? = null
+
+    @Volatile
+    private var screenRecordStopRequested: Boolean = false
+
     override suspend fun loadSystemInfo(
         deviceSerial: String,
         logCommand: (String) -> Unit,
@@ -239,6 +257,123 @@ private class JvmDeviceAdb : DeviceAdb {
         )
     }
 
+    override suspend fun recordScreen(
+        deviceSerial: String,
+        outputDirectoryPath: String,
+        logCommand: (String) -> Unit,
+    ): ScreenRecordResult {
+        val plan = buildScreenRecordTransferPlan(
+            deviceSerial = deviceSerial,
+            outputDirectoryPath = outputDirectoryPath,
+            capturedAt = LocalDateTime.now(),
+        )
+        val localDirectory = File(outputDirectoryPath)
+        if (!localDirectory.exists() && !localDirectory.mkdirs()) {
+            throw IllegalStateException(localized("device.unable_to_create_screen_record_output_directory_arg0", localDirectory.absolutePath))
+        }
+        if (!localDirectory.isDirectory) {
+            throw IllegalStateException(localized("device.screen_record_output_path_is_not_a_directory_arg0", localDirectory.absolutePath))
+        }
+
+        screenRecordStopRequested = false
+        var lastInterruptedResult: ScreenRecordResult? = null
+        for (remotePath in plan.remotePaths) {
+            val directoryReady = ensureRemoteScreenRecordParentDirectory(
+                deviceSerial = deviceSerial,
+                remotePath = remotePath,
+                logCommand = logCommand,
+            )
+            if (!directoryReady) {
+                lastInterruptedResult = ScreenRecordResult(
+                    remotePath = remotePath,
+                    localPath = plan.localPath,
+                    endState = ScreenRecordEndState.INTERRUPTED,
+                    message = localized("device.screen_record.remote_path_unavailable_arg0", remotePath),
+                )
+                continue
+            }
+
+            val outcome = runScreenRecordCommand(
+                command = buildScreenRecordCommand(deviceSerial, remotePath),
+                logCommand = logCommand,
+            )
+
+            if (outcome.endState == ScreenRecordEndState.INTERRUPTED) {
+                val result = ScreenRecordResult(
+                    remotePath = remotePath,
+                    localPath = plan.localPath,
+                    endState = outcome.endState,
+                    message = outcome.message,
+                )
+                if (shouldTryNextScreenRecordPath(outcome.message)) {
+                    lastInterruptedResult = result
+                    continue
+                }
+                return result
+            }
+
+            AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "pull", remotePath, plan.localPath),
+                displayCommand = "adb -s $deviceSerial pull $remotePath \"${plan.localPath}\"",
+                logCommand = logCommand
+            )
+            deleteRemoteScreenRecordFile(deviceSerial, remotePath, logCommand)
+            return ScreenRecordResult(
+                remotePath = remotePath,
+                localPath = plan.localPath,
+                endState = outcome.endState,
+                message = outcome.message,
+            )
+        }
+
+        return lastInterruptedResult ?: ScreenRecordResult(
+            remotePath = plan.remotePath,
+            localPath = plan.localPath,
+            endState = ScreenRecordEndState.INTERRUPTED,
+            message = localized("device.screen_record.no_available_remote_path"),
+        )
+    }
+
+    private suspend fun ensureRemoteScreenRecordParentDirectory(
+        deviceSerial: String,
+        remotePath: String,
+        logCommand: (String) -> Unit,
+    ): Boolean {
+        val parentPath = remotePath.substringBeforeLast('/', missingDelimiterValue = "")
+        if (parentPath.isBlank()) return true
+        return try {
+            AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "mkdir", "-p", parentPath),
+                displayCommand = "adb -s $deviceSerial shell mkdir -p $parentPath",
+                logCommand = logCommand,
+            )
+            true
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private suspend fun deleteRemoteScreenRecordFile(
+        deviceSerial: String,
+        remotePath: String,
+        logCommand: (String) -> Unit,
+    ) {
+        try {
+            AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "rm", "-f", remotePath),
+                displayCommand = "adb -s $deviceSerial shell rm -f $remotePath",
+                logCommand = logCommand,
+            )
+        } catch (_: Throwable) {
+            // The local MP4 has already been pulled. Remote temp cleanup failure should not fail the recording.
+        }
+    }
+
+    override fun stopScreenRecording() {
+        screenRecordStopRequested = true
+        activeScreenRecordProcess?.destroy()
+    }
+
     override suspend fun installApplications(
         deviceSerial: String,
         apkFilePaths: List<String>,
@@ -432,6 +567,52 @@ private class JvmDeviceAdb : DeviceAdb {
         } catch (e: Throwable) {
             null
         }.toDeviceInfoValue()
+    }
+
+    private suspend fun runScreenRecordCommand(
+        command: ScreenRecordCommand,
+        logCommand: (String) -> Unit,
+    ): ScreenRecordCommandOutcome {
+        logCommand(command.displayCommand)
+        return withContext(Dispatchers.IO) {
+            val process = ProcessBuilder(listOf(AdbShell.adbPath) + command.args)
+                .redirectErrorStream(true)
+                .start()
+            activeScreenRecordProcess = process
+            val outputReader = async(Dispatchers.IO) {
+                process.inputStream.bufferedReader(Charsets.UTF_8).readText()
+            }
+            try {
+                while (!process.waitFor(100L, TimeUnit.MILLISECONDS)) {
+                    currentCoroutineContext().ensureActive()
+                }
+                val output = outputReader.await().trim()
+                val exitCode = process.exitValue()
+                when {
+                    screenRecordStopRequested -> ScreenRecordCommandOutcome(
+                        endState = ScreenRecordEndState.STOPPED,
+                        message = output.ifBlank { localized("device.screen_record.stopped") },
+                    )
+                    exitCode == 0 -> ScreenRecordCommandOutcome(
+                        endState = ScreenRecordEndState.COMPLETED,
+                        message = output.takeIf { it.isNotBlank() },
+                    )
+                    else -> ScreenRecordCommandOutcome(
+                        endState = ScreenRecordEndState.INTERRUPTED,
+                        message = localized("device.screen_record.interrupted_exit_code_arg0", exitCode) +
+                            output.takeIf { it.isNotBlank() }?.let { "\n$it" }.orEmpty(),
+                    )
+                }
+            } catch (error: CancellationException) {
+                process.destroyForcibly()
+                outputReader.cancel()
+                throw error
+            } finally {
+                if (activeScreenRecordProcess === process) {
+                    activeScreenRecordProcess = null
+                }
+            }
+        }
     }
 }
 
@@ -758,6 +939,66 @@ internal fun buildScreenshotFileName(
 ): String {
     val safeSerial = deviceSerial.toScreenshotFileToken().ifBlank { "unknown_serial" }
     return "screenshot_${safeSerial}_${capturedAt.format(ScreenshotTimestampFormatter)}.png"
+}
+
+internal data class ScreenRecordTransferPlan(
+    val fileName: String,
+    val remotePath: String,
+    val remotePaths: List<String>,
+    val localPath: String,
+)
+
+internal fun buildScreenRecordTransferPlan(
+    deviceSerial: String,
+    outputDirectoryPath: String,
+    capturedAt: LocalDateTime,
+): ScreenRecordTransferPlan {
+    val fileName = buildScreenRecordFileName(deviceSerial, capturedAt)
+    val remotePaths = buildScreenRecordRemotePaths(fileName)
+    return ScreenRecordTransferPlan(
+        fileName = fileName,
+        remotePath = remotePaths.first(),
+        remotePaths = remotePaths,
+        localPath = File(outputDirectoryPath, fileName).absolutePath,
+    )
+}
+
+internal fun buildScreenRecordRemotePaths(fileName: String): List<String> {
+    return ScreenRecordRemoteDirectories.map { directory -> "$directory/$fileName" }
+}
+
+internal fun buildScreenRecordFileName(
+    deviceSerial: String,
+    capturedAt: LocalDateTime,
+): String {
+    val safeSerial = deviceSerial.toScreenshotFileToken().ifBlank { "unknown_serial" }
+    return "screenrecord_${safeSerial}_${capturedAt.format(ScreenshotTimestampFormatter)}.mp4"
+}
+
+internal data class ScreenRecordCommand(
+    val args: List<String>,
+    val displayCommand: String,
+)
+
+internal fun buildScreenRecordCommand(
+    deviceSerial: String,
+    remotePath: String,
+): ScreenRecordCommand {
+    return ScreenRecordCommand(
+        args = listOf("-s", deviceSerial, "shell", "screenrecord", remotePath),
+        displayCommand = "adb -s $deviceSerial shell screenrecord $remotePath",
+    )
+}
+
+private data class ScreenRecordCommandOutcome(
+    val endState: ScreenRecordEndState,
+    val message: String? = null,
+)
+
+private fun shouldTryNextScreenRecordPath(message: String?): Boolean {
+    val lowerMessage = message?.lowercase() ?: return false
+    return lowerMessage.contains("permission denied") ||
+        lowerMessage.contains("unable to open")
 }
 
 private fun String.toScreenshotFileToken(): String {

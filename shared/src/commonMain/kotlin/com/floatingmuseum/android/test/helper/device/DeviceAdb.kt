@@ -98,6 +98,19 @@ data class ScreenshotResult(
     val localPath: String,
 )
 
+data class ScreenRecordResult(
+    val remotePath: String,
+    val localPath: String,
+    val endState: ScreenRecordEndState,
+    val message: String? = null,
+)
+
+enum class ScreenRecordEndState {
+    COMPLETED,
+    STOPPED,
+    INTERRUPTED,
+}
+
 data class ApkInstallResult(
     val filePath: String,
     val fileName: String,
@@ -158,6 +171,14 @@ interface DeviceAdb {
         outputDirectoryPath: String,
         logCommand: (String) -> Unit,
     ): ScreenshotResult
+
+    suspend fun recordScreen(
+        deviceSerial: String,
+        outputDirectoryPath: String,
+        logCommand: (String) -> Unit,
+    ): ScreenRecordResult
+
+    fun stopScreenRecording()
 
     suspend fun installApplications(
         deviceSerial: String,

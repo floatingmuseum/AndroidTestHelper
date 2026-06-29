@@ -40,6 +40,8 @@ import com.floatingmuseum.android.test.helper.app.pluginCheckIgnoreKey
 import com.floatingmuseum.android.test.helper.app.removeInstalledApp
 import com.floatingmuseum.android.test.helper.device.DeviceSystemInfo
 import com.floatingmuseum.android.test.helper.device.DeviceQuickAction
+import com.floatingmuseum.android.test.helper.device.ScreenRecordEndState
+import com.floatingmuseum.android.test.helper.device.ScreenRecordResult
 import com.floatingmuseum.android.test.helper.device.SystemProperty
 import com.floatingmuseum.android.test.helper.device.createDeviceAdb
 import com.floatingmuseum.android.test.helper.device.DeviceTestPanel
@@ -128,6 +130,9 @@ fun App() {
         var isLoadingDeviceProperties by remember { mutableStateOf(false) }
         var deviceSystemInfoLoadedSerial by remember { mutableStateOf<String?>(null) }
         var devicePropertiesLoadedSerial by remember { mutableStateOf<String?>(null) }
+        var isScreenRecording by remember { mutableStateOf(false) }
+        var screenRecordingDeviceSerial by remember { mutableStateOf<String?>(null) }
+        var lastScreenRecordResult by remember { mutableStateOf<ScreenRecordResult?>(null) }
         val selectedDevice = devices.firstOrNull { it.transportId == selectedDeviceTransportId }
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
         var clearModuleDeviceState: () -> Unit = {}
@@ -163,6 +168,10 @@ fun App() {
             devicePropertiesLoadedSerial = null
             isLoadingDeviceSystemInfo = false
             isLoadingDeviceProperties = false
+            if (!isScreenRecording) {
+                lastScreenRecordResult = null
+                screenRecordingDeviceSerial = null
+            }
         }
 
         fun scheduleDeviceRefreshAfterAdbNotFoundIfNeeded(message: String) {
@@ -522,6 +531,65 @@ fun App() {
                     isRunning = false
                 }
             }
+        }
+
+        fun startSelectedDeviceScreenRecording(deviceSerial: String) {
+            if (isRunning || isScreenRecording) return
+            scope.launch {
+                isRunning = true
+                statusText = localized("device.screen_record.select_save_directory_status")
+                appendStatus(localized("device.screen_record.select_save_directory_dialog_title"))
+                try {
+                    val outputPath = selectDirectory(
+                        dialogTitle = localized("shell.select_screen_record_save_path"),
+                        approveButtonText = localized("shell.save"),
+                    )
+                    if (outputPath == null) {
+                        statusText = localized("shell.screen_record_cancelled")
+                        appendStatus(statusText)
+                    } else {
+                        isRunning = false
+                        isScreenRecording = true
+                        screenRecordingDeviceSerial = deviceSerial
+                        lastScreenRecordResult = null
+                        statusText = localized("shell.screen_recording")
+                        appendStatus(localized("shell.start_screen_record_on_device_arg0_save_to_arg1", deviceSerial, outputPath))
+                        val result = deviceAdb.recordScreen(deviceSerial, outputPath, ::appendCommand)
+                        lastScreenRecordResult = result
+                        when (result.endState) {
+                            ScreenRecordEndState.COMPLETED -> {
+                                statusText = localized("shell.screen_record_saved_to_arg0", result.localPath)
+                                appendStatus(localized("shell.screen_record_succeeded_local_file_arg0_device_file_arg1", result.localPath, result.remotePath))
+                            }
+                            ScreenRecordEndState.STOPPED -> {
+                                statusText = localized("shell.screen_record_stopped_saved_to_arg0", result.localPath)
+                                appendStatus(localized("shell.screen_record_stopped_local_file_arg0_device_file_arg1", result.localPath, result.remotePath))
+                            }
+                            ScreenRecordEndState.INTERRUPTED -> {
+                                statusText = result.message ?: localized("shell.screen_record_interrupted")
+                                appendError(localized("shell.screen_record_interrupted") + " - ${result.message ?: unknownError()}")
+                            }
+                        }
+                    }
+                } catch (error: CancellationException) {
+                    statusText = localized("shell.screen_record_stopped")
+                    appendStatus(statusText)
+                } catch (error: Throwable) {
+                    statusText = error.message ?: localized("shell.screen_record_failed")
+                    appendError(localized("shell.screen_record_failed") + " - ${error.message ?: unknownError()}")
+                } finally {
+                    isRunning = false
+                    isScreenRecording = false
+                    screenRecordingDeviceSerial = null
+                }
+            }
+        }
+
+        fun stopSelectedDeviceScreenRecording() {
+            if (!isScreenRecording) return
+            statusText = localized("shell.stopping_screen_record")
+            appendStatus(statusText)
+            deviceAdb.stopScreenRecording()
         }
 
         fun installSelectedApplications(deviceSerial: String) {
@@ -1147,7 +1215,7 @@ fun App() {
 
                 ModuleSwitcher(
                     selectedModule = selectedTestModule,
-                    isRunning = isRunning,
+                    isRunning = isRunning || isScreenRecording,
                     onSelect = { selectedTestModule = it },
                 )
 
@@ -1175,6 +1243,10 @@ fun App() {
                                     onTakeScreenshot = {
                                         selectedReadyTransportOrReport()?.let { takeSelectedDeviceScreenshot(it) }
                                     },
+                                    onStartScreenRecording = {
+                                        selectedReadyTransportOrReport()?.let { startSelectedDeviceScreenRecording(it) }
+                                    },
+                                    onStopScreenRecording = ::stopSelectedDeviceScreenRecording,
                                     onInstallApplications = {
                                         selectedReadyTransportOrReport()?.let { installSelectedApplications(it) }
                                     },
@@ -1184,6 +1256,9 @@ fun App() {
                                         }
                                     },
                                     isRunning = isRunning,
+                                    isScreenRecording = isScreenRecording,
+                                    isScreenRecordingThisDevice = isScreenRecording && screenRecordingDeviceSerial == selectedReadyDevice?.transportId,
+                                    lastScreenRecordResult = lastScreenRecordResult,
                                     onBatteryControl = { args ->
                                         selectedReadyTransportOrReport()?.let { transportId ->
                                             scope.launch {
@@ -1329,7 +1404,7 @@ fun App() {
                             DevicePanel(
                                 devices = devices,
                                 selectedDeviceTransportId = selectedDeviceTransportId,
-                                isRunning = isRunning,
+                                isRunning = isRunning || isScreenRecording,
                                 onRefresh = ::refreshDevices,
                                 onPairWirelessDevice = ::pairWirelessDevice,
                                 onConnectWirelessDevice = ::connectWirelessDevice,
