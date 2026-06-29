@@ -335,6 +335,23 @@ class AppTest {
     }
 
     @Test
+    fun buildsClearApplicationCacheCommandWithExplicitSerial() {
+        val command = buildClearApplicationCacheCommand(
+            deviceSerial = "serial-123",
+            packageName = "com.example.app",
+        )
+
+        assertEquals(
+            listOf("-s", "serial-123", "shell", "pm", "clear", "--cache-only", "com.example.app"),
+            command.args,
+        )
+        assertEquals(
+            "adb -s serial-123 shell pm clear --cache-only com.example.app",
+            command.displayCommand,
+        )
+    }
+
+    @Test
     fun buildsThirdPartyUninstallCommandWithExplicitSerial() {
         val command = buildUninstallApplicationCommand(
             deviceSerial = "serial-123",

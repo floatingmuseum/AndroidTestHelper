@@ -189,7 +189,7 @@ internal fun FileManagerPanel(
                     !hasReadyDevice -> {
                         EmptyFileManagerState(strings.t("common.device.select_device_first_with_period"))
                     }
-                    loadedSerial != selectedDevice.serialNumber -> {
+                    loadedSerial != selectedDevice.transportId -> {
                         EmptyFileManagerState(strings.t("file_manager.root_directory_has_not_been_loaded_it_loads_automati"))
                     }
                     else -> {

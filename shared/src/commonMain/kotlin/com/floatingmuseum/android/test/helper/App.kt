@@ -65,6 +65,14 @@ private enum class BannerActionType {
     ENABLE
 }
 
+internal fun extractAdbDeviceNotFoundTransport(message: String): String? {
+    return Regex("""device '([^']+)' not found""")
+        .find(message)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.takeIf { it.isNotBlank() }
+}
+
 @Composable
 @Preview
 fun App() {
@@ -80,7 +88,7 @@ fun App() {
 
         val scope = rememberCoroutineScope()
         var devices by remember { mutableStateOf<List<AndroidDevice>>(emptyList()) }
-        var selectedDeviceSerial by remember { mutableStateOf<String?>(null) }
+        var selectedDeviceTransportId by remember { mutableStateOf<String?>(null) }
 
         var showPluginBanner by remember { mutableStateOf(false) }
         var bannerMessage by remember { mutableStateOf("") }
@@ -120,14 +128,58 @@ fun App() {
         var isLoadingDeviceProperties by remember { mutableStateOf(false) }
         var deviceSystemInfoLoadedSerial by remember { mutableStateOf<String?>(null) }
         var devicePropertiesLoadedSerial by remember { mutableStateOf<String?>(null) }
-        val selectedDevice = devices.firstOrNull { it.serialNumber == selectedDeviceSerial }
+        val selectedDevice = devices.firstOrNull { it.transportId == selectedDeviceTransportId }
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
+        var clearModuleDeviceState: () -> Unit = {}
+        var shouldRefreshDevicesAfterAdbNotFound by remember { mutableStateOf(false) }
 
-        fun appendCommand(command: String) {
+        fun appendCommandLog(command: String) {
             val timePrefix = if (appSettings.showCommandTime) {
                 "[${getCurrentTimeFormatted()}] "
             } else ""
             commandLog = (commandLog + "$timePrefix$command").takeLast(200)
+        }
+
+        fun clearDeviceScopedState() {
+            clearModuleDeviceState()
+            thirdPartyApps = emptyList()
+            systemApps = emptyList()
+            thirdPartyLoadedSerial = null
+            thirdPartyAutoRefreshAttemptedSerial = null
+            systemLoadedSerial = null
+            systemCacheCheckedSerial = null
+            systemAutoRefreshAttemptedSerial = null
+            systemAppsCacheFormattedTime = null
+            thirdPartyProgressCurrent = 0
+            thirdPartyProgressTotal = 0
+            systemProgressCurrent = 0
+            systemProgressTotal = 0
+            applicationDetailPackageName = null
+            applicationDetailSections = emptyMap()
+            loadingApplicationDetailSection = null
+            deviceSystemInfo = null
+            systemProperties = emptyList()
+            deviceSystemInfoLoadedSerial = null
+            devicePropertiesLoadedSerial = null
+            isLoadingDeviceSystemInfo = false
+            isLoadingDeviceProperties = false
+        }
+
+        fun scheduleDeviceRefreshAfterAdbNotFoundIfNeeded(message: String) {
+            val missingTransport = extractAdbDeviceNotFoundTransport(message) ?: return
+            val missingDevice = devices.firstOrNull { it.transportId == missingTransport } ?: return
+            if (selectedDeviceTransportId == missingTransport) {
+                clearDeviceScopedState()
+            }
+            val status = localized("shell.device_refresh_after_adb_not_found_arg0", missingDevice.serialNumber)
+            statusText = status
+            appendCommandLog(commandStatus(status))
+            shouldRefreshDevicesAfterAdbNotFound = true
+        }
+
+        fun appendCommand(command: String) {
+            appendCommandLog(command)
+            scheduleDeviceRefreshAfterAdbNotFoundIfNeeded(command)
         }
 
         fun appendStatus(message: String) {
@@ -140,10 +192,19 @@ fun App() {
 
         fun noReadyDeviceMessage(): String = localized("common.device.select_device_first")
 
+        fun selectedReadyTransportOrReport(): String? {
+            return selectedReadyDevice?.transportId ?: run {
+                val message = noReadyDeviceMessage()
+                statusText = message
+                appendError(message)
+                null
+            }
+        }
+
         val dataFillModule = rememberDataFillModuleController(
             scope = scope,
             getSelectedReadyDevice = {
-                devices.firstOrNull { it.serialNumber == selectedDeviceSerial }?.takeIf { it.isReady }
+                devices.firstOrNull { it.transportId == selectedDeviceTransportId }?.takeIf { it.isReady }
             },
             isRunning = { isRunning },
             setRunning = { isRunning = it },
@@ -153,7 +214,7 @@ fun App() {
         val fileManagerModule = rememberFileManagerModuleController(
             scope = scope,
             getSelectedReadyDevice = {
-                devices.firstOrNull { it.serialNumber == selectedDeviceSerial }?.takeIf { it.isReady }
+                devices.firstOrNull { it.transportId == selectedDeviceTransportId }?.takeIf { it.isReady }
             },
             getDefaultRootPath = { AppSettingsShared.currentSettings.fileManagerDefaultRootPath },
             isRunning = { isRunning },
@@ -164,12 +225,17 @@ fun App() {
         val deviceLogModule = rememberDeviceLogModuleController(
             scope = scope,
             getSelectedReadyDevice = {
-                devices.firstOrNull { it.serialNumber == selectedDeviceSerial }?.takeIf { it.isReady }
+                devices.firstOrNull { it.transportId == selectedDeviceTransportId }?.takeIf { it.isReady }
             },
             setStatusText = { statusText = it },
             appendCommand = ::appendCommand,
         )
         val isCapturingLogcat = deviceLogModule.isCapturing
+        clearModuleDeviceState = {
+            dataFillModule.clearDeviceState()
+            fileManagerModule.clearDeviceState()
+            deviceLogModule.clearIfIdle()
+        }
 
         fun refreshDevices() {
             if (isRunning) return
@@ -180,13 +246,13 @@ fun App() {
                     val discoveredDevices = adbDeviceManager.listDevices(::appendCommand)
                     devices = discoveredDevices
                     val selectedStillConnected = discoveredDevices.any {
-                        it.serialNumber == selectedDeviceSerial && it.isReady
+                        it.transportId == selectedDeviceTransportId && it.isReady
                     }
-                    val nextSelectedDeviceSerial = when {
-                        selectedStillConnected -> selectedDeviceSerial
-                        else -> discoveredDevices.firstOrNull { it.isReady }?.serialNumber
+                    val nextSelectedDeviceTransportId = when {
+                        selectedStillConnected -> selectedDeviceTransportId
+                        else -> discoveredDevices.firstOrNull { it.isReady }?.transportId
                     }
-                    selectedDeviceSerial = nextSelectedDeviceSerial
+                    selectedDeviceTransportId = nextSelectedDeviceTransportId
                     dataFillModule.clearDeviceState()
                     fileManagerModule.clearDeviceState()
                     thirdPartyApps = emptyList()
@@ -212,7 +278,7 @@ fun App() {
                     isLoadingDeviceProperties = false
                     deviceLogModule.clearIfIdle()
 
-                    if (nextSelectedDeviceSerial == null) {
+                    if (nextSelectedDeviceTransportId == null) {
                         statusText = if (discoveredDevices.isEmpty()) {
                             localized("shell.no_devices_found")
                         } else {
@@ -222,7 +288,7 @@ fun App() {
                     } else if (selectedTestModule == TestModule.DataFill) {
                         statusText = localized("shell.found_arg0_devices_reading_storage", discoveredDevices.size)
                         try {
-                            dataFillModule.loadStorageInfoForDeviceScan(nextSelectedDeviceSerial)
+                            dataFillModule.loadStorageInfoForDeviceScan(nextSelectedDeviceTransportId)
                             statusText = localized("shell.found_arg0_devices_storage_refreshed", discoveredDevices.size)
                             appendStatus(localized("shell.device_connected_storage_refreshed"))
                         } catch (error: Throwable) {
@@ -232,10 +298,10 @@ fun App() {
                     } else if (selectedTestModule == TestModule.Device) {
                         statusText = localized("shell.found_arg0_devices_reading_system_info", discoveredDevices.size)
                         try {
-                            deviceSystemInfo = deviceAdb.loadSystemInfo(nextSelectedDeviceSerial, ::appendCommand)
-                            systemProperties = deviceAdb.loadSystemProperties(nextSelectedDeviceSerial, ::appendCommand)
-                            deviceSystemInfoLoadedSerial = nextSelectedDeviceSerial
-                            devicePropertiesLoadedSerial = nextSelectedDeviceSerial
+                            deviceSystemInfo = deviceAdb.loadSystemInfo(nextSelectedDeviceTransportId, ::appendCommand)
+                            systemProperties = deviceAdb.loadSystemProperties(nextSelectedDeviceTransportId, ::appendCommand)
+                            deviceSystemInfoLoadedSerial = nextSelectedDeviceTransportId
+                            devicePropertiesLoadedSerial = nextSelectedDeviceTransportId
                             statusText = localized("shell.found_arg0_devices_system_info_refreshed", discoveredDevices.size)
                             appendStatus(localized("shell.device_connected_system_info_and_properties_refreshe"))
                         } catch (error: Throwable) {
@@ -248,7 +314,7 @@ fun App() {
                     } else if (selectedTestModule == TestModule.FileManager) {
                         statusText = localized("shell.found_arg0_devices_reading_files", discoveredDevices.size)
                         try {
-                            fileManagerModule.loadRootForDeviceScan(nextSelectedDeviceSerial)
+                            fileManagerModule.loadRootForDeviceScan(nextSelectedDeviceTransportId)
                             statusText = localized("shell.found_arg0_devices_files_loaded", discoveredDevices.size)
                             appendStatus(localized("shell.device_connected_file_directory_refreshed"))
                         } catch (error: Throwable) {
@@ -266,6 +332,68 @@ fun App() {
                     isRunning = false
                 }
             }
+        }
+
+        LaunchedEffect(shouldRefreshDevicesAfterAdbNotFound, isRunning) {
+            if (shouldRefreshDevicesAfterAdbNotFound && !isRunning) {
+                shouldRefreshDevicesAfterAdbNotFound = false
+                refreshDevices()
+            }
+        }
+
+        suspend fun pairWirelessDevice(
+            host: String,
+            pairingPort: String,
+            pairingCode: String,
+        ): String {
+            if (isRunning) return localized("shell.waiting_for_the_current_task_to_finish")
+            isRunning = true
+            statusText = localized("shell.wireless_pairing")
+            val output = try {
+                val output = adbDeviceManager.pairWirelessDevice(
+                    host = host,
+                    pairingPort = pairingPort,
+                    pairingCode = pairingCode,
+                    logCommand = ::appendCommand,
+                )
+                statusText = localized("shell.wireless_pairing_succeeded")
+                appendStatus(statusText)
+                output.trim()
+            } catch (error: Throwable) {
+                statusText = error.message ?: localized("shell.wireless_pairing_failed")
+                appendError(localized("shell.wireless_pairing_failed") + " - ${error.message ?: unknownError()}")
+                throw error
+            } finally {
+                isRunning = false
+            }
+            return output
+        }
+
+        suspend fun connectWirelessDevice(
+            host: String,
+            debugPort: String,
+        ): String {
+            if (isRunning) return localized("shell.waiting_for_the_current_task_to_finish")
+            isRunning = true
+            statusText = localized("shell.wireless_connecting")
+            val output = try {
+                val output = adbDeviceManager.connectWirelessDevice(
+                    host = host,
+                    debugPort = debugPort,
+                    logCommand = ::appendCommand,
+                )
+                statusText = localized("shell.wireless_connect_succeeded")
+                appendStatus(statusText)
+                output.trim()
+            } catch (error: Throwable) {
+                statusText = error.message ?: localized("shell.wireless_connect_failed")
+                appendError(localized("shell.wireless_connect_failed") + " - ${error.message ?: unknownError()}")
+                throw error
+            } finally {
+                isRunning = false
+            }
+            refreshDevices()
+            return output
         }
 
         fun loadDeviceSystemInfo(deviceSerial: String) {
@@ -326,7 +454,7 @@ fun App() {
                     deviceAdb.rebootDevice(deviceSerial, ::appendCommand)
                     statusText = localized("shell.reboot_command_sent")
                     appendStatus(localized("shell.reboot_command_sent_device_will_reboot"))
-                    selectedDeviceSerial = null
+                    selectedDeviceTransportId = null
                     deviceSystemInfo = null
                     systemProperties = emptyList()
                 } catch (error: Throwable) {
@@ -353,7 +481,7 @@ fun App() {
                         action == DeviceQuickAction.REBOOT_RECOVERY ||
                         action == DeviceQuickAction.REBOOT_FASTBOOT
                     ) {
-                        selectedDeviceSerial = null
+                        selectedDeviceTransportId = null
                         deviceSystemInfo = null
                         systemProperties = emptyList()
                     }
@@ -458,7 +586,10 @@ fun App() {
             }
         }
 
-        fun loadThirdPartyApps(deviceSerial: String) {
+        fun loadThirdPartyApps(
+            deviceSerial: String,
+            deviceTransportId: String,
+        ) {
             if (isRunning) return
             scope.launch {
                 isRunning = true
@@ -473,7 +604,7 @@ fun App() {
                 statusText = localized("shell.reading_third_party_apps")
                 appendStatus(localized("shell.reading_third_party_apps"))
                 try {
-                    thirdPartyApps = appAdb.loadInstalledApps(deviceSerial, false, ::appendCommand) { current, total ->
+                    thirdPartyApps = appAdb.loadInstalledApps(deviceTransportId, false, ::appendCommand) { current, total ->
                         thirdPartyProgressCurrent = current
                         thirdPartyProgressTotal = total
                         statusText = localized("shell.reading_third_party_apps_arg0_arg1", current, total)
@@ -492,7 +623,10 @@ fun App() {
             }
         }
 
-        fun loadSystemApps(deviceSerial: String) {
+        fun loadSystemApps(
+            deviceSerial: String,
+            deviceTransportId: String,
+        ) {
             if (isRunning) return
             scope.launch {
                 isRunning = true
@@ -508,7 +642,7 @@ fun App() {
                 statusText = localized("shell.reading_system_apps")
                 appendStatus(localized("shell.reading_system_apps"))
                 try {
-                    val apps = appAdb.loadInstalledApps(deviceSerial, true, ::appendCommand) { current, total ->
+                    val apps = appAdb.loadInstalledApps(deviceTransportId, true, ::appendCommand) { current, total ->
                         systemProgressCurrent = current
                         systemProgressTotal = total
                         statusText = localized("shell.reading_system_apps_arg0_arg1", current, total)
@@ -576,8 +710,8 @@ fun App() {
 
         fun loadApplicationDetail(app: InstalledAppInfo, section: ApplicationDetailSection) {
             if (isRunning) return
-            val deviceSerial = selectedReadyDevice?.serialNumber
-            if (deviceSerial == null) {
+            val deviceTransportId = selectedReadyDevice?.transportId
+            if (deviceTransportId == null) {
                 statusText = noReadyDeviceMessage()
                 appendError(statusText)
                 return
@@ -595,7 +729,7 @@ fun App() {
                 appendStatus(statusText)
                 try {
                     val content = appAdb.loadApplicationDetail(
-                        deviceSerial = deviceSerial,
+                        deviceSerial = deviceTransportId,
                         app = app,
                         section = section,
                         logCommand = ::appendCommand,
@@ -659,7 +793,8 @@ fun App() {
         fun runApplicationAction(app: InstalledAppInfo, action: String) {
             if (isRunning) return
             val deviceSerial = selectedReadyDevice?.serialNumber
-            if (deviceSerial == null) {
+            val deviceTransportId = selectedReadyDevice?.transportId
+            if (deviceSerial == null || deviceTransportId == null) {
                 statusText = noReadyDeviceMessage()
                 appendError(statusText)
                 return
@@ -673,22 +808,27 @@ fun App() {
                 try {
                     when (action) {
                         ApplicationAction.LAUNCH -> {
-                            appAdb.launchApplication(deviceSerial, app.packageName, ::appendCommand)
+                            appAdb.launchApplication(deviceTransportId, app.packageName, ::appendCommand)
                             statusText = localized("shell.launched_arg0", app.packageName)
                             appendStatus(statusText)
                         }
                         ApplicationAction.STOP -> {
-                            appAdb.stopApplication(deviceSerial, app.packageName, ::appendCommand)
+                            appAdb.stopApplication(deviceTransportId, app.packageName, ::appendCommand)
                             statusText = localized("shell.force_stopped_arg0", app.packageName)
                             appendStatus(statusText)
                         }
                         ApplicationAction.CLEAR_DATA -> {
-                            appAdb.clearApplicationData(deviceSerial, app.packageName, ::appendCommand)
+                            appAdb.clearApplicationData(deviceTransportId, app.packageName, ::appendCommand)
                             statusText = localized("shell.cleared_data_for_arg0", app.packageName)
                             appendStatus(statusText)
                         }
+                        ApplicationAction.CLEAR_CACHE -> {
+                            appAdb.clearApplicationCache(deviceTransportId, app.packageName, ::appendCommand)
+                            statusText = localized("shell.cleared_cache_for_arg0", app.packageName)
+                            appendStatus(statusText)
+                        }
                         ApplicationAction.DISABLE -> {
-                            appAdb.disableApplication(deviceSerial, app.packageName, ::appendCommand)
+                            appAdb.disableApplication(deviceTransportId, app.packageName, ::appendCommand)
                             val nextSystemApps = updateApplicationEnabledState(app.packageName, false)
                             if (app.isSystem) {
                                 appAdb.saveCachedSystemApps(deviceSerial, nextSystemApps)
@@ -697,7 +837,7 @@ fun App() {
                             appendStatus(statusText)
                         }
                         ApplicationAction.ENABLE -> {
-                            appAdb.enableApplication(deviceSerial, app.packageName, ::appendCommand)
+                            appAdb.enableApplication(deviceTransportId, app.packageName, ::appendCommand)
                             val nextSystemApps = updateApplicationEnabledState(app.packageName, true)
                             if (app.isSystem) {
                                 appAdb.saveCachedSystemApps(deviceSerial, nextSystemApps)
@@ -706,7 +846,7 @@ fun App() {
                             appendStatus(statusText)
                         }
                         ApplicationAction.UNINSTALL -> {
-                            appAdb.uninstallApplication(deviceSerial, app.packageName, app.isSystem, ::appendCommand)
+                            appAdb.uninstallApplication(deviceTransportId, app.packageName, app.isSystem, ::appendCommand)
                             val nextSystemApps = removeApplicationFromLists(app.packageName)
                             if (app.isSystem) {
                                 appAdb.saveCachedSystemApps(deviceSerial, nextSystemApps)
@@ -725,7 +865,7 @@ fun App() {
                                 statusText = localized("file_manager.export_cancelled")
                                 appendStatus(statusText)
                             } else {
-                                val result = appAdb.exportApplicationApk(deviceSerial, app.packageName, outputPath, ::appendCommand)
+                                val result = appAdb.exportApplicationApk(deviceTransportId, app.packageName, outputPath, ::appendCommand)
                                 statusText = localized("shell.exported_arg0_apk_files_to_arg1", result.fileCount, result.directoryPath)
                                 appendStatus(statusText)
                             }
@@ -774,9 +914,9 @@ fun App() {
             }
         }
 
-        LaunchedEffect(selectedReadyDevice?.serialNumber) {
-            val deviceSerial = selectedReadyDevice?.serialNumber
-            if (deviceSerial != null) {
+        LaunchedEffect(selectedReadyDevice?.transportId) {
+            val deviceTransportId = selectedReadyDevice?.transportId
+            if (deviceTransportId != null) {
                 if (localApkBytes == null || localApkVersionInfo == null) {
                     try {
                         val bytes = appAdb.getLocalPluginApkBytes()
@@ -801,13 +941,13 @@ fun App() {
                     }
 
                     try {
-                        val installedVersionInfo = appAdb.getInstalledPluginVersionInfo(deviceSerial, ::appendCommand)
+                        val installedVersionInfo = appAdb.getInstalledPluginVersionInfo(deviceTransportId, ::appendCommand)
                         if (installedVersionInfo == null) {
                             bannerMessage = localized("shell.athplugin_is_not_installed_on_this_device_installing")
                             bannerActionType = BannerActionType.INSTALL
                             showPluginBanner = true
                         } else {
-                            val isPluginEnabled = appAdb.isPluginEnabled(deviceSerial, ::appendCommand)
+                            val isPluginEnabled = appAdb.isPluginEnabled(deviceTransportId, ::appendCommand)
                             if (!isPluginEnabled) {
                                 bannerMessage = localized("shell.athplugin_is_disabled_app_info_loading_may_take_long")
                                 bannerActionType = BannerActionType.ENABLE
@@ -835,17 +975,18 @@ fun App() {
 
         LaunchedEffect(
             selectedTestModule,
-            selectedReadyDevice?.serialNumber,
+            selectedReadyDevice?.transportId,
             appSettings.fileManagerDefaultRootPath,
         ) {
             val deviceSerial = selectedReadyDevice?.serialNumber
-            if (deviceSerial != null) {
+            val deviceTransportId = selectedReadyDevice?.transportId
+            if (deviceSerial != null && deviceTransportId != null) {
                 if (selectedTestModule == TestModule.Device) {
-                    if (deviceSystemInfoLoadedSerial != deviceSerial) {
-                        loadDeviceSystemInfo(deviceSerial)
+                    if (deviceSystemInfoLoadedSerial != deviceTransportId) {
+                        loadDeviceSystemInfo(deviceTransportId)
                     }
-                    if (devicePropertiesLoadedSerial != deviceSerial) {
-                        loadDeviceSystemProperties(deviceSerial)
+                    if (devicePropertiesLoadedSerial != deviceTransportId) {
+                        loadDeviceSystemProperties(deviceTransportId)
                     }
                 } else if (selectedTestModule == TestModule.App) {
                     if (systemLoadedSerial != deviceSerial) {
@@ -867,8 +1008,8 @@ fun App() {
                     }
                 } else if (selectedTestModule == TestModule.FileManager) {
                     fileManagerModule.applyDefaultRootPath()
-                    if (fileManagerModule.loadedSerial != deviceSerial) {
-                        fileManagerModule.loadDirectory(deviceSerial, fileManagerModule.appliedRootPath)
+                    if (fileManagerModule.loadedSerial != deviceTransportId) {
+                        fileManagerModule.loadDirectory(deviceTransportId, fileManagerModule.appliedRootPath)
                     }
                 }
             }
@@ -876,39 +1017,43 @@ fun App() {
 
         LaunchedEffect(
             selectedTestModule,
-            selectedReadyDevice?.serialNumber,
+            selectedReadyDevice?.transportId,
             isRunning,
             systemCacheCheckedSerial,
             systemAutoRefreshAttemptedSerial,
         ) {
             val deviceSerial = selectedReadyDevice?.serialNumber
+            val deviceTransportId = selectedReadyDevice?.transportId
             if (selectedTestModule == TestModule.App &&
                 deviceSerial != null &&
+                deviceTransportId != null &&
                 !isRunning &&
                 systemCacheCheckedSerial == deviceSerial &&
                 systemLoadedSerial != deviceSerial &&
                 systemAutoRefreshAttemptedSerial != deviceSerial
             ) {
                 systemAutoRefreshAttemptedSerial = deviceSerial
-                loadSystemApps(deviceSerial)
+                loadSystemApps(deviceSerial, deviceTransportId)
             }
         }
 
         LaunchedEffect(
             selectedTestModule,
-            selectedReadyDevice?.serialNumber,
+            selectedReadyDevice?.transportId,
             isRunning,
             thirdPartyAutoRefreshAttemptedSerial,
         ) {
             val deviceSerial = selectedReadyDevice?.serialNumber
+            val deviceTransportId = selectedReadyDevice?.transportId
             if (selectedTestModule == TestModule.App &&
                 deviceSerial != null &&
+                deviceTransportId != null &&
                 !isRunning &&
                 thirdPartyLoadedSerial != deviceSerial &&
                 thirdPartyAutoRefreshAttemptedSerial != deviceSerial
             ) {
                 thirdPartyAutoRefreshAttemptedSerial = deviceSerial
-                loadThirdPartyApps(deviceSerial)
+                loadThirdPartyApps(deviceSerial, deviceTransportId)
             }
         }
 
@@ -936,7 +1081,8 @@ fun App() {
                         actionLabel = actionLabel,
                         onAction = {
                             val serial = selectedReadyDevice?.serialNumber
-                            if (serial != null) {
+                            val transportId = selectedReadyDevice?.transportId
+                            if (serial != null && transportId != null) {
                                 if (bannerActionType == BannerActionType.ENABLE) {
                                     if (!isEnablingPlugin) {
                                         isEnablingPlugin = true
@@ -944,10 +1090,10 @@ fun App() {
                                             statusText = localized("shell.enabling_helper_plugin")
                                             appendStatus(localized("shell.start_enabling_helper_plugin_on_device_arg0", serial))
                                             try {
-                                                appAdb.enableApplication(serial, "com.floatingmuseum.android.test.helper.plugin", ::appendCommand)
+                                                appAdb.enableApplication(transportId, "com.floatingmuseum.android.test.helper.plugin", ::appendCommand)
                                                 // 延迟 500ms，等待系统状态更新
                                                 kotlinx.coroutines.delay(500)
-                                                val isEnabled = appAdb.isPluginEnabled(serial, ::appendCommand)
+                                                val isEnabled = appAdb.isPluginEnabled(transportId, ::appendCommand)
                                                 if (isEnabled) {
                                                     statusText = localized("shell.helper_plugin_enabled")
                                                     appendStatus(localized("shell.helper_plugin_enabled_on_device_arg0", serial))
@@ -971,7 +1117,7 @@ fun App() {
                                         scope.launch {
                                             statusText = localized("shell.installing_helper_plugin_on_device_arg0", serial)
                                             appendStatus(localized("shell.start_installing_helper_plugin_on_device_arg0", serial))
-                                            val success = appAdb.installPluginApk(serial, bytes, ::appendCommand)
+                                            val success = appAdb.installPluginApk(transportId, bytes, ::appendCommand)
                                             if (success) {
                                                 statusText = localized("shell.helper_plugin_installed")
                                                 appendStatus(localized("shell.helper_plugin_installed_on_device_arg0", serial))
@@ -1018,37 +1164,37 @@ fun App() {
                                     isLoadingInfo = isLoadingDeviceSystemInfo,
                                     isLoadingProperties = isLoadingDeviceProperties,
                                     onRefreshInfo = {
-                                        selectedReadyDevice?.serialNumber?.let { loadDeviceSystemInfo(it) }
+                                        selectedReadyTransportOrReport()?.let { loadDeviceSystemInfo(it) }
                                     },
                                     onRefreshProperties = {
-                                        selectedReadyDevice?.serialNumber?.let { loadDeviceSystemProperties(it) }
+                                        selectedReadyTransportOrReport()?.let { loadDeviceSystemProperties(it) }
                                     },
                                     onReboot = {
-                                        selectedReadyDevice?.serialNumber?.let { rebootSelectedDevice(it) }
+                                        selectedReadyTransportOrReport()?.let { rebootSelectedDevice(it) }
                                     },
                                     onTakeScreenshot = {
-                                        selectedReadyDevice?.serialNumber?.let { takeSelectedDeviceScreenshot(it) }
+                                        selectedReadyTransportOrReport()?.let { takeSelectedDeviceScreenshot(it) }
                                     },
                                     onInstallApplications = {
-                                        selectedReadyDevice?.serialNumber?.let { installSelectedApplications(it) }
+                                        selectedReadyTransportOrReport()?.let { installSelectedApplications(it) }
                                     },
                                     onQuickAction = { action ->
-                                        selectedReadyDevice?.serialNumber?.let {
+                                        selectedReadyTransportOrReport()?.let {
                                             runSelectedDeviceQuickAction(it, action)
                                         }
                                     },
                                     isRunning = isRunning,
                                     onBatteryControl = { args ->
-                                        selectedReadyDevice?.serialNumber?.let { serial ->
+                                        selectedReadyTransportOrReport()?.let { transportId ->
                                             scope.launch {
                                                 isRunning = true
                                                 statusText = localized("shell.running_battery_simulation")
-                                                appendStatus(localized("shell.run_battery_simulation_adb_s_arg0_shell_dumpsys_battery", serial, args.joinToString(" ")))
+                                                appendStatus(localized("shell.run_battery_simulation_adb_s_arg0_shell_dumpsys_battery", transportId, args.joinToString(" ")))
                                                 try {
-                                                    deviceAdb.controlBattery(serial, args, ::appendCommand)
+                                                    deviceAdb.controlBattery(transportId, args, ::appendCommand)
                                                     statusText = localized("shell.battery_simulation_executed")
                                                     appendStatus(statusText)
-                                                    deviceSystemInfo = deviceAdb.loadSystemInfo(serial, ::appendCommand)
+                                                    deviceSystemInfo = deviceAdb.loadSystemInfo(transportId, ::appendCommand)
                                                 } catch (error: Throwable) {
                                                     statusText = error.message ?: localized("shell.battery_simulation_failed")
                                                     appendError(localized("shell.battery_simulation_failed") + " - ${error.message ?: unknownError()}")
@@ -1059,16 +1205,16 @@ fun App() {
                                         }
                                     },
                                     onScreenSizeControl = { size ->
-                                        selectedReadyDevice?.serialNumber?.let { serial ->
+                                        selectedReadyTransportOrReport()?.let { transportId ->
                                             scope.launch {
                                                 isRunning = true
                                                 statusText = localized("shell.changing_screen_resolution")
-                                                appendStatus(localized("shell.change_screen_resolution_adb_s_arg0_shell_wm_size_arg1", serial, size))
+                                                appendStatus(localized("shell.change_screen_resolution_adb_s_arg0_shell_wm_size_arg1", transportId, size))
                                                 try {
-                                                    deviceAdb.modifyScreenSize(serial, size, ::appendCommand)
+                                                    deviceAdb.modifyScreenSize(transportId, size, ::appendCommand)
                                                     statusText = localized("shell.screen_resolution_change_executed")
                                                     appendStatus(statusText)
-                                                    deviceSystemInfo = deviceAdb.loadSystemInfo(serial, ::appendCommand)
+                                                    deviceSystemInfo = deviceAdb.loadSystemInfo(transportId, ::appendCommand)
                                                 } catch (error: Throwable) {
                                                     statusText = error.message ?: localized("shell.screen_resolution_change_failed")
                                                     appendError(localized("shell.screen_resolution_change_failed") + " - ${error.message ?: unknownError()}")
@@ -1079,16 +1225,16 @@ fun App() {
                                         }
                                     },
                                     onScreenDensityControl = { density ->
-                                        selectedReadyDevice?.serialNumber?.let { serial ->
+                                        selectedReadyTransportOrReport()?.let { transportId ->
                                             scope.launch {
                                                 isRunning = true
                                                 statusText = localized("shell.changing_screen_density")
-                                                appendStatus(localized("shell.change_screen_density_adb_s_arg0_shell_wm_density_arg1", serial, density))
+                                                appendStatus(localized("shell.change_screen_density_adb_s_arg0_shell_wm_density_arg1", transportId, density))
                                                 try {
-                                                    deviceAdb.modifyScreenDensity(serial, density, ::appendCommand)
+                                                    deviceAdb.modifyScreenDensity(transportId, density, ::appendCommand)
                                                     statusText = localized("shell.screen_density_change_executed")
                                                     appendStatus(statusText)
-                                                    deviceSystemInfo = deviceAdb.loadSystemInfo(serial, ::appendCommand)
+                                                    deviceSystemInfo = deviceAdb.loadSystemInfo(transportId, ::appendCommand)
                                                 } catch (error: Throwable) {
                                                     statusText = error.message ?: localized("shell.screen_density_change_failed")
                                                     appendError(localized("shell.screen_density_change_failed") + " - ${error.message ?: unknownError()}")
@@ -1149,11 +1295,13 @@ fun App() {
                                     systemProgressTotal = systemProgressTotal,
                                     onRefreshThirdParty = {
                                         val serial = selectedReadyDevice?.serialNumber
-                                        if (serial != null) loadThirdPartyApps(serial)
+                                        val transportId = selectedReadyDevice?.transportId
+                                        if (serial != null && transportId != null) loadThirdPartyApps(serial, transportId)
                                     },
                                     onRefreshSystem = {
                                         val serial = selectedReadyDevice?.serialNumber
-                                        if (serial != null) loadSystemApps(serial)
+                                        val transportId = selectedReadyDevice?.transportId
+                                        if (serial != null && transportId != null) loadSystemApps(serial, transportId)
                                     },
                                     onClearCache = ::clearApplicationListCache,
                                     onApplicationAction = ::runApplicationAction,
@@ -1180,11 +1328,13 @@ fun App() {
                         ) {
                             DevicePanel(
                                 devices = devices,
-                                selectedDeviceSerial = selectedDeviceSerial,
+                                selectedDeviceTransportId = selectedDeviceTransportId,
                                 isRunning = isRunning,
                                 onRefresh = ::refreshDevices,
+                                onPairWirelessDevice = ::pairWirelessDevice,
+                                onConnectWirelessDevice = ::connectWirelessDevice,
                                 onSelect = { device ->
-                                    selectedDeviceSerial = device.serialNumber
+                                    selectedDeviceTransportId = device.transportId
                                     dataFillModule.clearDeviceState()
                                     fileManagerModule.clearDeviceState()
                                     thirdPartyApps = emptyList()
@@ -1211,15 +1361,15 @@ fun App() {
 
                                     if (device.isReady) {
                                         if (selectedTestModule == TestModule.DataFill) {
-                                            dataFillModule.refreshStorageForDevice(device.serialNumber)
+                                            dataFillModule.refreshStorageForDevice(device.transportId)
                                         } else if (selectedTestModule == TestModule.FileManager) {
                                             fileManagerModule.loadDirectory(
-                                                deviceSerial = device.serialNumber,
+                                                deviceSerial = device.transportId,
                                                 remotePath = fileManagerModule.appliedRootPath,
                                             )
                                         } else if (selectedTestModule == TestModule.Device) {
-                                            loadDeviceSystemInfo(device.serialNumber)
-                                            loadDeviceSystemProperties(device.serialNumber)
+                                            loadDeviceSystemInfo(device.transportId)
+                                            loadDeviceSystemProperties(device.transportId)
                                         } else if (selectedTestModule == TestModule.Log) {
                                             statusText = localized("shell.selected_device_arg0_ready_to_capture_logcat", device.serialNumber)
                                         } else {

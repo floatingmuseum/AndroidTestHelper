@@ -173,7 +173,7 @@ object AdbShell {
             .filter { it.isNotEmpty() && !it.startsWith("List of devices attached") }
             .mapNotNull { line ->
                 val columns = line.split(Regex("\\s+"))
-                val serialNumber = columns.getOrNull(0) ?: return@mapNotNull null
+                val transportId = columns.getOrNull(0) ?: return@mapNotNull null
                 val state = columns.getOrNull(1) ?: return@mapNotNull null
                 val model = columns
                     .firstOrNull { it.startsWith("model:") }
@@ -183,13 +183,19 @@ object AdbShell {
                     ?: unknownModelFallback
 
                 AndroidDevice(
-                    serialNumber = serialNumber,
+                    serialNumber = parseHardwareSerialFromTransport(transportId),
+                    transportId = transportId,
                     model = model,
                     state = state,
                 )
             }
             .toList()
     }
+}
+
+internal fun parseHardwareSerialFromTransport(transportId: String): String {
+    val wirelessMatch = Regex("""^adb-([^-\.]+)-.+\._adb-tls-connect\._tcp$""").matchEntire(transportId)
+    return wirelessMatch?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() } ?: transportId
 }
 
 actual suspend fun loadAdbRuntimeInfo(): AdbRuntimeInfo {
@@ -240,8 +246,100 @@ class JvmAdbDeviceManager : AdbDeviceManager {
             displayCommand = "adb devices -l",
             logCommand = logCommand,
         )
-        return AdbShell.parseAdbDevices(output)
+        val devices = AdbShell.parseAdbDevices(output)
+        return deduplicateDevicesBySerial(
+            devices.map { device ->
+                if (device.isReady && shouldReadHardwareSerial(device)) {
+                    readHardwareSerial(device.transportId, logCommand)?.let { serial ->
+                        device.copy(serialNumber = serial)
+                    } ?: device
+                } else {
+                    device
+                }
+            },
+        )
+    }
+
+    override suspend fun pairWirelessDevice(
+        host: String,
+        pairingPort: String,
+        pairingCode: String,
+        logCommand: (String) -> Unit,
+    ): String {
+        val command = buildWirelessPairCommand(host, pairingPort, pairingCode)
+        val output = AdbShell.executeAdb(
+            args = command.args,
+            displayCommand = command.displayCommand,
+            logCommand = logCommand,
+        )
+        requireWirelessAdbSuccess(output, command.displayCommand)
+        return output
+    }
+
+    override suspend fun connectWirelessDevice(
+        host: String,
+        debugPort: String,
+        logCommand: (String) -> Unit,
+    ): String {
+        val command = buildWirelessConnectCommand(host, debugPort)
+        val output = AdbShell.executeAdb(
+            args = command.args,
+            displayCommand = command.displayCommand,
+            logCommand = logCommand,
+        )
+        requireWirelessAdbSuccess(output, command.displayCommand)
+        return output
     }
 }
 
 actual fun createAdbDeviceManager(): AdbDeviceManager = JvmAdbDeviceManager()
+
+private suspend fun readHardwareSerial(
+    transportId: String,
+    logCommand: (String) -> Unit,
+): String? {
+    return runCatching {
+        AdbShell.executeAdb(
+            args = listOf("-s", transportId, "shell", "getprop", "ro.serialno"),
+            displayCommand = "adb -s $transportId shell getprop ro.serialno",
+            logCommand = logCommand,
+        ).trim().takeIf { it.isNotBlank() }
+    }.getOrNull()
+}
+
+internal fun shouldReadHardwareSerial(device: AndroidDevice): Boolean {
+    return device.serialNumber == device.transportId && isIpPortTransport(device.transportId)
+}
+
+internal fun isIpPortTransport(transportId: String): Boolean {
+    return Regex("""^\d{1,3}(\.\d{1,3}){3}:\d{1,5}$""").matches(transportId) ||
+        Regex("""^\[[0-9a-fA-F:]+]:\d{1,5}$""").matches(transportId)
+}
+
+internal fun deduplicateDevicesBySerial(devices: List<AndroidDevice>): List<AndroidDevice> {
+    return devices
+        .groupBy { it.serialNumber }
+        .values
+        .map { candidates ->
+            candidates.maxWithOrNull(
+                compareBy<AndroidDevice> { it.isReady }
+                    .thenBy { !it.hasDistinctTransport }
+                    .thenBy { !it.transportId.startsWith("adb-") }
+            ) ?: candidates.first()
+        }
+}
+
+private fun requireWirelessAdbSuccess(
+    output: String,
+    displayCommand: String,
+) {
+    val normalized = output.lowercase()
+    if (
+        normalized.contains("failed") ||
+        normalized.contains("unable") ||
+        normalized.contains("cannot") ||
+        normalized.contains("error")
+    ) {
+        throw IllegalStateException(localized("adb.command_reported_failure") + "\n$displayCommand\n${output.trim()}")
+    }
+}

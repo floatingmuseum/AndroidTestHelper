@@ -46,7 +46,7 @@ internal class DataFillModuleController(
     }
 
     fun refreshStorageForSelectedDevice() {
-        val deviceSerial = getSelectedReadyDevice()?.serialNumber
+        val deviceSerial = getSelectedReadyDevice()?.transportId
         if (deviceSerial == null) {
             val message = localized("common.device.select_device_first")
             setStatusText(message)
@@ -67,7 +67,7 @@ internal class DataFillModuleController(
     }
 
     fun fillFixed(sizeBytes: Long) {
-        val deviceSerial = getSelectedReadyDevice()?.serialNumber
+        val deviceSerial = getSelectedReadyDevice()?.transportId
         if (deviceSerial != null) {
             runAdbTask(localized("data_fill.fill_arg0", formatBytes(sizeBytes))) {
                 dataFillAdb.fillSize(deviceSerial, sizeBytes, appendCommand) { progress ->
@@ -78,7 +78,7 @@ internal class DataFillModuleController(
     }
 
     fun fillCustom() {
-        val deviceSerial = getSelectedReadyDevice()?.serialNumber
+        val deviceSerial = getSelectedReadyDevice()?.transportId
         val sizeBytes = parseGiBInput(customFillValue)
         if (deviceSerial != null && sizeBytes != null) {
             runAdbTask(localized("data_fill.fill_arg0", formatBytes(sizeBytes))) {
@@ -94,7 +94,7 @@ internal class DataFillModuleController(
     }
 
     fun fillUntilRemaining() {
-        val deviceSerial = getSelectedReadyDevice()?.serialNumber
+        val deviceSerial = getSelectedReadyDevice()?.transportId
         val targetBytes = parseGiBInput(remainingValue)
         if (deviceSerial != null && targetBytes != null) {
             runAdbTask(localized("data_fill.fill_until_arg0_remains", formatBytes(targetBytes))) {
@@ -130,7 +130,7 @@ internal class DataFillModuleController(
                 appendCommand(commandStatus(localized("data_fill.task.completed_with_name", name)))
             } catch (error: CancellationException) {
                 fillProgress = null
-                val deviceSerial = getSelectedReadyDevice()?.serialNumber
+                val deviceSerial = getSelectedReadyDevice()?.transportId
                 if (deviceSerial == null) {
                     val message = localized("data_fill.task_stopped")
                     setStatusText(message)

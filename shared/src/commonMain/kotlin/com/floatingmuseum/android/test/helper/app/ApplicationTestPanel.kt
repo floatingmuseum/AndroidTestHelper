@@ -91,7 +91,7 @@ fun ApplicationTestPanel(
     var isThirdPartyExpanded by remember { mutableStateOf(true) }
     var isSystemExpanded by remember { mutableStateOf(true) }
     var appSearchQuery by remember { mutableStateOf("") }
-    var selectedAppPackageName by remember(selectedDevice?.serialNumber) { mutableStateOf<String?>(null) }
+    var selectedAppPackageName by remember(selectedDevice?.transportId) { mutableStateOf<String?>(null) }
     val filteredThirdPartyApps = remember(thirdPartyApps, appSearchQuery) {
         filterInstalledApps(thirdPartyApps, appSearchQuery)
     }

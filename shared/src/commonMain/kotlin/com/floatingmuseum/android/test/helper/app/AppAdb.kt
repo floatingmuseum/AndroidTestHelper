@@ -103,19 +103,21 @@ object ApplicationAction {
     const val LAUNCH = "launch"
     const val STOP = "stop"
     const val CLEAR_DATA = "clearData"
+    const val CLEAR_CACHE = "clearCache"
     const val DISABLE = "disable"
     const val ENABLE = "enable"
     const val EXPORT_APK = "exportApk"
     const val UNINSTALL = "uninstall"
     const val SAVE_ICON = "saveIcon"
 
-    val visibleActions = listOf(LAUNCH, STOP, CLEAR_DATA, DISABLE, ENABLE, EXPORT_APK, UNINSTALL)
+    val visibleActions = listOf(LAUNCH, STOP, CLEAR_DATA, CLEAR_CACHE, DISABLE, ENABLE, EXPORT_APK, UNINSTALL)
 }
 
 fun applicationActionLabel(action: String): String = when (action) {
     ApplicationAction.LAUNCH -> localized("app.launch")
     ApplicationAction.STOP -> localized("app.force_stop")
     ApplicationAction.CLEAR_DATA -> localized("app.clear_data")
+    ApplicationAction.CLEAR_CACHE -> localized("app.clear_app_cache")
     ApplicationAction.DISABLE -> localized("app.disable")
     ApplicationAction.ENABLE -> localized("app.enable")
     ApplicationAction.EXPORT_APK -> localized("app.export_apk")
@@ -171,6 +173,12 @@ interface AppAdb {
     )
 
     suspend fun clearApplicationData(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    )
+
+    suspend fun clearApplicationCache(
         deviceSerial: String,
         packageName: String,
         logCommand: (String) -> Unit,

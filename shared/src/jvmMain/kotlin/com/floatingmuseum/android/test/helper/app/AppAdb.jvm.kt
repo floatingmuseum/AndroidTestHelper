@@ -518,6 +518,22 @@ private class JvmAppAdb : AppAdb {
         )
     }
 
+    override suspend fun clearApplicationCache(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ) {
+        val command = buildClearApplicationCacheCommand(
+            deviceSerial = deviceSerial,
+            packageName = packageName,
+        )
+        AdbShell.executeAdb(
+            args = command.args,
+            displayCommand = command.displayCommand,
+            logCommand = logCommand,
+        )
+    }
+
     override suspend fun disableApplication(
         deviceSerial: String,
         packageName: String,
@@ -1889,6 +1905,21 @@ internal data class ApplicationUninstallCommand(
     val args: List<String>,
     val displayCommand: String,
 )
+
+internal data class ApplicationCacheClearCommand(
+    val args: List<String>,
+    val displayCommand: String,
+)
+
+internal fun buildClearApplicationCacheCommand(
+    deviceSerial: String,
+    packageName: String,
+): ApplicationCacheClearCommand {
+    return ApplicationCacheClearCommand(
+        args = listOf("-s", deviceSerial, "shell", "pm", "clear", "--cache-only", packageName),
+        displayCommand = "adb -s $deviceSerial shell pm clear --cache-only $packageName",
+    )
+}
 
 internal fun buildUninstallApplicationCommand(
     deviceSerial: String,

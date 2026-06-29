@@ -99,6 +99,7 @@ fun DeviceTestPanel(
                 )
             }
         } else {
+            val hasReadyDevice = selectedDevice.isReady
             Row(
                 modifier = Modifier.fillMaxSize().padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -142,7 +143,7 @@ fun DeviceTestPanel(
                                     )
                                     .clickable {
                                         if (isSelected) {
-                                            if (!isLoading && !isRunning) {
+                                            if (!isLoading && !isRunning && hasReadyDevice) {
                                                 onRefresh()
                                             }
                                         } else {
@@ -217,6 +218,9 @@ fun DeviceTestPanel(
                                             verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
                                             InfoRow(strings.t("device.serial_number_sn"), selectedDevice.serialNumber)
+                                            if (selectedDevice.hasDistinctTransport) {
+                                                InfoRow(strings.t("device.adb_transport"), selectedDevice.transportId)
+                                            }
                                             InfoRow(strings.t("device.brand"), systemInfo.brand)
                                             InfoRow(strings.t("device.info.model"), systemInfo.model)
                                             InfoRow(strings.t("device.rom_version"), systemInfo.romVersion)
@@ -406,7 +410,7 @@ fun DeviceTestPanel(
                                                                                 onScreenSizeControl(mockSizeText.trim())
                                                                             }
                                                                         },
-                                                                        enabled = !isRunning && mockSizeText.isNotEmpty(),
+                                                                        enabled = !isRunning && hasReadyDevice && mockSizeText.isNotEmpty(),
                                                                         modifier = Modifier.height(36.dp)
                                                                     ) {
                                                                         Text(strings.t("common.change"))
@@ -415,7 +419,7 @@ fun DeviceTestPanel(
                                                             }
                                                             Button(
                                                                 onClick = { onScreenSizeControl("reset") },
-                                                                enabled = !isRunning,
+                                                                enabled = !isRunning && hasReadyDevice,
                                                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                                                 modifier = Modifier.fillMaxWidth().height(40.dp)
                                                             ) {
@@ -449,7 +453,7 @@ fun DeviceTestPanel(
                                                                                 onScreenDensityControl(mockDensityText.trim())
                                                                             }
                                                                         },
-                                                                        enabled = !isRunning && mockDensityText.isNotEmpty(),
+                                                                        enabled = !isRunning && hasReadyDevice && mockDensityText.isNotEmpty(),
                                                                         modifier = Modifier.height(36.dp)
                                                                     ) {
                                                                         Text(strings.t("common.change"))
@@ -458,7 +462,7 @@ fun DeviceTestPanel(
                                                             }
                                                             Button(
                                                                 onClick = { onScreenDensityControl("reset") },
-                                                                enabled = !isRunning,
+                                                                enabled = !isRunning && hasReadyDevice,
                                                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                                                 modifier = Modifier.fillMaxWidth().height(40.dp)
                                                             ) {
@@ -567,7 +571,7 @@ fun DeviceTestPanel(
                                                             Text(strings.t("device.simulate_unplug_charger"), style = MaterialTheme.typography.bodyMedium)
                                                             Button(
                                                                 onClick = { onBatteryControl(listOf("unplug")) },
-                                                                enabled = !isRunning,
+                                                                enabled = !isRunning && hasReadyDevice,
                                                                 modifier = Modifier.height(36.dp)
                                                             ) {
                                                                 Text(strings.t("device.unplug"))
@@ -599,7 +603,7 @@ fun DeviceTestPanel(
                                                                             onBatteryControl(listOf("set", "level", lvl.toString()))
                                                                         }
                                                                     },
-                                                                    enabled = !isRunning && mockLevelText.isNotEmpty(),
+                                                                    enabled = !isRunning && hasReadyDevice && mockLevelText.isNotEmpty(),
                                                                     modifier = Modifier.height(36.dp)
                                                                 ) {
                                                                     Text(strings.t("device.set"))
@@ -633,7 +637,7 @@ fun DeviceTestPanel(
                                                                             onBatteryControl(listOf("set", "temp", tempInt.toString()))
                                                                         }
                                                                     },
-                                                                    enabled = !isRunning && mockTempText.isNotEmpty(),
+                                                                    enabled = !isRunning && hasReadyDevice && mockTempText.isNotEmpty(),
                                                                     modifier = Modifier.height(36.dp)
                                                                 ) {
                                                                     Text(strings.t("device.set"))
@@ -653,7 +657,7 @@ fun DeviceTestPanel(
                                                             ) {
                                                                 Button(
                                                                     onClick = { onBatteryControl(listOf("set", "status", "2")) },
-                                                                    enabled = !isRunning,
+                                                                    enabled = !isRunning && hasReadyDevice,
                                                                     modifier = Modifier.height(32.dp),
                                                                     contentPadding = ButtonDefaults.ContentPadding
                                                                 ) {
@@ -661,7 +665,7 @@ fun DeviceTestPanel(
                                                                 }
                                                                 Button(
                                                                     onClick = { onBatteryControl(listOf("set", "status", "3")) },
-                                                                    enabled = !isRunning,
+                                                                    enabled = !isRunning && hasReadyDevice,
                                                                     modifier = Modifier.height(32.dp),
                                                                     contentPadding = ButtonDefaults.ContentPadding
                                                                 ) {
@@ -669,7 +673,7 @@ fun DeviceTestPanel(
                                                                 }
                                                                 Button(
                                                                     onClick = { onBatteryControl(listOf("set", "status", "5")) },
-                                                                    enabled = !isRunning,
+                                                                    enabled = !isRunning && hasReadyDevice,
                                                                     modifier = Modifier.height(32.dp),
                                                                     contentPadding = ButtonDefaults.ContentPadding
                                                                 ) {
@@ -682,7 +686,7 @@ fun DeviceTestPanel(
 
                                                         Button(
                                                             onClick = { onBatteryControl(listOf("reset")) },
-                                                            enabled = !isRunning,
+                                                            enabled = !isRunning && hasReadyDevice,
                                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                                             modifier = Modifier.fillMaxWidth().height(40.dp)
                                                         ) {
@@ -848,7 +852,7 @@ fun DeviceTestPanel(
                                 rowActions.forEach { action ->
                                     DeviceShortcutButton(
                                         action = action,
-                                        enabled = !isRunning,
+                                        enabled = !isRunning && hasReadyDevice,
                                         modifier = Modifier.weight(1f)
                                     )
                                 }

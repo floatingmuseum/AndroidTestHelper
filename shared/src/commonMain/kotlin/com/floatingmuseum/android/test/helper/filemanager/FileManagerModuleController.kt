@@ -102,7 +102,7 @@ internal class FileManagerModuleController(
 
     fun refreshSelectedDirectory() {
         applyDefaultRootPath()
-        val serial = getSelectedReadyDevice()?.serialNumber
+        val serial = getSelectedReadyDevice()?.transportId
         if (serial == null) {
             val message = localized("common.device.select_device_first")
             setStatusText(message)
@@ -113,7 +113,7 @@ internal class FileManagerModuleController(
     }
 
     fun refreshEntryDirectory(entry: RemoteFileEntry) {
-        val serial = getSelectedReadyDevice()?.serialNumber
+        val serial = getSelectedReadyDevice()?.transportId
         if (serial == null) {
             val message = localized("common.device.select_device_first")
             setStatusText(message)
@@ -135,7 +135,7 @@ internal class FileManagerModuleController(
             return
         }
 
-        val serial = getSelectedReadyDevice()?.serialNumber ?: return
+        val serial = getSelectedReadyDevice()?.transportId ?: return
         if (childrenByPath.containsKey(normalizedPath)) {
             expandedPaths = expandedPaths + normalizedPath
         } else {
@@ -193,7 +193,7 @@ internal class FileManagerModuleController(
     }
 
     fun exportEntry(entry: RemoteFileEntry) {
-        val serial = getSelectedReadyDevice()?.serialNumber
+        val serial = getSelectedReadyDevice()?.transportId
         if (serial == null) {
             val message = localized("common.device.select_device_first")
             setStatusText(message)
@@ -234,7 +234,7 @@ internal class FileManagerModuleController(
     }
 
     fun deleteEntry(entry: RemoteFileEntry) {
-        val serial = getSelectedReadyDevice()?.serialNumber
+        val serial = getSelectedReadyDevice()?.transportId
         if (serial == null) {
             val message = localized("common.device.select_device_first")
             setStatusText(message)
@@ -287,7 +287,7 @@ internal class FileManagerModuleController(
     }
 
     fun createEntry(targetDirectory: RemoteFileEntry, name: String, type: RemoteCreateType) {
-        val serial = getSelectedReadyDevice()?.serialNumber
+        val serial = getSelectedReadyDevice()?.transportId
         if (serial == null) {
             val message = localized("common.device.select_device_first")
             setStatusText(message)
@@ -405,7 +405,7 @@ internal class FileManagerModuleController(
     }
 
     private suspend fun uploadFilesToDirectory(filePaths: List<String>, targetDirectoryPath: String) {
-        val serial = getSelectedReadyDevice()?.serialNumber
+        val serial = getSelectedReadyDevice()?.transportId
         if (serial == null) {
             val message = localized("common.device.select_device_first")
             setStatusText(message)

@@ -61,7 +61,7 @@ internal class DeviceLogModuleController(
             appendCommand(commandStatus(localized("log.start_capturing_logcat_from_device_arg0", device.serialNumber)))
             try {
                 val result = deviceLogAdb.captureFullLogs(
-                    deviceSerial = device.serialNumber,
+                    deviceSerial = device.transportId,
                     deviceModel = device.model,
                     logCommand = appendCommand,
                     onProgress = { nextProgress ->
