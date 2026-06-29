@@ -163,7 +163,10 @@ object AdbShell {
             .joinToString(" / ")
     }
 
-    fun parseAdbDevices(output: String): List<AndroidDevice> {
+    fun parseAdbDevices(
+        output: String,
+        unknownModelFallback: String = localized("device.unknown_model"),
+    ): List<AndroidDevice> {
         return output
             .lineSequence()
             .map { it.trim() }
@@ -177,7 +180,7 @@ object AdbShell {
                     ?.substringAfter("model:")
                     ?.replace('_', ' ')
                     ?.takeIf { it.isNotBlank() }
-                    ?: "未知型号"
+                    ?: unknownModelFallback
 
                 AndroidDevice(
                     serialNumber = serialNumber,

@@ -1,5 +1,8 @@
 package com.floatingmuseum.android.test.helper.adb
 
+import com.floatingmuseum.android.test.helper.settings.AppLanguage
+import com.floatingmuseum.android.test.helper.settings.AppSettings
+import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -12,6 +15,7 @@ class AdbDeviceManagerTest {
             R52T90ABC12            device product:gts8wifi model:SM_X700 device:gts8wifi transport_id:1
             emulator-5554          offline transport_id:2
             """.trimIndent(),
+            unknownModelFallback = "Unknown model",
         )
 
         assertEquals(2, devices.size)
@@ -20,9 +24,25 @@ class AdbDeviceManagerTest {
         assertEquals("device", devices[0].state)
         assertEquals(true, devices[0].isReady)
         assertEquals("emulator-5554", devices[1].serialNumber)
-        assertEquals("未知型号", devices[1].model)
+        assertEquals("Unknown model", devices[1].model)
         assertEquals("offline", devices[1].state)
         assertEquals(false, devices[1].isReady)
+    }
+
+    @Test
+    fun parsesAdbDevicesOutputWithCurrentLanguageUnknownModelFallback() {
+        val previousSettings = AppSettingsShared.currentSettings
+        try {
+            AppSettingsShared.updateSettings(AppSettings(language = AppLanguage.SimplifiedChinese))
+            val zhDevices = AdbShell.parseAdbDevices("emulator-5554 offline transport_id:2")
+            assertEquals("未知型号", zhDevices.single().model)
+
+            AppSettingsShared.updateSettings(AppSettings(language = AppLanguage.English))
+            val enDevices = AdbShell.parseAdbDevices("emulator-5554 offline transport_id:2")
+            assertEquals("Unknown model", enDevices.single().model)
+        } finally {
+            AppSettingsShared.updateSettings(previousSettings)
+        }
     }
 
     @Test

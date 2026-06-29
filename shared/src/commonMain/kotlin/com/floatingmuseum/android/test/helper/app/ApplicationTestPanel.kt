@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import com.floatingmuseum.android.test.helper.AndroidDevice
 import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
+import com.floatingmuseum.android.test.helper.settings.AppLanguage
 
 private val SearchMatchBackground = Color(0xFFFFFF00)
 private val SearchMatchContent = Color(0xFF111111)
@@ -884,16 +885,12 @@ private fun ApplicationDetailInfoPanel(
                         )
                     }
                     else -> {
-                        val displayItems = content.items.map { item ->
-                            item.toDisplayDetailItem(selectedSection)
-                        }
+                        val displayItems = content.toDisplayDetailItems(selectedSection)
                         val filteredItems = displayItems.filter { item ->
                             detailSearchQuery.isBlank() ||
                                 item.searchableName.contains(detailSearchQuery.trim(), ignoreCase = true)
                         }
-                        val isPlaceholderItem = content.items.size == 1 &&
-                            (content.items.first().label == "状态" || content.items.first().label.equals("Status", ignoreCase = true))
-                        val totalComponentCount = if (isPlaceholderItem) 0 else displayItems.size
+                        val totalComponentCount = displayItems.size
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -939,7 +936,16 @@ private fun ApplicationDetailInfoPanel(
                                     singleLine = true,
                                 )
                             }
-                            if (filteredItems.isEmpty()) {
+                            if (displayItems.isEmpty()) {
+                                Text(
+                                    text = strings.t("app.no_displayable_info_in_this_section"),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 24.dp),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else if (filteredItems.isEmpty()) {
                                 Text(
                                     text = strings.t("app.no_matching_info"),
                                     modifier = Modifier
@@ -964,19 +970,32 @@ private fun ApplicationDetailInfoPanel(
     }
 }
 
-private data class DisplayApplicationDetailItem(
+internal data class DisplayApplicationDetailItem(
     val title: String,
     val body: String,
     val searchableName: String,
 )
 
-private fun ApplicationDetailItem.toDisplayDetailItem(
+internal fun ApplicationDetailContent.toDisplayDetailItems(
+    section: ApplicationDetailSection = this.section,
+): List<DisplayApplicationDetailItem> {
+    if (isNoInformationPlaceholder()) return emptyList()
+    return items.map { item -> item.toDisplayDetailItem(section) }
+}
+
+internal fun ApplicationDetailContent.isNoInformationPlaceholder(): Boolean {
+    val item = items.singleOrNull() ?: return false
+    return item.label.matchesKnownDetailLabel("app.status") &&
+        item.value.matchesKnownDetailLabel("app.no_information_parsed_for_this_section")
+}
+
+internal fun ApplicationDetailItem.toDisplayDetailItem(
     section: ApplicationDetailSection,
 ): DisplayApplicationDetailItem {
     return when {
         section.isApplicationComponentSection() -> {
             val parsedName = extractDetailAttribute(value, "name")
-            val title = parsedName ?: label
+            val title = parsedName ?: label.normalizedKnownDetailLabel()
             DisplayApplicationDetailItem(
                 title = title,
                 body = removeDetailAttribute(value, "name").ifBlank { localized("app.declared") },
@@ -987,10 +1006,10 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
             val parsedName = extractDetailAttribute(value, "name")
             val (title, body) = if (parsedName != null) {
                 val remaining = removeDetailAttribute(value, "name").ifBlank {
-                    if (label.startsWith("权限") || label.equals("Permission", ignoreCase = true)) {
+                    if (label.isGenericPermissionLabel()) {
                         localized("app.declared")
                     } else {
-                        label
+                        label.normalizedKnownDetailLabel()
                     }
                 }
                 Pair(parsedName, remaining)
@@ -1007,10 +1026,10 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
                     Pair(
                         name,
                         remaining.ifBlank {
-                            if (label.startsWith("权限") || label.equals("Permission", ignoreCase = true)) {
+                            if (label.isGenericPermissionLabel()) {
                                 localized("app.declared")
                             } else {
-                                label
+                                label.normalizedKnownDetailLabel()
                             }
                         }
                     )
@@ -1022,10 +1041,10 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
                 } else {
                     Pair(
                         value.trim(),
-                        if (label.startsWith("权限") || label.equals("Permission", ignoreCase = true)) {
+                        if (label.isGenericPermissionLabel()) {
                             localized("app.declared")
                         } else {
-                            label
+                            label.normalizedKnownDetailLabel()
                         }
                     )
                 }
@@ -1037,12 +1056,80 @@ private fun ApplicationDetailItem.toDisplayDetailItem(
             )
         }
         else -> DisplayApplicationDetailItem(
-            title = label,
-            body = value,
-            searchableName = label,
+            title = label.normalizedKnownDetailLabel(),
+            body = value.normalizedKnownDetailValue(label.knownDetailLabelKey()),
+            searchableName = label.normalizedKnownDetailLabel(),
         )
     }
 }
+
+private fun String.normalizedKnownDetailLabel(): String {
+    val key = knownDetailLabelKey() ?: return this
+    return localized(key)
+}
+
+private fun String.isGenericPermissionLabel(): Boolean {
+    val normalized = trim()
+    val englishPermissions = localized("app.permissions", language = AppLanguage.English)
+    val simplifiedChinesePermissions = localized("app.permissions", language = AppLanguage.SimplifiedChinese)
+    return normalized.matchesKnownDetailLabel("app.permissions") ||
+        normalized.equals("Permission", ignoreCase = true) ||
+        normalized.startsWith("Permission ", ignoreCase = true) ||
+        normalized == simplifiedChinesePermissions ||
+        normalized.startsWith("$simplifiedChinesePermissions ") ||
+        normalized.equals(englishPermissions, ignoreCase = true) ||
+        normalized.startsWith("$englishPermissions ", ignoreCase = true)
+}
+
+private fun String.knownDetailLabelKey(): String? {
+    return KnownDisplayLabelKeys.firstOrNull { key -> matchesKnownDetailLabel(key) }
+}
+
+private fun String.normalizedKnownDetailValue(labelKey: String?): String {
+    val valueKey = when (labelKey) {
+        "app.type" -> knownAppTypeValueKey()
+        "app.enabled_state" -> knownEnabledStateValueKey()
+        else -> null
+    } ?: return this
+    return localized(valueKey)
+}
+
+private fun String.knownAppTypeValueKey(): String? {
+    return KnownAppTypeValueKeys.firstOrNull { key -> matchesKnownDetailLabel(key) }
+}
+
+private fun String.knownEnabledStateValueKey(): String? {
+    return KnownEnabledStateValueKeys.firstOrNull { key -> matchesKnownDetailLabel(key) }
+}
+
+private fun String.matchesKnownDetailLabel(key: String): Boolean {
+    val normalized = trim()
+    return normalized.equals(localized(key, language = AppLanguage.English), ignoreCase = true) ||
+        normalized == localized(key, language = AppLanguage.SimplifiedChinese)
+}
+
+private val KnownDisplayLabelKeys = listOf(
+    "app.name",
+    "app.package_name",
+    "app.version_name",
+    "app.version_code",
+    "app.type",
+    "app.enabled_state",
+    "app.status",
+    "app.declared_permission",
+    "app.install_state",
+    "app.permissions",
+)
+
+private val KnownAppTypeValueKeys = listOf(
+    "app.system_app",
+    "app.third_party_app",
+)
+
+private val KnownEnabledStateValueKeys = listOf(
+    "app.enabled",
+    "app.disabled",
+)
 
 private fun ApplicationDetailSection.isSearchableDetailSection(): Boolean {
     return this == ApplicationDetailSection.PERMISSIONS || isApplicationComponentSection()
