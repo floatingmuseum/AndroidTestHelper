@@ -236,8 +236,16 @@ internal fun DevicePanel(
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },
-                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f),
+                                disabledContainerColor = if (isSelected) {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                },
+                                disabledContentColor = if (isSelected) {
+                                    MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.70f)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f)
+                                },
                             ),
                         ) {
                             Column(
