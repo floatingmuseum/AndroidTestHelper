@@ -87,6 +87,26 @@ interface FileManagerAdb {
         type: RemoteCreateType,
         logCommand: (String) -> Unit,
     ): String
+
+    suspend fun readFileContent(
+        deviceSerial: String,
+        remotePath: String,
+        limitBytes: Long?,
+        logCommand: (String) -> Unit,
+    ): String
+
+    suspend fun readImageBytes(
+        deviceSerial: String,
+        remotePath: String,
+        logCommand: (String) -> Unit,
+    ): ByteArray
+
+    suspend fun saveFileContent(
+        deviceSerial: String,
+        remotePath: String,
+        content: String,
+        logCommand: (String) -> Unit,
+    )
 }
 
 expect fun createFileManagerAdb(): FileManagerAdb

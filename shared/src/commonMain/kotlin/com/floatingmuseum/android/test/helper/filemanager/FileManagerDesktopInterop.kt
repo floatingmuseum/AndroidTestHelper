@@ -10,3 +10,6 @@ expect fun Modifier.localFileDropTarget(
     onFilesDropped: (List<String>, String) -> Unit,
     onUnsupportedDrop: () -> Unit,
 ): Modifier
+
+expect fun byteArrayToImageBitmap(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap
+

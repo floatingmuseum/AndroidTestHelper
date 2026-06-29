@@ -60,6 +60,8 @@ internal class FileManagerModuleController(
         private set
     var uploadProgress by mutableStateOf<FileUploadProgress?>(null)
         private set
+    var previewState by mutableStateOf<PreviewState?>(null)
+        private set
 
     private var uploadJob by mutableStateOf<Job?>(null)
 
@@ -80,6 +82,7 @@ internal class FileManagerModuleController(
         dragTargetPath = null
         uploadProgress = null
         uploadJob = null
+        previewState = null
     }
 
     fun applyDefaultRootPath(): Boolean {
@@ -97,6 +100,7 @@ internal class FileManagerModuleController(
         dragTargetPath = null
         uploadProgress = null
         uploadJob = null
+        previewState = null
         return true
     }
 
@@ -482,6 +486,151 @@ internal class FileManagerModuleController(
     }
 
     private fun normalizedDefaultRootPath(): String = normalizeRemotePath(getDefaultRootPath())
+
+    fun openPreview(entry: RemoteFileEntry) {
+        val serial = getSelectedReadyDevice()?.transportId
+        if (serial == null) {
+            val message = localized("common.device.select_device_first")
+            setStatusText(message)
+            appendCommand(commandError(message))
+            return
+        }
+
+        val fileType = getPreviewFileType(entry.name)
+        if (fileType == PreviewFileType.Unsupported) {
+            val message = localized("file_manager.preview_unsupported_type_arg0", entry.name)
+            setStatusText(message)
+            return
+        }
+
+        val sizeBytes = entry.sizeBytes
+        val limit5MB = 5 * 1024 * 1024L
+        val limit50MB = 50 * 1024 * 1024L
+
+        if (sizeBytes > limit50MB) {
+            val msg = localized("file_manager.preview_file_too_large_arg0", formatRemoteFileSize(sizeBytes))
+            setStatusText(msg)
+            appendCommand(commandError(msg))
+            return
+        }
+
+        val isLargeReadOnly = sizeBytes > limit5MB
+
+        previewState = PreviewState(
+            entry = entry,
+            fileType = fileType,
+            isLoading = true,
+            isLargeFileReadOnly = isLargeReadOnly
+        )
+
+        scope.launch {
+            try {
+                if (fileType == PreviewFileType.Image) {
+                    val bytes = fileManagerAdb.readImageBytes(serial, entry.path, appendCommand)
+                    val bitmap = byteArrayToImageBitmap(bytes)
+                    previewState = previewState?.copy(
+                        isLoading = false,
+                        imageBitmap = bitmap
+                    )
+                } else {
+                    val limitBytes = if (isLargeReadOnly) 200 * 1024L else null
+                    val content = fileManagerAdb.readFileContent(serial, entry.path, limitBytes, appendCommand)
+                    previewState = previewState?.copy(
+                        isLoading = false,
+                        contentText = content,
+                        currentEditorText = content
+                    )
+                }
+            } catch (error: CancellationException) {
+                closePreview()
+            } catch (error: Throwable) {
+                previewState = previewState?.copy(
+                    isLoading = false,
+                    error = error.message ?: unknownError()
+                )
+                setStatusText(error.message ?: localized("file_manager.preview_failed"))
+                appendCommand(commandError(localized("file_manager.preview_failed") + " - ${error.message ?: unknownError()}"))
+            }
+        }
+    }
+
+    fun closePreview() {
+        previewState = null
+    }
+
+    fun updateEditorText(text: String) {
+        val state = previewState ?: return
+        if (state.isLargeFileReadOnly) return
+        previewState = state.copy(
+            currentEditorText = text,
+            isModified = text != state.contentText
+        )
+    }
+
+    fun toggleMaximizePreview() {
+        val state = previewState ?: return
+        previewState = state.copy(isMaximized = !state.isMaximized)
+    }
+
+    fun formatPreviewContent() {
+        val state = previewState ?: return
+        if (state.fileType != PreviewFileType.Text) return
+        val text = state.currentEditorText
+        val lowerName = state.entry.name.lowercase()
+        val formatted = try {
+            when {
+                lowerName.endsWith(".json") -> formatJson(text)
+                lowerName.endsWith(".xml") -> formatXml(text)
+                else -> text
+            }
+        } catch (_: Exception) {
+            text
+        }
+        updateEditorText(formatted)
+    }
+
+    fun savePreviewChanges() {
+        val state = previewState ?: return
+        if (state.isLargeFileReadOnly || !state.isModified || state.isSaving) return
+
+        val serial = getSelectedReadyDevice()?.transportId
+        if (serial == null) {
+            val message = localized("common.device.select_device_first")
+            setStatusText(message)
+            appendCommand(commandError(message))
+            return
+        }
+
+        previewState = state.copy(isSaving = true)
+        scope.launch {
+            try {
+                setStatusText(localized("file_manager.saving_changes_to_arg0", state.entry.name))
+                appendCommand(commandStatus(localized("file_manager.save_changes_to_arg0_on_device_arg1", state.entry.path, serial)))
+
+                val textToSave = previewState?.currentEditorText ?: state.currentEditorText
+                fileManagerAdb.saveFileContent(serial, state.entry.path, textToSave, appendCommand)
+
+                previewState = previewState?.copy(
+                    isSaving = false,
+                    isModified = false,
+                    contentText = textToSave
+                )
+                setStatusText(localized("file_manager.saved_changes_to_arg0", state.entry.name))
+                appendCommand(commandStatus(localized("file_manager.saved_changes_to_arg0_successfully", state.entry.path)))
+
+                // 刷新所在目录
+                val parentPath = parentRemotePath(state.entry.path)
+                val refreshedChildren = fileManagerAdb.listDirectory(serial, parentPath, appendCommand)
+                childrenByPath = childrenByPath + (parentPath to refreshedChildren)
+            } catch (error: CancellationException) {
+                previewState = previewState?.copy(isSaving = false)
+            } catch (error: Throwable) {
+                previewState = previewState?.copy(isSaving = false)
+                setStatusText(error.message ?: localized("file_manager.save_failed"))
+                appendCommand(commandError(localized("file_manager.save_failed") + " - ${error.message ?: unknownError()}"))
+            }
+        }
+    }
 }
 
 @Composable
@@ -542,6 +691,13 @@ internal fun FileManagerModuleContent(
         onDroppedFiles = controller::uploadDroppedFiles,
         onDragStateChange = controller::updateDragOver,
         onUnsupportedDrop = controller::handleUnsupportedDrop,
+        previewState = controller.previewState,
+        onOpenPreview = controller::openPreview,
+        onClosePreview = controller::closePreview,
+        onUpdateEditorText = controller::updateEditorText,
+        onFormatPreview = controller::formatPreviewContent,
+        onSavePreview = controller::savePreviewChanges,
+        onToggleMaximizePreview = controller::toggleMaximizePreview,
         modifier = modifier,
     )
 }
@@ -549,4 +705,118 @@ internal fun FileManagerModuleContent(
 private fun formatFileManagerProgressPercent(value: Float): String {
     val percent = (value.coerceIn(0f, 1f) * 100).toInt()
     return "$percent%"
+}
+
+internal enum class PreviewFileType {
+    Text,
+    Image,
+    Unsupported
+}
+
+internal data class PreviewState(
+    val entry: RemoteFileEntry,
+    val fileType: PreviewFileType,
+    val contentText: String = "",
+    val imageBitmap: androidx.compose.ui.graphics.ImageBitmap? = null,
+    val error: String? = null,
+    val isLoading: Boolean = false,
+    val isSaving: Boolean = false,
+    val isModified: Boolean = false,
+    val currentEditorText: String = "",
+    val isLargeFileReadOnly: Boolean = false,
+    val isMaximized: Boolean = false
+)
+
+internal fun getPreviewFileType(name: String): PreviewFileType {
+    val lower = name.lowercase()
+    return when {
+        lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp") || lower.endsWith(".gif") -> PreviewFileType.Image
+        lower.endsWith(".txt") || lower.endsWith(".log") || lower.endsWith(".xml") || lower.endsWith(".json") ||
+                lower.endsWith(".properties") || lower.endsWith(".ini") || lower.endsWith(".sh") || lower.endsWith(".py") ||
+                lower.endsWith(".js") || lower.endsWith(".html") || lower.endsWith(".css") || lower.endsWith(".conf") ||
+                lower.endsWith(".cfg") || lower.endsWith(".yaml") || lower.endsWith(".yml") || lower.endsWith(".gradle") ||
+                lower.endsWith(".kts") || lower.endsWith(".md") || lower.endsWith(".csv") -> PreviewFileType.Text
+        else -> PreviewFileType.Unsupported
+    }
+}
+
+internal fun formatJson(json: String): String {
+    val sb = java.lang.StringBuilder()
+    var indent = 0
+    var inString = false
+    var escaped = false
+    for (c in json) {
+        if (escaped) {
+            sb.append(c)
+            escaped = false
+            continue
+        }
+        if (c == '\\') {
+            sb.append(c)
+            escaped = true
+            continue
+        }
+        if (c == '"') {
+            inString = !inString
+            sb.append(c)
+            continue
+        }
+        if (inString) {
+            sb.append(c)
+            continue
+        }
+        when (c) {
+            '{', '[' -> {
+                sb.append(c).append("\n")
+                indent++
+                sb.append("  ".repeat(indent))
+            }
+            '}', ']' -> {
+                sb.append("\n")
+                indent--
+                if (indent < 0) indent = 0
+                sb.append("  ".repeat(indent)).append(c)
+            }
+            ',' -> {
+                sb.append(c).append("\n").append("  ".repeat(indent))
+            }
+            ':' -> {
+                sb.append(c).append(" ")
+            }
+            ' ', '\t', '\r', '\n' -> {
+                // Ignore raw whitespace
+            }
+            else -> {
+                sb.append(c)
+            }
+        }
+    }
+    return sb.toString().trim()
+}
+
+internal fun formatXml(xml: String): String {
+    val cleaned = xml.replace(Regex(">\\s+<"), "><").trim()
+    val sb = java.lang.StringBuilder()
+    var indent = 0
+    val reg = Regex("<[^>]+>|[^<]+")
+    val matches = reg.findAll(cleaned).map { it.value }.toList()
+    for (token in matches) {
+        val t = token.trim()
+        if (t.isEmpty()) continue
+        if (t.startsWith("</")) {
+            indent--
+            if (indent < 0) indent = 0
+            sb.append("\n").append("  ".repeat(indent)).append(t)
+        } else if (t.startsWith("<") && t.endsWith(">")) {
+            if (t.startsWith("<?") || t.endsWith("/>")) {
+                sb.append("\n").append("  ".repeat(indent)).append(t)
+            } else {
+                sb.append("\n").append("  ".repeat(indent)).append(t)
+                indent++
+            }
+        } else {
+            sb.append(t)
+        }
+    }
+    return sb.toString().trim()
 }

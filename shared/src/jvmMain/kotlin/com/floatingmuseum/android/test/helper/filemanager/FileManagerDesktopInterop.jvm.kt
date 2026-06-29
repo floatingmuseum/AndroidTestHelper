@@ -2,6 +2,9 @@ package com.floatingmuseum.android.test.helper.filemanager
 
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.graphics.ImageBitmap
+import org.jetbrains.skia.Image
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -93,4 +96,8 @@ internal fun parseLocalFileReferences(values: List<String>): List<String> {
         .map { it.absolutePath }
         .distinct()
         .toList()
+}
+
+actual fun byteArrayToImageBitmap(bytes: ByteArray): ImageBitmap {
+    return Image.makeFromEncoded(bytes).toComposeImageBitmap()
 }

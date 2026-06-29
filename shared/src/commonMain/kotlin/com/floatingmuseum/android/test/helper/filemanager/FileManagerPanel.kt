@@ -1,5 +1,7 @@
 package com.floatingmuseum.android.test.helper.filemanager
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -111,6 +114,13 @@ internal fun FileManagerPanel(
     onDroppedFiles: (List<String>, String) -> Unit,
     onDragStateChange: (Boolean, String?) -> Unit,
     onUnsupportedDrop: () -> Unit,
+    previewState: PreviewState?,
+    onOpenPreview: (RemoteFileEntry) -> Unit,
+    onClosePreview: () -> Unit,
+    onUpdateEditorText: (String) -> Unit,
+    onFormatPreview: () -> Unit,
+    onSavePreview: () -> Unit,
+    onToggleMaximizePreview: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val strings = rememberAppStrings()
@@ -122,124 +132,154 @@ internal fun FileManagerPanel(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Card(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isDragOver) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surface
-                },
-            ),
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        if (previewState != null && previewState.isMaximized) {
+            FilePreviewer(
+                state = previewState,
+                onClose = onClosePreview,
+                onUpdateText = onUpdateEditorText,
+                onFormat = onFormatPreview,
+                onSave = onSavePreview,
+                onToggleMaximize = onToggleMaximizePreview,
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
+        } else {
+            Row(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = strings.t("file_manager.device_files"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = selectedDevice?.let { "${it.model} · ${it.serialNumber}" } ?: strings.t("file_manager.no_device_selected"),
-                            modifier = Modifier.weight(1f, fill = false),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Text(
-                        text = if (isDragOver) {
-                            dragTargetPath?.let {
-                                strings.t("file_manager.release_to_upload_to_arg0", it)
-                            } ?: strings.t("file_manager.drop_on_a_directory_or_file_row_to_upload")
+                Card(
+                    modifier = Modifier.weight(if (previewState != null) 0.6f else 1f).fillMaxHeight(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isDragOver) {
+                            MaterialTheme.colorScheme.primaryContainer
                         } else {
-                            strings.t("file_manager.help.context_menu_and_drop_upload")
+                            MaterialTheme.colorScheme.surface
                         },
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                FileManagerHeader()
-
-                uploadProgress?.let { progress ->
-                    UploadProgressBar(
-                        progress = progress,
-                        isRunning = isRunning,
-                        onStopUpload = onStopUpload,
-                    )
-                }
-
-                when {
-                    !hasReadyDevice -> {
-                        EmptyFileManagerState(strings.t("common.device.select_device_first_with_period"))
-                    }
-                    loadedSerial != selectedDevice.transportId -> {
-                        EmptyFileManagerState(strings.t("file_manager.root_directory_has_not_been_loaded_it_loads_automati"))
-                    }
-                    else -> {
-                        val highlightedDropDirectory = if (isDragOver) {
-                            dragTargetPath?.let(::normalizeRemotePath)
-                        } else {
-                            null
-                        }
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(1.dp),
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            itemsIndexed(
-                                items = treeRows,
-                                key = { index, row -> "${row.entry.path}#$index" },
-                            ) { _, row ->
-                                FileTreeRow(
-                                    row = row,
-                                    selected = row.entry.path == selectedEntryPath,
-                                    dropHighlighted = highlightedDropDirectory?.let { targetPath ->
-                                        isRemotePathInDirectoryTree(row.entry.path, targetPath)
-                                    } == true,
-                                    isRunning = isRunning,
-                                    onToggle = { onToggleEntry(row.entry) },
-                                    onSelect = { onSelectEntry(row.entry) },
-                                    onRefresh = { onRefreshEntry(row.entry) },
-                                    onExport = { onExportEntry(row.entry) },
-                                    onDeleteRequest = { pendingDeleteEntry = row.entry },
-                                    onCreateFileRequest = {
-                                        pendingCreateEntry = PendingCreateEntry(row.entry, RemoteCreateType.File)
-                                    },
-                                    onCreateDirectoryRequest = {
-                                        pendingCreateEntry = PendingCreateEntry(row.entry, RemoteCreateType.Directory)
-                                    },
-                                    onCopyPath = { onCopyPath(row.entry) },
-                                    onDropTargetHover = { targetPath ->
-                                        onDragStateChange(targetPath != null, targetPath)
-                                    },
-                                    onDroppedFiles = { paths, targetPath ->
-                                        onDragStateChange(false, null)
-                                        onDroppedFiles(paths, targetPath)
-                                    },
-                                    onUnsupportedDrop = {
-                                        onDragStateChange(false, null)
-                                        onUnsupportedDrop()
-                                    },
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = strings.t("file_manager.device_files"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
                                 )
+                                Text(
+                                    text = selectedDevice?.let { "${it.model} · ${it.serialNumber}" } ?: strings.t("file_manager.no_device_selected"),
+                                    modifier = Modifier.weight(1f, fill = false),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Text(
+                                text = if (isDragOver) {
+                                    dragTargetPath?.let {
+                                        strings.t("file_manager.release_to_upload_to_arg0", it)
+                                    } ?: strings.t("file_manager.drop_on_a_directory_or_file_row_to_upload")
+                                } else {
+                                    strings.t("file_manager.help.context_menu_and_drop_upload")
+                                },
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+
+                        FileManagerHeader()
+
+                        uploadProgress?.let { progress ->
+                            UploadProgressBar(
+                                progress = progress,
+                                isRunning = isRunning,
+                                onStopUpload = onStopUpload,
+                            )
+                        }
+
+                        when {
+                            !hasReadyDevice -> {
+                                EmptyFileManagerState(strings.t("common.device.select_device_first_with_period"))
+                            }
+                            loadedSerial != selectedDevice.transportId -> {
+                                EmptyFileManagerState(strings.t("file_manager.root_directory_has_not_been_loaded_it_loads_automati"))
+                            }
+                            else -> {
+                                val highlightedDropDirectory = if (isDragOver) {
+                                    dragTargetPath?.let(::normalizeRemotePath)
+                                } else {
+                                    null
+                                }
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                                ) {
+                                    itemsIndexed(
+                                        items = treeRows,
+                                        key = { index, row -> "${row.entry.path}#$index" },
+                                    ) { _, row ->
+                                        FileTreeRow(
+                                            row = row,
+                                            selected = row.entry.path == selectedEntryPath,
+                                            dropHighlighted = highlightedDropDirectory?.let { targetPath ->
+                                                isRemotePathInDirectoryTree(row.entry.path, targetPath)
+                                            } == true,
+                                            isRunning = isRunning,
+                                            onToggle = { onToggleEntry(row.entry) },
+                                            onSelect = { onSelectEntry(row.entry) },
+                                            onRefresh = { onRefreshEntry(row.entry) },
+                                            onExport = { onExportEntry(row.entry) },
+                                            onDeleteRequest = { pendingDeleteEntry = row.entry },
+                                            onCreateFileRequest = {
+                                                pendingCreateEntry = PendingCreateEntry(row.entry, RemoteCreateType.File)
+                                            },
+                                            onCreateDirectoryRequest = {
+                                                pendingCreateEntry = PendingCreateEntry(row.entry, RemoteCreateType.Directory)
+                                            },
+                                            onCopyPath = { onCopyPath(row.entry) },
+                                            onDropTargetHover = { targetPath ->
+                                                onDragStateChange(targetPath != null, targetPath)
+                                            },
+                                            onDroppedFiles = { paths, targetPath ->
+                                                onDragStateChange(false, null)
+                                                onDroppedFiles(paths, targetPath)
+                                            },
+                                            onUnsupportedDrop = {
+                                                onDragStateChange(false, null)
+                                                onUnsupportedDrop()
+                                            },
+                                            onOpenPreview = { onOpenPreview(row.entry) },
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
+                }
+
+                if (previewState != null) {
+                    FilePreviewer(
+                        state = previewState,
+                        onClose = onClosePreview,
+                        onUpdateText = onUpdateEditorText,
+                        onFormat = onFormatPreview,
+                        onSave = onSavePreview,
+                        onToggleMaximize = onToggleMaximizePreview,
+                        modifier = Modifier.weight(0.4f).fillMaxHeight()
+                    )
                 }
             }
         }
@@ -382,15 +422,19 @@ private fun FileTreeRow(
     onDropTargetHover: (String?) -> Unit,
     onDroppedFiles: (List<String>, String) -> Unit,
     onUnsupportedDrop: () -> Unit,
+    onOpenPreview: () -> Unit,
 ) {
     val entry = row.entry
     val normalizedEntryPath = normalizeRemotePath(entry.path)
     val dropTargetPath = remoteDropTargetDirectoryPath(entry)
     var dropTargeted by remember(normalizedEntryPath) { mutableStateOf(false) }
+    var lastClickTime by remember(entry.path) { mutableStateOf(0L) }
     FileManagerEntryContextMenu(
         enabled = !isRunning,
         createEnabled = !isRunning && entry.isDirectory,
         deleteEnabled = !isRunning && row.depth > 0,
+        previewEnabled = !isRunning && !entry.isDirectory && getPreviewFileType(entry.name) != PreviewFileType.Unsupported,
+        onPreview = onOpenPreview,
         onRefresh = onRefresh,
         onExport = onExport,
         onDelete = onDeleteRequest,
@@ -441,7 +485,18 @@ private fun FileTreeRow(
                     )
                     .clickable(
                         enabled = !isRunning,
-                        onClick = if (entry.isExpandable) onToggle else onSelect,
+                        onClick = {
+                            if (entry.isExpandable) {
+                                onToggle()
+                            } else {
+                                onSelect()
+                                val now = System.currentTimeMillis()
+                                if (now - lastClickTime < 500L) {
+                                    onOpenPreview()
+                                }
+                                lastClickTime = now
+                            }
+                        },
                     )
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -570,6 +625,8 @@ private fun FileManagerEntryContextMenu(
     enabled: Boolean,
     createEnabled: Boolean,
     deleteEnabled: Boolean,
+    previewEnabled: Boolean,
+    onPreview: () -> Unit,
     onRefresh: () -> Unit,
     onExport: () -> Unit,
     onDelete: () -> Unit,
@@ -621,6 +678,17 @@ private fun FileManagerEntryContextMenu(
                                 onRefresh()
                             },
                         )
+                        if (previewEnabled) {
+                            FileContextMenuItem(
+                                text = strings.t("file_manager.context_menu.preview"),
+                                enabled = enabled,
+                                onHover = { showCreateMenu = false },
+                                onClick = {
+                                    menuOffset = null
+                                    onPreview()
+                                },
+                            )
+                        }
                         FileContextMenuItem(
                             text = strings.t("file_manager.context_menu.create_submenu"),
                             enabled = createEnabled,
@@ -849,4 +917,230 @@ private fun formatUploadPercent(value: Float): String {
 
 private fun formatUploadBytes(bytes: Long): String {
     return if (bytes <= 0L) "0 B" else formatRemoteFileSize(bytes)
+}
+
+@Composable
+private fun FilePreviewer(
+    state: PreviewState,
+    onClose: () -> Unit,
+    onUpdateText: (String) -> Unit,
+    onFormat: () -> Unit,
+    onSave: () -> Unit,
+    onToggleMaximize: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val strings = rememberAppStrings()
+    val isReadOnly = state.isLargeFileReadOnly
+    val lowerName = state.entry.name.lowercase()
+    val isText = state.fileType == PreviewFileType.Text
+
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = state.entry.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = formatRemoteFileSize(state.entry.sizeBytes),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (isReadOnly) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = MaterialTheme.shapes.extraSmall,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        Text(
+                            text = "只读",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                } else if (state.isModified) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = MaterialTheme.shapes.extraSmall,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        Text(
+                            text = "已修改",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                if (isText && !isReadOnly && (lowerName.endsWith(".json") || lowerName.endsWith(".xml"))) {
+                    TextButton(
+                        onClick = onFormat,
+                        enabled = !state.isLoading && !state.isSaving
+                    ) {
+                        Text(strings.t("file_manager.preview.format"))
+                    }
+                }
+
+                TextButton(onClick = onToggleMaximize) {
+                    Text(
+                        if (state.isMaximized) {
+                            strings.t("file_manager.preview.restore")
+                        } else {
+                            strings.t("file_manager.preview.maximize")
+                        }
+                    )
+                }
+
+                if (isText && !isReadOnly) {
+                    Button(
+                        onClick = onSave,
+                        enabled = state.isModified && !state.isLoading && !state.isSaving,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            text = if (state.isSaving) {
+                                strings.t("file_manager.preview.saving")
+                            } else {
+                                strings.t("file_manager.preview.save")
+                            }
+                        )
+                    }
+                }
+
+                TextButton(
+                    onClick = onClose,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text(strings.t("file_manager.preview.close"))
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                when {
+                    state.isLoading -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                    state.error != null -> {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = strings.t("file_manager.preview_failed"),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = state.error,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    state.fileType == PreviewFileType.Image && state.imageBitmap != null -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                bitmap = state.imageBitmap,
+                                contentDescription = state.entry.name,
+                                modifier = Modifier
+                                    .padding(16.dp)
+                                    .fillMaxSize()
+                            )
+                        }
+                    }
+                    state.fileType == PreviewFileType.Text -> {
+                        val linesCount = state.currentEditorText.count { it == '\n' } + 1
+                        val lineNumbersText = (1..linesCount).joinToString("\n")
+
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            Text(
+                                text = lineNumbersText,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                                    .padding(horizontal = 8.dp, vertical = 12.dp)
+                                    .fillMaxHeight(),
+                                overflow = TextOverflow.Clip
+                            )
+
+                            OutlinedTextField(
+                                value = state.currentEditorText,
+                                onValueChange = onUpdateText,
+                                readOnly = isReadOnly,
+                                enabled = !state.isSaving,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = FontFamily.Monospace
+                                ),
+                                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color.Transparent,
+                                    unfocusedBorderColor = Color.Transparent,
+                                    disabledBorderColor = Color.Transparent
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (isReadOnly) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = strings.t("file_manager.preview.large_readonly_warn"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
+    }
 }

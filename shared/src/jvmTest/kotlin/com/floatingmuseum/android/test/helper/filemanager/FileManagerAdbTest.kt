@@ -137,4 +137,28 @@ class FileManagerAdbTest {
             ),
         )
     }
+    @Test
+    fun getPreviewFileTypeCorrectlyCategorizesExtensions() {
+        assertEquals(PreviewFileType.Image, getPreviewFileType("photo.png"))
+        assertEquals(PreviewFileType.Image, getPreviewFileType("icon.webp"))
+        assertEquals(PreviewFileType.Text, getPreviewFileType("config.json"))
+        assertEquals(PreviewFileType.Text, getPreviewFileType("styles.css"))
+        assertEquals(PreviewFileType.Unsupported, getPreviewFileType("binary.db"))
+    }
+
+    @Test
+    fun formatJsonBeautifiesCompactJson() {
+        val compact = "{\"a\":1,\"b\":[true,false],\"c\":{\"d\":\"val\"}}"
+        val formatted = formatJson(compact)
+        val expected = "{\n  \"a\": 1,\n  \"b\": [\n    true,\n    false\n  ],\n  \"c\": {\n    \"d\": \"val\"\n  }\n}"
+        assertEquals(expected, formatted)
+    }
+
+    @Test
+    fun formatXmlBeautifiesCompactXml() {
+        val compact = "<map><string name=\"x\">value</string><bool name=\"y\" value=\"true\"/></map>"
+        val formatted = formatXml(compact)
+        val expected = "<map>\n  <string name=\"x\">value\n  </string>\n  <bool name=\"y\" value=\"true\"/>\n</map>"
+        assertEquals(expected, formatted)
+    }
 }

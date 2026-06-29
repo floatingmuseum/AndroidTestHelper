@@ -5,6 +5,7 @@ import com.floatingmuseum.android.test.helper.adb.AdbCommandException
 import com.floatingmuseum.android.test.helper.localization.commandStatus
 import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
+import com.floatingmuseum.android.test.helper.AppRuntimePaths
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -148,6 +149,202 @@ private class JvmFileManagerAdb : FileManagerAdb {
             logCommand = logCommand,
         )
         return targetPath
+    }
+
+    override suspend fun readFileContent(
+        deviceSerial: String,
+        remotePath: String,
+        limitBytes: Long?,
+        logCommand: (String) -> Unit,
+    ): String {
+        val normalizedPath = normalizeRemotePath(remotePath)
+        val useTail = limitBytes != null
+        val normalCmd = if (useTail) {
+            listOf("tail", "-c", limitBytes.toString(), shellQuote(normalizedPath))
+        } else {
+            listOf("cat", shellQuote(normalizedPath))
+        }
+
+        try {
+            return AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "shell") + normalCmd,
+                displayCommand = "adb -s $deviceSerial shell " + normalCmd.joinToString(" ") { if (it.startsWith("'")) it else shellQuote(it) },
+                logCommand = logCommand,
+            )
+        } catch (e: Exception) {
+            val suCmdStr = if (useTail) {
+                "tail -c $limitBytes ${shellQuote(normalizedPath)}"
+            } else {
+                "cat ${shellQuote(normalizedPath)}"
+            }
+            try {
+                return AdbShell.executeAdb(
+                    args = listOf("-s", deviceSerial, "shell", "su", "-c", suCmdStr),
+                    displayCommand = "adb -s $deviceSerial shell su -c \"$suCmdStr\"",
+                    logCommand = logCommand,
+                )
+            } catch (suEx: Exception) {
+                throw e
+            }
+        }
+    }
+
+    override suspend fun readImageBytes(
+        deviceSerial: String,
+        remotePath: String,
+        logCommand: (String) -> Unit,
+    ): ByteArray {
+        val normalizedPath = normalizeRemotePath(remotePath)
+        val tempDir = AppRuntimePaths.createTempDirectory("file_editor_img")
+        try {
+            val localPath = exportPath(deviceSerial, normalizedPath, tempDir.absolutePath, logCommand)
+            return withContext(Dispatchers.IO) {
+                File(localPath).readBytes()
+            }
+        } finally {
+            try {
+                tempDir.deleteRecursively()
+            } catch (_: Exception) {}
+        }
+    }
+
+    override suspend fun saveFileContent(
+        deviceSerial: String,
+        remotePath: String,
+        content: String,
+        logCommand: (String) -> Unit,
+    ) {
+        val normalizedPath = normalizeRemotePath(remotePath)
+        var hasBackup = false
+        val backupPath = "$normalizedPath.bak"
+
+        // 1. 尝试在设备端进行备份
+        try {
+            AdbShell.executeAdb(
+                args = listOf("-s", deviceSerial, "shell", "cp", shellQuote(normalizedPath), shellQuote(backupPath)),
+                displayCommand = "adb -s $deviceSerial shell cp ${shellQuote(normalizedPath)} ${shellQuote(backupPath)}",
+                logCommand = logCommand,
+            )
+            hasBackup = true
+        } catch (_: Exception) {
+            // 尝试 Root 提权备份
+            try {
+                AdbShell.executeAdb(
+                    args = listOf("-s", deviceSerial, "shell", "su", "-c", "cp ${shellQuote(normalizedPath)} ${shellQuote(backupPath)}"),
+                    displayCommand = "adb -s $deviceSerial shell su -c \"cp ${shellQuote(normalizedPath)} ${shellQuote(backupPath)}\"",
+                    logCommand = logCommand,
+                )
+                hasBackup = true
+            } catch (_: Exception) {
+                // 备份失败说明文件可能不存在，或者无法备份，继续执行
+            }
+        }
+
+        val tempDir = AppRuntimePaths.createTempDirectory("file_editor")
+        val tempLocalFile = File(tempDir, "editor_temp.txt")
+        var hasPushed = false
+
+        try {
+            // 2. 将内容写入电脑本地的临时文件
+            withContext(Dispatchers.IO) {
+                tempLocalFile.writeText(content, Charsets.UTF_8)
+            }
+
+            // 3. 尝试常规 push
+            try {
+                AdbShell.executeAdb(
+                    args = listOf("-s", deviceSerial, "push", tempLocalFile.absolutePath, normalizedPath),
+                    displayCommand = "adb -s $deviceSerial push ${quoteDisplay(tempLocalFile.absolutePath)} ${quoteDisplay(normalizedPath)}",
+                    logCommand = logCommand,
+                )
+                hasPushed = true
+            } catch (pushErr: Exception) {
+                // 常规 push 失败，尝试 Root 提权写入
+                val tempDevicePath = "/data/local/tmp/ath_temp_edit"
+                try {
+                    AdbShell.executeAdb(
+                        args = listOf("-s", deviceSerial, "push", tempLocalFile.absolutePath, tempDevicePath),
+                        displayCommand = "adb -s $deviceSerial push ${quoteDisplay(tempLocalFile.absolutePath)} $tempDevicePath",
+                        logCommand = logCommand,
+                    )
+                    AdbShell.executeAdb(
+                        args = listOf("-s", deviceSerial, "shell", "su", "-c", "cp $tempDevicePath ${shellQuote(normalizedPath)}"),
+                        displayCommand = "adb -s $deviceSerial shell su -c \"cp $tempDevicePath ${shellQuote(normalizedPath)}\"",
+                        logCommand = logCommand,
+                    )
+                    hasPushed = true
+                } catch (suErr: Exception) {
+                    throw pushErr // 抛出最初的写入错误
+                } finally {
+                    // 清理公共临时文件
+                    try {
+                        AdbShell.executeAdb(
+                            args = listOf("-s", deviceSerial, "shell", "rm", "-f", tempDevicePath),
+                            displayCommand = "adb -s $deviceSerial shell rm -f $tempDevicePath",
+                            logCommand = logCommand,
+                        )
+                    } catch (_: Exception) {
+                        try {
+                            AdbShell.executeAdb(
+                                args = listOf("-s", deviceSerial, "shell", "su", "-c", "rm -f $tempDevicePath"),
+                                displayCommand = "adb -s $deviceSerial shell su -c \"rm -f $tempDevicePath\"",
+                                logCommand = logCommand,
+                            )
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+
+            // 4. 写入成功后清理远程备份
+            if (hasPushed && hasBackup) {
+                try {
+                    AdbShell.executeAdb(
+                        args = listOf("-s", deviceSerial, "shell", "rm", "-f", shellQuote(backupPath)),
+                        displayCommand = "adb -s $deviceSerial shell rm -f ${shellQuote(backupPath)}",
+                        logCommand = logCommand,
+                    )
+                } catch (_: Exception) {
+                    try {
+                        AdbShell.executeAdb(
+                            args = listOf("-s", deviceSerial, "shell", "su", "-c", "rm -f ${shellQuote(backupPath)}"),
+                            displayCommand = "adb -s $deviceSerial shell su -c \"rm -f ${shellQuote(backupPath)}\"",
+                            logCommand = logCommand,
+                        )
+                    } catch (_: Exception) {}
+                }
+            }
+
+        } catch (e: Exception) {
+            // 5. 写入中发生任何异常，如果存在备份则尝试回滚
+            if (hasBackup) {
+                try {
+                    AdbShell.executeAdb(
+                        args = listOf("-s", deviceSerial, "shell", "mv", shellQuote(backupPath), shellQuote(normalizedPath)),
+                        displayCommand = "adb -s $deviceSerial shell mv ${shellQuote(backupPath)} ${shellQuote(normalizedPath)}",
+                        logCommand = logCommand,
+                    )
+                } catch (_: Exception) {
+                    try {
+                        AdbShell.executeAdb(
+                            args = listOf("-s", deviceSerial, "shell", "su", "-c", "mv ${shellQuote(backupPath)} ${shellQuote(normalizedPath)}"),
+                            displayCommand = "adb -s $deviceSerial shell su -c \"mv ${shellQuote(backupPath)} ${shellQuote(normalizedPath)}\"",
+                            logCommand = logCommand,
+                        )
+                    } catch (_: Exception) {}
+                }
+            }
+            throw e
+        } finally {
+            // 6. 最终清理本地临时文件和目录
+            try {
+                if (tempLocalFile.exists()) {
+                    tempLocalFile.delete()
+                }
+                if (tempDir.exists()) {
+                    tempDir.delete()
+                }
+            } catch (_: Exception) {}
+        }
     }
 }
 
