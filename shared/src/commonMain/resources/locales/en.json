@@ -332,6 +332,8 @@
   "file_manager.preview.format": "Format",
   "file_manager.preview.large_readonly_warn": "Note: File size exceeds 5MB. Truncated read-only preview loaded.",
   "file_manager.preview.maximize": "Maximize",
+  "file_manager.preview.modified_badge": "Modified",
+  "file_manager.preview.readonly_badge": "Read-only",
   "file_manager.preview.restore": "Restore",
   "file_manager.preview.save": "Save Changes",
   "file_manager.preview.saving": "Saving...",

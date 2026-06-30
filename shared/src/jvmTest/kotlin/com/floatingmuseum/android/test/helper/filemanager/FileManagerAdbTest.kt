@@ -1,10 +1,13 @@
 package com.floatingmuseum.android.test.helper.filemanager
 
+import com.floatingmuseum.android.test.helper.localization.localized
+import com.floatingmuseum.android.test.helper.settings.AppLanguage
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class FileManagerAdbTest {
@@ -144,6 +147,25 @@ class FileManagerAdbTest {
         assertEquals(PreviewFileType.Text, getPreviewFileType("config.json"))
         assertEquals(PreviewFileType.Text, getPreviewFileType("styles.css"))
         assertEquals(PreviewFileType.Unsupported, getPreviewFileType("binary.db"))
+    }
+
+    @Test
+    fun previewStatusBadgeKeyPrefersReadOnlyThenModified() {
+        assertEquals("file_manager.preview.readonly_badge", previewStatusBadgeKey(isReadOnly = true, isModified = false))
+        assertEquals("file_manager.preview.readonly_badge", previewStatusBadgeKey(isReadOnly = true, isModified = true))
+        assertEquals("file_manager.preview.modified_badge", previewStatusBadgeKey(isReadOnly = false, isModified = true))
+        assertNull(previewStatusBadgeKey(isReadOnly = false, isModified = false))
+    }
+
+    @Test
+    fun previewStatusBadgeEnglishLabelsDoNotContainChinese() {
+        val labels = listOf(
+            localized(previewStatusBadgeKey(isReadOnly = true, isModified = false)!!, language = AppLanguage.English),
+            localized(previewStatusBadgeKey(isReadOnly = false, isModified = true)!!, language = AppLanguage.English),
+        )
+
+        assertEquals(listOf("Read-only", "Modified"), labels)
+        assertFalse(labels.any { it.contains(Regex("\\p{IsHan}")) })
     }
 
     @Test

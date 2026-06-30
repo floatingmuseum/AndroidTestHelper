@@ -727,6 +727,14 @@ internal data class PreviewState(
     val isMaximized: Boolean = false
 )
 
+internal fun previewStatusBadgeKey(isReadOnly: Boolean, isModified: Boolean): String? {
+    return when {
+        isReadOnly -> "file_manager.preview.readonly_badge"
+        isModified -> "file_manager.preview.modified_badge"
+        else -> null
+    }
+}
+
 internal fun getPreviewFileType(name: String): PreviewFileType {
     val lower = name.lowercase()
     return when {

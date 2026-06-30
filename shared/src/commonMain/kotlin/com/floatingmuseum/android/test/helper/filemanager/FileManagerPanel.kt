@@ -933,6 +933,10 @@ private fun FilePreviewer(
     val isReadOnly = state.isLargeFileReadOnly
     val lowerName = state.entry.name.lowercase()
     val isText = state.fileType == PreviewFileType.Text
+    val statusBadgeKey = previewStatusBadgeKey(
+        isReadOnly = isReadOnly,
+        isModified = state.isModified,
+    )
 
     Card(
         modifier = modifier,
@@ -965,29 +969,26 @@ private fun FilePreviewer(
                     )
                 }
 
-                if (isReadOnly) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.errorContainer,
-                        shape = MaterialTheme.shapes.extraSmall,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    ) {
-                        Text(
-                            text = "只读",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+                if (statusBadgeKey != null) {
+                    val badgeContainerColor = if (isReadOnly) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        MaterialTheme.colorScheme.primaryContainer
                     }
-                } else if (state.isModified) {
+                    val badgeContentColor = if (isReadOnly) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    }
                     Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer,
+                        color = badgeContainerColor,
                         shape = MaterialTheme.shapes.extraSmall,
                         modifier = Modifier.padding(horizontal = 4.dp)
                     ) {
                         Text(
-                            text = "已修改",
+                            text = strings.t(statusBadgeKey),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            color = badgeContentColor,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
