@@ -44,6 +44,12 @@ private class JvmDeviceAdb : DeviceAdb {
     private var activeScreenRecordProcess: Process? = null
 
     @Volatile
+    private var activeScreenRecordStopMode: ScreenRecordStopMode = ScreenRecordStopMode.DestroyProcess
+
+    @Volatile
+    private var activeScreenRecordStopSignalFile: File? = null
+
+    @Volatile
     private var screenRecordStopRequested: Boolean = false
 
     @Volatile
@@ -445,7 +451,24 @@ private class JvmDeviceAdb : DeviceAdb {
 
     override fun stopScreenRecording() {
         screenRecordStopRequested = true
-        activeScreenRecordProcess?.destroy()
+        activeScreenRecordProcess?.let { process ->
+            when (activeScreenRecordStopMode) {
+                ScreenRecordStopMode.DestroyProcess -> process.destroy()
+                ScreenRecordStopMode.SignalCtrlBreak -> {
+                    val stopFile = activeScreenRecordStopSignalFile
+                    if (stopFile == null) {
+                        process.destroy()
+                    } else {
+                        runCatching {
+                            stopFile.parentFile?.mkdirs()
+                            stopFile.writeText("stop")
+                        }.onFailure {
+                            process.destroy()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     override suspend fun mirrorDevice(
@@ -685,6 +708,8 @@ private class JvmDeviceAdb : DeviceAdb {
                 .redirectErrorStream(true)
                 .start()
             activeScreenRecordProcess = process
+            activeScreenRecordStopMode = ScreenRecordStopMode.DestroyProcess
+            activeScreenRecordStopSignalFile = null
             onRecordingStarted()
             val outputReader = async(Dispatchers.IO) {
                 process.inputStream.bufferedReader(Charsets.UTF_8).readText()
@@ -717,6 +742,8 @@ private class JvmDeviceAdb : DeviceAdb {
             } finally {
                 if (activeScreenRecordProcess === process) {
                     activeScreenRecordProcess = null
+                    activeScreenRecordStopMode = ScreenRecordStopMode.DestroyProcess
+                    activeScreenRecordStopSignalFile = null
                 }
             }
         }
@@ -730,17 +757,47 @@ private class JvmDeviceAdb : DeviceAdb {
         logCommand(command.displayCommand)
         return withContext(Dispatchers.IO) {
             val scrcpyFile = File(command.scrcpyPath)
-            val processBuilder = ProcessBuilder(listOf(command.scrcpyPath) + command.args)
-                .redirectErrorStream(true)
-            scrcpyFile.parentFile?.takeIf { it.isDirectory }?.let { scrcpyDirectory ->
-                processBuilder.directory(scrcpyDirectory)
-                scrcpyDirectory.resolve("scrcpy-server").takeIf { it.isFile }?.let { serverFile ->
+            val scrcpyDirectory = scrcpyFile.parentFile?.takeIf { it.isDirectory }
+            val windowsStopSignalFile = if (isWindowsHost()) {
+                AppRuntimePaths.createTempDirectory("scrcpy_record_").resolve("stop.signal")
+            } else {
+                null
+            }
+            val processBuilder = if (windowsStopSignalFile != null) {
+                val scriptFile = windowsStopSignalFile.parentFile.resolve("run-scrcpy-record.ps1")
+                scriptFile.writeText(
+                    buildWindowsScrcpyRecordWrapperScript(
+                        command = command,
+                        workingDirectory = scrcpyDirectory ?: File(".").absoluteFile,
+                        stopSignalFile = windowsStopSignalFile,
+                    ),
+                )
+                ProcessBuilder(
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    scriptFile.absolutePath,
+                )
+            } else {
+                ProcessBuilder(listOf(command.scrcpyPath) + command.args)
+            }.redirectErrorStream(true)
+            scrcpyDirectory?.let { directory ->
+                processBuilder.directory(directory)
+                directory.resolve("scrcpy-server").takeIf { it.isFile }?.let { serverFile ->
                     processBuilder.environment()["SCRCPY_SERVER_PATH"] = serverFile.absolutePath
                 }
             }
             processBuilder.environment()["ADB"] = AdbShell.adbPath
             val process = processBuilder.start()
             activeScreenRecordProcess = process
+            activeScreenRecordStopSignalFile = windowsStopSignalFile
+            activeScreenRecordStopMode = if (windowsStopSignalFile != null) {
+                ScreenRecordStopMode.SignalCtrlBreak
+            } else {
+                ScreenRecordStopMode.DestroyProcess
+            }
             val recordingStarted = AtomicBoolean(false)
             val outputReader = async(Dispatchers.IO) {
                 val lines = mutableListOf<String>()
@@ -782,6 +839,8 @@ private class JvmDeviceAdb : DeviceAdb {
             } finally {
                 if (activeScreenRecordProcess === process) {
                     activeScreenRecordProcess = null
+                    activeScreenRecordStopMode = ScreenRecordStopMode.DestroyProcess
+                    activeScreenRecordStopSignalFile = null
                 }
             }
         }
@@ -1328,6 +1387,206 @@ internal fun isScrcpyRecordingStartedLine(line: String): Boolean {
     return "recording" in normalized &&
         "started" in normalized &&
         ("to " in normalized || "file" in normalized || "record" in normalized)
+}
+
+private enum class ScreenRecordStopMode {
+    DestroyProcess,
+    SignalCtrlBreak,
+}
+
+private fun isWindowsHost(): Boolean {
+    return System.getProperty("os.name").contains("win", ignoreCase = true)
+}
+
+internal fun buildWindowsScrcpyRecordWrapperScript(
+    command: ScrcpyRecordCommand,
+    workingDirectory: File,
+    stopSignalFile: File,
+): String {
+    val commandLine = buildWindowsCommandLine(command.scrcpyPath, command.args)
+    return """
+        ${'$'}ErrorActionPreference = 'Stop'
+        ${'$'}scrcpyPath = ${command.scrcpyPath.toPowerShellSingleQuoted()}
+        ${'$'}commandLine = ${commandLine.toPowerShellSingleQuoted()}
+        ${'$'}workingDirectory = ${workingDirectory.absolutePath.toPowerShellSingleQuoted()}
+        ${'$'}stopFile = ${stopSignalFile.absolutePath.toPowerShellSingleQuoted()}
+
+        if (-not ('AndroidTestHelperScrcpyProcessControl' -as [type])) {
+        Add-Type -TypeDefinition @'
+        using System;
+        using System.Runtime.InteropServices;
+
+        public class AndroidTestHelperScrcpyProcessControl {
+            [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+            public struct STARTUPINFO {
+                public UInt32 cb;
+                public string lpReserved;
+                public string lpDesktop;
+                public string lpTitle;
+                public UInt32 dwX;
+                public UInt32 dwY;
+                public UInt32 dwXSize;
+                public UInt32 dwYSize;
+                public UInt32 dwXCountChars;
+                public UInt32 dwYCountChars;
+                public UInt32 dwFillAttribute;
+                public UInt32 dwFlags;
+                public UInt16 wShowWindow;
+                public UInt16 cbReserved2;
+                public IntPtr lpReserved2;
+                public IntPtr hStdInput;
+                public IntPtr hStdOutput;
+                public IntPtr hStdError;
+            }
+
+            [StructLayout(LayoutKind.Sequential)]
+            public struct PROCESS_INFORMATION {
+                public IntPtr hProcess;
+                public IntPtr hThread;
+                public UInt32 dwProcessId;
+                public UInt32 dwThreadId;
+            }
+
+            [DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+            public static extern bool CreateProcessW(
+                string app,
+                string cmd,
+                IntPtr processAttributes,
+                IntPtr threadAttributes,
+                bool inheritHandles,
+                UInt32 creationFlags,
+                IntPtr environment,
+                string currentDirectory,
+                ref STARTUPINFO startupInfo,
+                out PROCESS_INFORMATION processInformation
+            );
+
+            [DllImport("kernel32.dll", SetLastError=true)]
+            public static extern bool GenerateConsoleCtrlEvent(UInt32 ctrlEvent, UInt32 processGroupId);
+
+            [DllImport("kernel32.dll", SetLastError=true)]
+            public static extern bool CloseHandle(IntPtr handle);
+
+            [DllImport("kernel32.dll", SetLastError=true)]
+            public static extern IntPtr GetStdHandle(Int32 standardHandle);
+
+            [DllImport("kernel32.dll", SetLastError=true)]
+            public static extern bool AllocConsole();
+
+            [DllImport("kernel32.dll", SetLastError=true)]
+            public static extern IntPtr GetConsoleWindow();
+
+            [DllImport("user32.dll", SetLastError=true)]
+            public static extern bool ShowWindow(IntPtr window, Int32 command);
+        }
+        '@
+        }
+
+        ${'$'}stdIn = [AndroidTestHelperScrcpyProcessControl]::GetStdHandle(-10)
+        ${'$'}stdOut = [AndroidTestHelperScrcpyProcessControl]::GetStdHandle(-11)
+        ${'$'}stdErr = [AndroidTestHelperScrcpyProcessControl]::GetStdHandle(-12)
+        if ([AndroidTestHelperScrcpyProcessControl]::GetConsoleWindow() -eq [IntPtr]::Zero) {
+            [AndroidTestHelperScrcpyProcessControl]::AllocConsole() | Out-Null
+            ${'$'}consoleWindow = [AndroidTestHelperScrcpyProcessControl]::GetConsoleWindow()
+            if (${'$'}consoleWindow -ne [IntPtr]::Zero) {
+                [AndroidTestHelperScrcpyProcessControl]::ShowWindow(${'$'}consoleWindow, 0) | Out-Null
+            }
+        }
+
+        ${'$'}startupInfo = New-Object AndroidTestHelperScrcpyProcessControl+STARTUPINFO
+        ${'$'}startupInfo.cb = [Runtime.InteropServices.Marshal]::SizeOf(${'$'}startupInfo)
+        ${'$'}startupInfo.dwFlags = 0x00000100
+        ${'$'}startupInfo.hStdInput = ${'$'}stdIn
+        ${'$'}startupInfo.hStdOutput = ${'$'}stdOut
+        ${'$'}startupInfo.hStdError = ${'$'}stdErr
+        ${'$'}processInfo = New-Object AndroidTestHelperScrcpyProcessControl+PROCESS_INFORMATION
+        ${'$'}createNewProcessGroup = 0x00000200
+
+        ${'$'}created = [AndroidTestHelperScrcpyProcessControl]::CreateProcessW(
+            ${'$'}scrcpyPath,
+            ${'$'}commandLine,
+            [IntPtr]::Zero,
+            [IntPtr]::Zero,
+            ${'$'}true,
+            ${'$'}createNewProcessGroup,
+            [IntPtr]::Zero,
+            ${'$'}workingDirectory,
+            [ref]${'$'}startupInfo,
+            [ref]${'$'}processInfo
+        )
+
+        if (-not ${'$'}created) {
+            ${'$'}errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            Write-Error "Unable to start scrcpy process. Win32 error: ${'$'}errorCode"
+            exit 1
+        }
+
+        try {
+            ${'$'}child = [System.Diagnostics.Process]::GetProcessById([int]${'$'}processInfo.dwProcessId)
+            ${'$'}stopSent = ${'$'}false
+            ${'$'}stopDeadline = ${'$'}null
+            while (-not ${'$'}child.HasExited) {
+                if ((-not ${'$'}stopSent) -and (Test-Path -LiteralPath ${'$'}stopFile)) {
+                    ${'$'}sent = [AndroidTestHelperScrcpyProcessControl]::GenerateConsoleCtrlEvent(1, ${'$'}processInfo.dwProcessId)
+                    if (-not ${'$'}sent) {
+                        ${'$'}errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+                        Write-Output "Unable to signal scrcpy with Ctrl+Break. Win32 error: ${'$'}errorCode"
+                        ${'$'}child.Kill()
+                        break
+                    }
+                    ${'$'}stopSent = ${'$'}true
+                    ${'$'}stopDeadline = (Get-Date).AddSeconds(15)
+                }
+                if (${'$'}stopSent -and ${'$'}stopDeadline -ne ${'$'}null -and (Get-Date) -gt ${'$'}stopDeadline) {
+                    if (-not ${'$'}child.HasExited) {
+                        ${'$'}child.Kill()
+                    }
+                    break
+                }
+                Start-Sleep -Milliseconds 100
+            }
+            ${'$'}child.WaitForExit()
+            exit ${'$'}child.ExitCode
+        } finally {
+            [AndroidTestHelperScrcpyProcessControl]::CloseHandle(${'$'}processInfo.hProcess) | Out-Null
+            [AndroidTestHelperScrcpyProcessControl]::CloseHandle(${'$'}processInfo.hThread) | Out-Null
+            Remove-Item -LiteralPath ${'$'}stopFile -ErrorAction SilentlyContinue
+        }
+    """.trimIndent()
+}
+
+internal fun buildWindowsCommandLine(executablePath: String, args: List<String>): String {
+    return (listOf(executablePath) + args)
+        .joinToString(" ") { it.toWindowsCommandLineArgument() }
+}
+
+internal fun String.toWindowsCommandLineArgument(): String {
+    if (isEmpty()) return "\"\""
+    val result = StringBuilder()
+    result.append('"')
+    var backslashCount = 0
+    for (char in this) {
+        when (char) {
+            '\\' -> backslashCount += 1
+            '"' -> {
+                repeat(backslashCount * 2 + 1) { result.append('\\') }
+                result.append('"')
+                backslashCount = 0
+            }
+            else -> {
+                repeat(backslashCount) { result.append('\\') }
+                backslashCount = 0
+                result.append(char)
+            }
+        }
+    }
+    repeat(backslashCount * 2) { result.append('\\') }
+    result.append('"')
+    return result.toString()
+}
+
+private fun String.toPowerShellSingleQuoted(): String {
+    return "'${replace("'", "''")}'"
 }
 
 internal data class ScrcpyMirrorCommand(

@@ -346,6 +346,38 @@ class DeviceAdbTest {
     }
 
     @Test
+    fun testWindowsCommandLineQuotesScrcpyRecordingArguments() {
+        assertEquals(
+            "\"C:\\Program Files\\scrcpy\\scrcpy.exe\" \"--record=C:\\Recordings\\demo file.mp4\" \"--window-title=He said \\\"record\\\"\"",
+            buildWindowsCommandLine(
+                executablePath = "C:\\Program Files\\scrcpy\\scrcpy.exe",
+                args = listOf(
+                    "--record=C:\\Recordings\\demo file.mp4",
+                    "--window-title=He said \"record\"",
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun testWindowsScrcpyRecordWrapperSignalsCtrlBreak() {
+        val script = buildWindowsScrcpyRecordWrapperScript(
+            command = ScrcpyRecordCommand(
+                scrcpyPath = "C:\\scrcpy\\scrcpy.exe",
+                args = listOf("--record=C:\\Recordings\\demo.mp4"),
+                displayCommand = "",
+            ),
+            workingDirectory = File("C:\\scrcpy"),
+            stopSignalFile = File("C:\\Temp\\ath-stop.signal"),
+        )
+
+        assertEquals(true, "CreateProcessW" in script)
+        assertEquals(true, "GenerateConsoleCtrlEvent(1" in script)
+        assertEquals(true, "0x00000200" in script)
+        assertEquals(false, "taskkill" in script)
+    }
+
+    @Test
     fun testScrcpyRecordingStartedLineDetection() {
         assertEquals(true, isScrcpyRecordingStartedLine("INFO: Recording started to matroska file: demo.mkv"))
         assertEquals(true, isScrcpyRecordingStartedLine("[server] INFO: Recording started to file: demo.mkv"))
