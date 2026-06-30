@@ -10,6 +10,17 @@ class AppSettingsTest {
     }
 
     @Test
+    fun screenRecordSettingsUseOperationalDefaults() {
+        val settings = AppSettings()
+
+        assertEquals(ScreenRecordFormat.Mkv, settings.screenRecordFormat)
+        assertEquals(ScreenRecordMaxSize.Original, settings.screenRecordMaxSize)
+        assertEquals(ScreenRecordBitRate.Default, settings.screenRecordBitRate)
+        assertEquals(ScreenRecordMaxFps.Default, settings.screenRecordMaxFps)
+        assertEquals(ScreenRecordAudioMode.Disabled, settings.screenRecordAudioMode)
+    }
+
+    @Test
     fun languageDefaultsToSystemLanguageMode() {
         assertEquals(null, AppSettings().language)
     }

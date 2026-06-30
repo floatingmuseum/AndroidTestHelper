@@ -18,6 +18,77 @@ val APP_LANGUAGE_OPTIONS = listOf(
 )
 
 @Serializable
+enum class ScreenRecordFormat {
+    Mkv,
+    Mp4,
+}
+
+val SCREEN_RECORD_FORMAT_OPTIONS = listOf(
+    ScreenRecordFormat.Mkv,
+    ScreenRecordFormat.Mp4,
+)
+
+@Serializable
+enum class ScreenRecordMaxSize {
+    Original,
+    Size1080,
+    Size720,
+    Size480,
+}
+
+val SCREEN_RECORD_MAX_SIZE_OPTIONS = listOf(
+    ScreenRecordMaxSize.Original,
+    ScreenRecordMaxSize.Size1080,
+    ScreenRecordMaxSize.Size720,
+    ScreenRecordMaxSize.Size480,
+)
+
+@Serializable
+enum class ScreenRecordBitRate {
+    Default,
+    Mbps4,
+    Mbps8,
+    Mbps12,
+    Mbps20,
+}
+
+val SCREEN_RECORD_BIT_RATE_OPTIONS = listOf(
+    ScreenRecordBitRate.Default,
+    ScreenRecordBitRate.Mbps4,
+    ScreenRecordBitRate.Mbps8,
+    ScreenRecordBitRate.Mbps12,
+    ScreenRecordBitRate.Mbps20,
+)
+
+@Serializable
+enum class ScreenRecordMaxFps {
+    Default,
+    Fps15,
+    Fps30,
+    Fps60,
+}
+
+val SCREEN_RECORD_MAX_FPS_OPTIONS = listOf(
+    ScreenRecordMaxFps.Default,
+    ScreenRecordMaxFps.Fps15,
+    ScreenRecordMaxFps.Fps30,
+    ScreenRecordMaxFps.Fps60,
+)
+
+@Serializable
+enum class ScreenRecordAudioMode {
+    Disabled,
+    DeviceOutput,
+    Microphone,
+}
+
+val SCREEN_RECORD_AUDIO_MODE_OPTIONS = listOf(
+    ScreenRecordAudioMode.Disabled,
+    ScreenRecordAudioMode.DeviceOutput,
+    ScreenRecordAudioMode.Microphone,
+)
+
+@Serializable
 data class AppSettings(
     val language: AppLanguage? = null,
     val showCommandTime: Boolean = false,
@@ -25,6 +96,11 @@ data class AppSettings(
     val fileManagerDefaultRootPath: String = DEFAULT_FILE_MANAGER_ROOT_PATH,
     val customAdbPath: String? = null,
     val customScrcpyPath: String? = null,
+    val screenRecordFormat: ScreenRecordFormat = ScreenRecordFormat.Mkv,
+    val screenRecordMaxSize: ScreenRecordMaxSize = ScreenRecordMaxSize.Original,
+    val screenRecordBitRate: ScreenRecordBitRate = ScreenRecordBitRate.Default,
+    val screenRecordMaxFps: ScreenRecordMaxFps = ScreenRecordMaxFps.Default,
+    val screenRecordAudioMode: ScreenRecordAudioMode = ScreenRecordAudioMode.Disabled,
 )
 
 fun AppSettings.normalized(): AppSettings {

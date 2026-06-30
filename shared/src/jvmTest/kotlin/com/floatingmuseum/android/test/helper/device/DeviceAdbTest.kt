@@ -1,5 +1,10 @@
 package com.floatingmuseum.android.test.helper.device
 
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordAudioMode
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordBitRate
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordFormat
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordMaxFps
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordMaxSize
 import java.io.File
 import java.time.LocalDateTime
 import kotlin.test.Test
@@ -331,6 +336,16 @@ class DeviceAdbTest {
     }
 
     @Test
+    fun testBuildScrcpyRecordFileNameUsesConfiguredContainer() {
+        val capturedAt = LocalDateTime.of(2026, 6, 17, 9, 8, 7)
+
+        assertEquals(
+            "screenrecord_R58M123ABC_20260617_090807.mp4",
+            buildScrcpyRecordFileName("R58M123ABC", capturedAt, ScreenRecordFormat.Mp4)
+        )
+    }
+
+    @Test
     fun testScrcpyRecordingStartedLineDetection() {
         assertEquals(true, isScrcpyRecordingStartedLine("INFO: Recording started to matroska file: demo.mkv"))
         assertEquals(true, isScrcpyRecordingStartedLine("[server] INFO: Recording started to file: demo.mkv"))
@@ -407,6 +422,41 @@ class DeviceAdbTest {
         )
         assertEquals(
             "\"C:\\scrcpy\\scrcpy.exe\" --serial=R58M123ABC --no-audio --no-playback --no-window --no-control --record-format=mkv --record=\"$localFile\"",
+            command.displayCommand,
+        )
+    }
+
+    @Test
+    fun testBuildScrcpyRecordCommandUsesConfiguredRecordingOptions() {
+        val localFile = File("recordings/demo.mp4").absolutePath
+        val command = buildScrcpyRecordCommand(
+            scrcpyPath = "C:\\scrcpy\\scrcpy.exe",
+            deviceSerial = "R58M123ABC",
+            localPath = localFile,
+            format = ScreenRecordFormat.Mp4,
+            maxSize = ScreenRecordMaxSize.Size720,
+            bitRate = ScreenRecordBitRate.Mbps12,
+            maxFps = ScreenRecordMaxFps.Fps30,
+            audioMode = ScreenRecordAudioMode.Microphone,
+        )
+
+        assertEquals(
+            listOf(
+                "--serial=R58M123ABC",
+                "--audio-source=mic",
+                "--no-playback",
+                "--no-window",
+                "--no-control",
+                "--max-size=720",
+                "--video-bit-rate=12M",
+                "--max-fps=30",
+                "--record-format=mp4",
+                "--record=$localFile",
+            ),
+            command.args,
+        )
+        assertEquals(
+            "\"C:\\scrcpy\\scrcpy.exe\" --serial=R58M123ABC --audio-source=mic --no-playback --no-window --no-control --max-size=720 --video-bit-rate=12M --max-fps=30 --record-format=mp4 --record=\"$localFile\"",
             command.displayCommand,
         )
     }

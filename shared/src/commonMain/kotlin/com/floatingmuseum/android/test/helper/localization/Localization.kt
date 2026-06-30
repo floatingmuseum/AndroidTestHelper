@@ -4,6 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.floatingmuseum.android.test.helper.settings.AppLanguage
 import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordAudioMode
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordBitRate
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordFormat
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordMaxFps
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordMaxSize
 import kotlinx.serialization.json.Json
 
 private val JsonParser = Json {
@@ -58,6 +63,39 @@ internal class AppStrings(private val language: AppLanguage) {
     fun languageDisplayName(option: AppLanguage): String = when (option) {
         AppLanguage.SimplifiedChinese -> languageSimplifiedChinese
         AppLanguage.English -> languageEnglish
+    }
+
+    fun screenRecordFormatLabel(option: ScreenRecordFormat): String = when (option) {
+        ScreenRecordFormat.Mkv -> t("settings.screen_record.format.mkv")
+        ScreenRecordFormat.Mp4 -> t("settings.screen_record.format.mp4")
+    }
+
+    fun screenRecordMaxSizeLabel(option: ScreenRecordMaxSize): String = when (option) {
+        ScreenRecordMaxSize.Original -> t("settings.screen_record.max_size.original")
+        ScreenRecordMaxSize.Size1080 -> t("settings.screen_record.max_size.1080")
+        ScreenRecordMaxSize.Size720 -> t("settings.screen_record.max_size.720")
+        ScreenRecordMaxSize.Size480 -> t("settings.screen_record.max_size.480")
+    }
+
+    fun screenRecordBitRateLabel(option: ScreenRecordBitRate): String = when (option) {
+        ScreenRecordBitRate.Default -> t("settings.screen_record.bit_rate.default")
+        ScreenRecordBitRate.Mbps4 -> t("settings.screen_record.bit_rate.4m")
+        ScreenRecordBitRate.Mbps8 -> t("settings.screen_record.bit_rate.8m")
+        ScreenRecordBitRate.Mbps12 -> t("settings.screen_record.bit_rate.12m")
+        ScreenRecordBitRate.Mbps20 -> t("settings.screen_record.bit_rate.20m")
+    }
+
+    fun screenRecordMaxFpsLabel(option: ScreenRecordMaxFps): String = when (option) {
+        ScreenRecordMaxFps.Default -> t("settings.screen_record.max_fps.default")
+        ScreenRecordMaxFps.Fps15 -> t("settings.screen_record.max_fps.15")
+        ScreenRecordMaxFps.Fps30 -> t("settings.screen_record.max_fps.30")
+        ScreenRecordMaxFps.Fps60 -> t("settings.screen_record.max_fps.60")
+    }
+
+    fun screenRecordAudioModeLabel(option: ScreenRecordAudioMode): String = when (option) {
+        ScreenRecordAudioMode.Disabled -> t("settings.screen_record.audio_mode.disabled")
+        ScreenRecordAudioMode.DeviceOutput -> t("settings.screen_record.audio_mode.device_output")
+        ScreenRecordAudioMode.Microphone -> t("settings.screen_record.audio_mode.microphone")
     }
 }
 

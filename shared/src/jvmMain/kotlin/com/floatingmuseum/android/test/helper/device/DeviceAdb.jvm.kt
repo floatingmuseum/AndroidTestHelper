@@ -6,6 +6,12 @@ import com.floatingmuseum.android.test.helper.localization.commandError
 import com.floatingmuseum.android.test.helper.localization.commandStatus
 import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.scrcpy.ScrcpyShell
+import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordAudioMode
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordBitRate
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordFormat
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordMaxFps
+import com.floatingmuseum.android.test.helper.settings.ScreenRecordMaxSize
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -277,9 +283,10 @@ private class JvmDeviceAdb : DeviceAdb {
             outputDirectoryPath = outputDirectoryPath,
             capturedAt = capturedAt,
         )
+        val settings = AppSettingsShared.currentSettings
         val scrcpyLocalPath = File(
             outputDirectoryPath,
-            buildScrcpyRecordFileName(deviceSerial, capturedAt),
+            buildScrcpyRecordFileName(deviceSerial, capturedAt, settings.screenRecordFormat),
         ).absolutePath
         val localDirectory = File(outputDirectoryPath)
         if (!localDirectory.exists() && !localDirectory.mkdirs()) {
@@ -306,6 +313,11 @@ private class JvmDeviceAdb : DeviceAdb {
                     scrcpyPath = scrcpyPath,
                     deviceSerial = deviceSerial,
                     localPath = scrcpyLocalPath,
+                    format = settings.screenRecordFormat,
+                    maxSize = settings.screenRecordMaxSize,
+                    bitRate = settings.screenRecordBitRate,
+                    maxFps = settings.screenRecordMaxFps,
+                    audioMode = settings.screenRecordAudioMode,
                 ),
                 logCommand = logCommand,
                 onRecordingStarted = onRecordingStarted,
@@ -1203,9 +1215,10 @@ internal fun buildScreenRecordFileName(
 internal fun buildScrcpyRecordFileName(
     deviceSerial: String,
     capturedAt: LocalDateTime,
+    format: ScreenRecordFormat = ScreenRecordFormat.Mkv,
 ): String {
     val safeSerial = deviceSerial.toScreenshotFileToken().ifBlank { "unknown_serial" }
-    return "screenrecord_${safeSerial}_${capturedAt.format(ScreenshotTimestampFormatter)}.mkv"
+    return "screenrecord_${safeSerial}_${capturedAt.format(ScreenshotTimestampFormatter)}.${format.fileExtension}"
 }
 
 internal data class ScreenRecordCommand(
@@ -1233,20 +1246,81 @@ internal fun buildScrcpyRecordCommand(
     scrcpyPath: String,
     deviceSerial: String,
     localPath: String,
+    format: ScreenRecordFormat = ScreenRecordFormat.Mkv,
+    maxSize: ScreenRecordMaxSize = ScreenRecordMaxSize.Original,
+    bitRate: ScreenRecordBitRate = ScreenRecordBitRate.Default,
+    maxFps: ScreenRecordMaxFps = ScreenRecordMaxFps.Default,
+    audioMode: ScreenRecordAudioMode = ScreenRecordAudioMode.Disabled,
 ): ScrcpyRecordCommand {
+    val args = buildList {
+        add("--serial=$deviceSerial")
+        addAll(audioMode.scrcpyArgs)
+        add("--no-playback")
+        add("--no-window")
+        add("--no-control")
+        maxSize.scrcpyArg?.let { add(it) }
+        bitRate.scrcpyArg?.let { add(it) }
+        maxFps.scrcpyArg?.let { add(it) }
+        add("--record-format=${format.scrcpyValue}")
+        add("--record=$localPath")
+    }
     return ScrcpyRecordCommand(
         scrcpyPath = scrcpyPath,
-        args = listOf(
-            "--serial=$deviceSerial",
-            "--no-audio",
-            "--no-playback",
-            "--no-window",
-            "--no-control",
-            "--record-format=mkv",
-            "--record=$localPath",
-        ),
-        displayCommand = "\"$scrcpyPath\" --serial=$deviceSerial --no-audio --no-playback --no-window --no-control --record-format=mkv --record=\"$localPath\"",
+        args = args,
+        displayCommand = buildScrcpyDisplayCommand(scrcpyPath, args),
     )
+}
+
+private val ScreenRecordFormat.scrcpyValue: String
+    get() = when (this) {
+        ScreenRecordFormat.Mkv -> "mkv"
+        ScreenRecordFormat.Mp4 -> "mp4"
+    }
+
+private val ScreenRecordFormat.fileExtension: String
+    get() = scrcpyValue
+
+private val ScreenRecordMaxSize.scrcpyArg: String?
+    get() = when (this) {
+        ScreenRecordMaxSize.Original -> null
+        ScreenRecordMaxSize.Size1080 -> "--max-size=1080"
+        ScreenRecordMaxSize.Size720 -> "--max-size=720"
+        ScreenRecordMaxSize.Size480 -> "--max-size=480"
+    }
+
+private val ScreenRecordBitRate.scrcpyArg: String?
+    get() = when (this) {
+        ScreenRecordBitRate.Default -> null
+        ScreenRecordBitRate.Mbps4 -> "--video-bit-rate=4M"
+        ScreenRecordBitRate.Mbps8 -> "--video-bit-rate=8M"
+        ScreenRecordBitRate.Mbps12 -> "--video-bit-rate=12M"
+        ScreenRecordBitRate.Mbps20 -> "--video-bit-rate=20M"
+    }
+
+private val ScreenRecordMaxFps.scrcpyArg: String?
+    get() = when (this) {
+        ScreenRecordMaxFps.Default -> null
+        ScreenRecordMaxFps.Fps15 -> "--max-fps=15"
+        ScreenRecordMaxFps.Fps30 -> "--max-fps=30"
+        ScreenRecordMaxFps.Fps60 -> "--max-fps=60"
+    }
+
+private val ScreenRecordAudioMode.scrcpyArgs: List<String>
+    get() = when (this) {
+        ScreenRecordAudioMode.Disabled -> listOf("--no-audio")
+        ScreenRecordAudioMode.DeviceOutput -> listOf("--audio-source=output")
+        ScreenRecordAudioMode.Microphone -> listOf("--audio-source=mic")
+    }
+
+private fun buildScrcpyDisplayCommand(scrcpyPath: String, args: List<String>): String {
+    val displayArgs = args.joinToString(" ") { arg ->
+        if (arg.startsWith("--record=")) {
+            "--record=\"${arg.substringAfter('=').toDisplayCommandToken()}\""
+        } else {
+            arg
+        }
+    }
+    return "\"$scrcpyPath\" $displayArgs"
 }
 
 internal fun isScrcpyRecordingStartedLine(line: String): Boolean {
