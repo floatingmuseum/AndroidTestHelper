@@ -412,6 +412,29 @@ class DeviceAdbTest {
     }
 
     @Test
+    fun testBuildScrcpyMirrorCommandUsesExplicitDeviceAndKeepsControlEnabled() {
+        val command = buildScrcpyMirrorCommand(
+            scrcpyPath = "C:\\scrcpy\\scrcpy.exe",
+            deviceSerial = "R58M123ABC",
+            windowTitle = "AndroidTestHelper - Demo",
+        )
+
+        assertEquals("C:\\scrcpy\\scrcpy.exe", command.scrcpyPath)
+        assertEquals(
+            listOf(
+                "--serial=R58M123ABC",
+                "--no-audio",
+                "--window-title=AndroidTestHelper - Demo",
+            ),
+            command.args,
+        )
+        assertEquals(
+            "\"C:\\scrcpy\\scrcpy.exe\" --serial=R58M123ABC --no-audio --window-title=\"AndroidTestHelper - Demo\"",
+            command.displayCommand,
+        )
+    }
+
+    @Test
     fun testBuildInstallApplicationCommandUsesExplicitDeviceAndApkPath() {
         val apkFile = File("local apps/demo.apk").absoluteFile
 

@@ -111,6 +111,17 @@ enum class ScreenRecordEndState {
     INTERRUPTED,
 }
 
+data class DeviceMirrorResult(
+    val endState: DeviceMirrorEndState,
+    val message: String? = null,
+)
+
+enum class DeviceMirrorEndState {
+    CLOSED,
+    STOPPED,
+    INTERRUPTED,
+}
+
 data class ApkInstallResult(
     val filePath: String,
     val fileName: String,
@@ -180,6 +191,15 @@ interface DeviceAdb {
     ): ScreenRecordResult
 
     fun stopScreenRecording()
+
+    suspend fun mirrorDevice(
+        deviceSerial: String,
+        windowTitle: String,
+        logCommand: (String) -> Unit,
+        onMirrorStarted: () -> Unit,
+    ): DeviceMirrorResult
+
+    fun stopDeviceMirror()
 
     suspend fun installApplications(
         deviceSerial: String,

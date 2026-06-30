@@ -40,6 +40,12 @@ private class JvmDeviceAdb : DeviceAdb {
     @Volatile
     private var screenRecordStopRequested: Boolean = false
 
+    @Volatile
+    private var activeDeviceMirrorProcess: Process? = null
+
+    @Volatile
+    private var deviceMirrorStopRequested: Boolean = false
+
     override suspend fun loadSystemInfo(
         deviceSerial: String,
         logCommand: (String) -> Unit,
@@ -430,6 +436,37 @@ private class JvmDeviceAdb : DeviceAdb {
         activeScreenRecordProcess?.destroy()
     }
 
+    override suspend fun mirrorDevice(
+        deviceSerial: String,
+        windowTitle: String,
+        logCommand: (String) -> Unit,
+        onMirrorStarted: () -> Unit,
+    ): DeviceMirrorResult {
+        deviceMirrorStopRequested = false
+        val scrcpyPath = ScrcpyShell.scrcpyPath
+        val scrcpyVersion = ScrcpyShell.readScrcpyVersion(scrcpyPath)
+        if (scrcpyVersion.isFailure) {
+            throw IllegalStateException(localized(
+                "device.mirror.scrcpy_unavailable_arg0",
+                scrcpyVersion.exceptionOrNull()?.displayMessage() ?: localized("common.unknown_error"),
+            ))
+        }
+        return runScrcpyMirrorCommand(
+            command = buildScrcpyMirrorCommand(
+                scrcpyPath = scrcpyPath,
+                deviceSerial = deviceSerial,
+                windowTitle = windowTitle,
+            ),
+            logCommand = logCommand,
+            onMirrorStarted = onMirrorStarted,
+        )
+    }
+
+    override fun stopDeviceMirror() {
+        deviceMirrorStopRequested = true
+        activeDeviceMirrorProcess?.destroy()
+    }
+
     override suspend fun installApplications(
         deviceSerial: String,
         apkFilePaths: List<String>,
@@ -733,6 +770,62 @@ private class JvmDeviceAdb : DeviceAdb {
             } finally {
                 if (activeScreenRecordProcess === process) {
                     activeScreenRecordProcess = null
+                }
+            }
+        }
+    }
+
+    private suspend fun runScrcpyMirrorCommand(
+        command: ScrcpyMirrorCommand,
+        logCommand: (String) -> Unit,
+        onMirrorStarted: () -> Unit,
+    ): DeviceMirrorResult {
+        logCommand(command.displayCommand)
+        return withContext(Dispatchers.IO) {
+            val scrcpyFile = File(command.scrcpyPath)
+            val processBuilder = ProcessBuilder(listOf(command.scrcpyPath) + command.args)
+                .redirectErrorStream(true)
+            scrcpyFile.parentFile?.takeIf { it.isDirectory }?.let { scrcpyDirectory ->
+                processBuilder.directory(scrcpyDirectory)
+                scrcpyDirectory.resolve("scrcpy-server").takeIf { it.isFile }?.let { serverFile ->
+                    processBuilder.environment()["SCRCPY_SERVER_PATH"] = serverFile.absolutePath
+                }
+            }
+            processBuilder.environment()["ADB"] = AdbShell.adbPath
+            val process = processBuilder.start()
+            activeDeviceMirrorProcess = process
+            onMirrorStarted()
+            val outputReader = async(Dispatchers.IO) {
+                process.inputStream.bufferedReader(Charsets.UTF_8).readText()
+            }
+            try {
+                while (!process.waitFor(100L, TimeUnit.MILLISECONDS)) {
+                    currentCoroutineContext().ensureActive()
+                }
+                val output = outputReader.await().trim()
+                val exitCode = process.exitValue()
+                when {
+                    deviceMirrorStopRequested -> DeviceMirrorResult(
+                        endState = DeviceMirrorEndState.STOPPED,
+                        message = output.ifBlank { localized("device.mirror.stopped") },
+                    )
+                    exitCode == 0 -> DeviceMirrorResult(
+                        endState = DeviceMirrorEndState.CLOSED,
+                        message = output.takeIf { it.isNotBlank() },
+                    )
+                    else -> DeviceMirrorResult(
+                        endState = DeviceMirrorEndState.INTERRUPTED,
+                        message = localized("device.mirror.interrupted_exit_code_arg0", exitCode) +
+                            output.takeIf { it.isNotBlank() }?.let { "\n$it" }.orEmpty(),
+                    )
+                }
+            } catch (error: CancellationException) {
+                process.destroyForcibly()
+                outputReader.cancel()
+                throw error
+            } finally {
+                if (activeDeviceMirrorProcess === process) {
+                    activeDeviceMirrorProcess = null
                 }
             }
         }
@@ -1161,6 +1254,32 @@ internal fun isScrcpyRecordingStartedLine(line: String): Boolean {
     return "recording" in normalized &&
         "started" in normalized &&
         ("to " in normalized || "file" in normalized || "record" in normalized)
+}
+
+internal data class ScrcpyMirrorCommand(
+    val scrcpyPath: String,
+    val args: List<String>,
+    val displayCommand: String,
+)
+
+internal fun buildScrcpyMirrorCommand(
+    scrcpyPath: String,
+    deviceSerial: String,
+    windowTitle: String,
+): ScrcpyMirrorCommand {
+    return ScrcpyMirrorCommand(
+        scrcpyPath = scrcpyPath,
+        args = listOf(
+            "--serial=$deviceSerial",
+            "--no-audio",
+            "--window-title=$windowTitle",
+        ),
+        displayCommand = "\"$scrcpyPath\" --serial=$deviceSerial --no-audio --window-title=\"${windowTitle.toDisplayCommandToken()}\"",
+    )
+}
+
+private fun String.toDisplayCommandToken(): String {
+    return replace("\"", "\\\"")
 }
 
 private data class ScreenRecordCommandOutcome(

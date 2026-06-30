@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,7 @@ import com.floatingmuseum.android.test.helper.app.pluginCheckIgnoreKey
 import com.floatingmuseum.android.test.helper.app.removeInstalledApp
 import com.floatingmuseum.android.test.helper.device.DeviceSystemInfo
 import com.floatingmuseum.android.test.helper.device.DeviceQuickAction
+import com.floatingmuseum.android.test.helper.device.DeviceMirrorEndState
 import com.floatingmuseum.android.test.helper.device.ScreenRecordEndState
 import com.floatingmuseum.android.test.helper.device.ScreenRecordResult
 import com.floatingmuseum.android.test.helper.device.ScreenRecordFloatingButton
@@ -137,10 +139,20 @@ fun App() {
         var screenRecordingStartedAtMillis by remember { mutableStateOf<Long?>(null) }
         var screenRecordingStopRequestedAtMillis by remember { mutableStateOf<Long?>(null) }
         var lastScreenRecordResult by remember { mutableStateOf<ScreenRecordResult?>(null) }
+        var isDeviceMirroring by remember { mutableStateOf(false) }
+        var deviceMirrorDeviceSerial by remember { mutableStateOf<String?>(null) }
+        var deviceMirrorStopRequestedAtMillis by remember { mutableStateOf<Long?>(null) }
         val selectedDevice = devices.firstOrNull { it.transportId == selectedDeviceTransportId }
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
         var clearModuleDeviceState: () -> Unit = {}
         var shouldRefreshDevicesAfterAdbNotFound by remember { mutableStateOf(false) }
+
+        DisposableEffect(Unit) {
+            onDispose {
+                deviceAdb.stopScreenRecording()
+                deviceAdb.stopDeviceMirror()
+            }
+        }
 
         fun appendCommandLog(command: String) {
             val timePrefix = if (appSettings.showCommandTime) {
@@ -178,6 +190,10 @@ fun App() {
                 screenRecordingDeviceLabel = null
                 screenRecordingStartedAtMillis = null
                 screenRecordingStopRequestedAtMillis = null
+            }
+            if (!isDeviceMirroring) {
+                deviceMirrorDeviceSerial = null
+                deviceMirrorStopRequestedAtMillis = null
             }
         }
 
@@ -629,6 +645,68 @@ fun App() {
             statusText = localized("shell.stopping_screen_record")
             appendStatus(statusText)
             deviceAdb.stopScreenRecording()
+        }
+
+        fun startSelectedDeviceMirror(deviceSerial: String) {
+            if (isDeviceMirroring) return
+            scope.launch {
+                val mirrorDevice = devices.firstOrNull { it.transportId == deviceSerial }
+                val mirrorLabel = mirrorDevice?.let { "${it.model} · ${it.serialNumber}" } ?: deviceSerial
+                isDeviceMirroring = true
+                deviceMirrorDeviceSerial = deviceSerial
+                deviceMirrorStopRequestedAtMillis = null
+                statusText = localized("shell.device_mirror_starting")
+                appendStatus(localized("shell.start_device_mirror_on_device_arg0", deviceSerial))
+                try {
+                    val result = deviceAdb.mirrorDevice(
+                        deviceSerial = deviceSerial,
+                        windowTitle = localized("device.mirror.window_title_arg0", mirrorLabel),
+                        logCommand = ::appendCommand,
+                        onMirrorStarted = {
+                            scope.launch {
+                                if (isDeviceMirroring && deviceMirrorStopRequestedAtMillis == null) {
+                                    statusText = localized("shell.device_mirror_running")
+                                    appendStatus(localized("shell.device_mirror_window_opened_arg0", deviceSerial))
+                                }
+                            }
+                        },
+                    )
+                    when (result.endState) {
+                        DeviceMirrorEndState.CLOSED -> {
+                            statusText = localized("shell.device_mirror_closed")
+                            appendStatus(statusText)
+                        }
+                        DeviceMirrorEndState.STOPPED -> {
+                            statusText = localized("shell.device_mirror_stopped")
+                            appendStatus(statusText)
+                        }
+                        DeviceMirrorEndState.INTERRUPTED -> {
+                            statusText = result.message ?: localized("shell.device_mirror_interrupted")
+                            appendError(localized("shell.device_mirror_interrupted") + " - ${result.message ?: unknownError()}")
+                        }
+                    }
+                } catch (error: CancellationException) {
+                    statusText = localized("shell.device_mirror_stopped")
+                    appendStatus(statusText)
+                } catch (error: Throwable) {
+                    statusText = error.message ?: localized("shell.device_mirror_failed")
+                    appendError(localized("shell.device_mirror_failed") + " - ${error.message ?: unknownError()}")
+                } finally {
+                    isDeviceMirroring = false
+                    deviceMirrorDeviceSerial = null
+                    deviceMirrorStopRequestedAtMillis = null
+                }
+            }
+        }
+
+        fun stopSelectedDeviceMirror() {
+            if (!isDeviceMirroring) return
+            if (deviceMirrorStopRequestedAtMillis == null) {
+                deviceMirrorStopRequestedAtMillis = System.currentTimeMillis()
+            }
+            statusText = localized("shell.device_mirror_stopping")
+            appendStatus(statusText)
+            deviceAdb.stopDeviceMirror()
         }
 
         fun installSelectedApplications(deviceSerial: String) {
@@ -1286,6 +1364,10 @@ fun App() {
                                         selectedReadyTransportOrReport()?.let { startSelectedDeviceScreenRecording(it) }
                                     },
                                     onStopScreenRecording = ::stopSelectedDeviceScreenRecording,
+                                    onStartDeviceMirror = {
+                                        selectedReadyTransportOrReport()?.let { startSelectedDeviceMirror(it) }
+                                    },
+                                    onStopDeviceMirror = ::stopSelectedDeviceMirror,
                                     onInstallApplications = {
                                         selectedReadyTransportOrReport()?.let { installSelectedApplications(it) }
                                     },
@@ -1297,6 +1379,8 @@ fun App() {
                                     isRunning = isRunning,
                                     isScreenRecording = isScreenRecording,
                                     isScreenRecordingThisDevice = isScreenRecording && screenRecordingDeviceSerial == selectedReadyDevice?.transportId,
+                                    isDeviceMirroring = isDeviceMirroring,
+                                    isDeviceMirroringThisDevice = isDeviceMirroring && deviceMirrorDeviceSerial == selectedReadyDevice?.transportId,
                                     lastScreenRecordResult = lastScreenRecordResult,
                                     onBatteryControl = { args ->
                                         selectedReadyTransportOrReport()?.let { transportId ->

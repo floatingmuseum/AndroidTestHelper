@@ -65,11 +65,15 @@ fun DeviceTestPanel(
     onTakeScreenshot: () -> Unit,
     onStartScreenRecording: () -> Unit,
     onStopScreenRecording: () -> Unit,
+    onStartDeviceMirror: () -> Unit,
+    onStopDeviceMirror: () -> Unit,
     onInstallApplications: () -> Unit,
     onQuickAction: (DeviceQuickAction) -> Unit,
     isRunning: Boolean,
     isScreenRecording: Boolean,
     isScreenRecordingThisDevice: Boolean,
+    isDeviceMirroring: Boolean,
+    isDeviceMirroringThisDevice: Boolean,
     lastScreenRecordResult: ScreenRecordResult?,
     onBatteryControl: ((args: List<String>) -> Unit)? = null,
     onScreenSizeControl: ((String) -> Unit)? = null,
@@ -828,6 +832,21 @@ fun DeviceTestPanel(
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                             )
                         }
+                    } else if (isDeviceMirroringThisDevice) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = strings.t("device.mirror.running_hint"),
+                                modifier = Modifier.padding(12.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
                     } else if (lastScreenRecordResult != null) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -868,6 +887,25 @@ fun DeviceTestPanel(
                         DeviceShortcutAction(DeviceQuickAction.REBOOT_FASTBOOT.displayLabel(), true, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.REBOOT_FASTBOOT) },
                         DeviceShortcutAction(DeviceQuickAction.CURRENT_ACTIVITY.displayLabel(), false, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.CURRENT_ACTIVITY) },
                         DeviceShortcutAction(strings.t("device.screenshot"), false, canRunDeviceShortcut, onTakeScreenshot),
+                        DeviceShortcutAction(
+                            label = if (isDeviceMirroringThisDevice) {
+                                strings.t("device.mirror.stop")
+                            } else {
+                                strings.t("device.mirror.start")
+                            },
+                            isDanger = isDeviceMirroringThisDevice,
+                            enabled = if (isDeviceMirroringThisDevice) {
+                                true
+                            } else {
+                                canRunDeviceShortcut && !isDeviceMirroring
+                            },
+                        ) {
+                            if (isDeviceMirroringThisDevice) {
+                                onStopDeviceMirror()
+                            } else {
+                                onStartDeviceMirror()
+                            }
+                        },
                         DeviceShortcutAction(
                             label = if (isScreenRecordingThisDevice) {
                                 strings.t("device.screen_record.stop")
