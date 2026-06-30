@@ -7,7 +7,7 @@
 - **跨平台桌面端**
   - 支持 Windows、macOS 和 Linux。
   - 共享 Compose UI，桌面端实现集中在 JVM source set。
-  - 自动从项目根或安装目录下的 `platform-tools/` 解析当前系统对应的 `adb`。
+  - 自动从项目根或安装目录下的 `plugins/android/platform-tools/` 解析当前系统对应的 `adb`。
 - **设备连接管理**
   - 底部常驻设备面板展示已连接设备。
   - 使用 `adb devices -l` 获取 serial、model 和连接状态。
@@ -183,5 +183,5 @@ Windows PowerShell：
 - 所有设备动作必须显式带 serial。
 - 不要用前端假数据代替设备状态。读不到就显示不可用或错误。
 - 长任务必须可停止，并清理正在运行的 ADB 子进程。
-- `platform-tools/`、Gradle Wrapper、内置 `ATHPlugin*.apk` 是运行所需资产，不要随意删除。
+- `plugins/android/platform-tools/`、Gradle Wrapper、内置 `ATHPlugin*.apk` 是运行所需资产，不要随意删除。
 - 不要提交 `.gradle/`、`.kotlin/`、`build/`、`.idea/`、`*.iml`、`AndroidTestHelperData/`。

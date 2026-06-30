@@ -317,6 +317,28 @@ class DeviceAdbTest {
     }
 
     @Test
+    fun testBuildScrcpyRecordFileNameUsesMkvContainer() {
+        val capturedAt = LocalDateTime.of(2026, 6, 17, 9, 8, 7)
+
+        assertEquals(
+            "screenrecord_R58M123ABC_20260617_090807.mkv",
+            buildScrcpyRecordFileName("R58M123ABC", capturedAt)
+        )
+        assertEquals(
+            "screenrecord_192.168.1.5_5555_20260617_090807.mkv",
+            buildScrcpyRecordFileName("192.168.1.5:5555", capturedAt)
+        )
+    }
+
+    @Test
+    fun testScrcpyRecordingStartedLineDetection() {
+        assertEquals(true, isScrcpyRecordingStartedLine("INFO: Recording started to matroska file: demo.mkv"))
+        assertEquals(true, isScrcpyRecordingStartedLine("[server] INFO: Recording started to file: demo.mkv"))
+        assertEquals(false, isScrcpyRecordingStartedLine("INFO: Recording complete to file: demo.mkv"))
+        assertEquals(false, isScrcpyRecordingStartedLine("INFO: scrcpy 4.0 <https://github.com/Genymobile/scrcpy>"))
+    }
+
+    @Test
     fun testBuildScreenRecordTransferPlanUsesRemoteAndLocalTargets() {
         val capturedAt = LocalDateTime.of(2026, 6, 17, 9, 8, 7)
         val outputDirectory = File("recordings").absolutePath
@@ -357,6 +379,34 @@ class DeviceAdbTest {
         )
         assertEquals(
             "adb -s R58M123ABC shell screenrecord /sdcard/Movies/demo.mp4",
+            command.displayCommand,
+        )
+    }
+
+    @Test
+    fun testBuildScrcpyRecordCommandWritesLocalFileWithoutDeviceStorage() {
+        val localFile = File("recordings/demo.mkv").absolutePath
+        val command = buildScrcpyRecordCommand(
+            scrcpyPath = "C:\\scrcpy\\scrcpy.exe",
+            deviceSerial = "R58M123ABC",
+            localPath = localFile,
+        )
+
+        assertEquals("C:\\scrcpy\\scrcpy.exe", command.scrcpyPath)
+        assertEquals(
+            listOf(
+                "--serial=R58M123ABC",
+                "--no-audio",
+                "--no-playback",
+                "--no-window",
+                "--no-control",
+                "--record-format=mkv",
+                "--record=$localFile",
+            ),
+            command.args,
+        )
+        assertEquals(
+            "\"C:\\scrcpy\\scrcpy.exe\" --serial=R58M123ABC --no-audio --no-playback --no-window --no-control --record-format=mkv --record=\"$localFile\"",
             command.displayCommand,
         )
     }

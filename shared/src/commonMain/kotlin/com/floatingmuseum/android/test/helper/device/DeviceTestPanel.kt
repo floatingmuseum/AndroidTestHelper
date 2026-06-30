@@ -860,7 +860,7 @@ fun DeviceTestPanel(
                         }
                     }
 
-                    val canRunDeviceShortcut = !isRunning && !isScreenRecording && hasReadyDevice
+                    val canRunDeviceShortcut = !isRunning && hasReadyDevice
                     val shortcutActions = listOf(
                         DeviceShortcutAction(DeviceQuickAction.SHUTDOWN.displayLabel(), true, canRunDeviceShortcut) { onQuickAction(DeviceQuickAction.SHUTDOWN) },
                         DeviceShortcutAction(strings.t("device.reboot"), true, canRunDeviceShortcut, onReboot),
@@ -875,7 +875,11 @@ fun DeviceTestPanel(
                                 strings.t("device.screen_record.start")
                             },
                             isDanger = isScreenRecordingThisDevice,
-                            enabled = if (isScreenRecordingThisDevice) !isRunning else canRunDeviceShortcut,
+                            enabled = if (isScreenRecordingThisDevice) {
+                                !isRunning
+                            } else {
+                                canRunDeviceShortcut && !isScreenRecording
+                            },
                         ) {
                             if (isScreenRecordingThisDevice) {
                                 onStopScreenRecording()

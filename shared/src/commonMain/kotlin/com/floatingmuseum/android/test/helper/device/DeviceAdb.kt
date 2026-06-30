@@ -176,6 +176,7 @@ interface DeviceAdb {
         deviceSerial: String,
         outputDirectoryPath: String,
         logCommand: (String) -> Unit,
+        onRecordingStarted: () -> Unit,
     ): ScreenRecordResult
 
     fun stopScreenRecording()

@@ -42,6 +42,7 @@ import com.floatingmuseum.android.test.helper.device.DeviceSystemInfo
 import com.floatingmuseum.android.test.helper.device.DeviceQuickAction
 import com.floatingmuseum.android.test.helper.device.ScreenRecordEndState
 import com.floatingmuseum.android.test.helper.device.ScreenRecordResult
+import com.floatingmuseum.android.test.helper.device.ScreenRecordFloatingButton
 import com.floatingmuseum.android.test.helper.device.SystemProperty
 import com.floatingmuseum.android.test.helper.device.createDeviceAdb
 import com.floatingmuseum.android.test.helper.device.DeviceTestPanel
@@ -132,6 +133,9 @@ fun App() {
         var devicePropertiesLoadedSerial by remember { mutableStateOf<String?>(null) }
         var isScreenRecording by remember { mutableStateOf(false) }
         var screenRecordingDeviceSerial by remember { mutableStateOf<String?>(null) }
+        var screenRecordingDeviceLabel by remember { mutableStateOf<String?>(null) }
+        var screenRecordingStartedAtMillis by remember { mutableStateOf<Long?>(null) }
+        var screenRecordingStopRequestedAtMillis by remember { mutableStateOf<Long?>(null) }
         var lastScreenRecordResult by remember { mutableStateOf<ScreenRecordResult?>(null) }
         val selectedDevice = devices.firstOrNull { it.transportId == selectedDeviceTransportId }
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
@@ -171,6 +175,9 @@ fun App() {
             if (!isScreenRecording) {
                 lastScreenRecordResult = null
                 screenRecordingDeviceSerial = null
+                screenRecordingDeviceLabel = null
+                screenRecordingStartedAtMillis = null
+                screenRecordingStopRequestedAtMillis = null
             }
         }
 
@@ -548,22 +555,48 @@ fun App() {
                         statusText = localized("shell.screen_record_cancelled")
                         appendStatus(statusText)
                     } else {
+                        val recordingDevice = devices.firstOrNull { it.transportId == deviceSerial }
                         isRunning = false
                         isScreenRecording = true
                         screenRecordingDeviceSerial = deviceSerial
+                        screenRecordingDeviceLabel = recordingDevice?.let { "${it.model} · ${it.serialNumber}" } ?: deviceSerial
+                        screenRecordingStartedAtMillis = null
+                        screenRecordingStopRequestedAtMillis = null
                         lastScreenRecordResult = null
                         statusText = localized("shell.screen_recording")
                         appendStatus(localized("shell.start_screen_record_on_device_arg0_save_to_arg1", deviceSerial, outputPath))
-                        val result = deviceAdb.recordScreen(deviceSerial, outputPath, ::appendCommand)
+                        val result = deviceAdb.recordScreen(
+                            deviceSerial = deviceSerial,
+                            outputDirectoryPath = outputPath,
+                            logCommand = ::appendCommand,
+                            onRecordingStarted = {
+                                scope.launch {
+                                    if (isScreenRecording &&
+                                        screenRecordingStartedAtMillis == null &&
+                                        screenRecordingStopRequestedAtMillis == null
+                                    ) {
+                                        screenRecordingStartedAtMillis = System.currentTimeMillis()
+                                    }
+                                }
+                            },
+                        )
                         lastScreenRecordResult = result
                         when (result.endState) {
                             ScreenRecordEndState.COMPLETED -> {
                                 statusText = localized("shell.screen_record_saved_to_arg0", result.localPath)
-                                appendStatus(localized("shell.screen_record_succeeded_local_file_arg0_device_file_arg1", result.localPath, result.remotePath))
+                                if (result.remotePath.isBlank()) {
+                                    appendStatus(localized("shell.screen_record_succeeded_local_file_arg0", result.localPath))
+                                } else {
+                                    appendStatus(localized("shell.screen_record_succeeded_local_file_arg0_device_file_arg1", result.localPath, result.remotePath))
+                                }
                             }
                             ScreenRecordEndState.STOPPED -> {
                                 statusText = localized("shell.screen_record_stopped_saved_to_arg0", result.localPath)
-                                appendStatus(localized("shell.screen_record_stopped_local_file_arg0_device_file_arg1", result.localPath, result.remotePath))
+                                if (result.remotePath.isBlank()) {
+                                    appendStatus(localized("shell.screen_record_stopped_local_file_arg0", result.localPath))
+                                } else {
+                                    appendStatus(localized("shell.screen_record_stopped_local_file_arg0_device_file_arg1", result.localPath, result.remotePath))
+                                }
                             }
                             ScreenRecordEndState.INTERRUPTED -> {
                                 statusText = result.message ?: localized("shell.screen_record_interrupted")
@@ -581,12 +614,18 @@ fun App() {
                     isRunning = false
                     isScreenRecording = false
                     screenRecordingDeviceSerial = null
+                    screenRecordingDeviceLabel = null
+                    screenRecordingStartedAtMillis = null
+                    screenRecordingStopRequestedAtMillis = null
                 }
             }
         }
 
         fun stopSelectedDeviceScreenRecording() {
             if (!isScreenRecording) return
+            if (screenRecordingStopRequestedAtMillis == null) {
+                screenRecordingStopRequestedAtMillis = System.currentTimeMillis()
+            }
             statusText = localized("shell.stopping_screen_record")
             appendStatus(statusText)
             deviceAdb.stopScreenRecording()
@@ -1215,7 +1254,7 @@ fun App() {
 
                 ModuleSwitcher(
                     selectedModule = selectedTestModule,
-                    isRunning = isRunning || isScreenRecording,
+                    isRunning = isRunning,
                     onSelect = { selectedTestModule = it },
                 )
 
@@ -1404,7 +1443,7 @@ fun App() {
                             DevicePanel(
                                 devices = devices,
                                 selectedDeviceTransportId = selectedDeviceTransportId,
-                                isRunning = isRunning || isScreenRecording,
+                                isRunning = isRunning,
                                 onRefresh = ::refreshDevices,
                                 onPairWirelessDevice = ::pairWirelessDevice,
                                 onConnectWirelessDevice = ::connectWirelessDevice,
@@ -1476,6 +1515,17 @@ fun App() {
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(top = 88.dp, end = 40.dp),
+                    )
+                }
+                if (isScreenRecording) {
+                    ScreenRecordFloatingButton(
+                        deviceLabel = screenRecordingDeviceLabel ?: localized("device.screen_record.recording_title"),
+                        isPreparing = screenRecordingStartedAtMillis == null,
+                        isStopping = screenRecordingStopRequestedAtMillis != null,
+                        onStop = ::stopSelectedDeviceScreenRecording,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = if (isCapturingLogcat) 176.dp else 88.dp, end = 40.dp),
                     )
                 }
             }

@@ -119,13 +119,9 @@ object AdbShell {
         searchRoots.asSequence().flatMap { root ->
             generateSequence(root.absoluteFile) { it.parentFile }
         }.distinctBy { it.absolutePath }.forEach { directory ->
-            val candidate = directory.resolve("platform-tools")
-                .resolve(platformFolder)
-                .resolve("platform-tools")
-                .resolve(adbBinary)
-            if (candidate.exists()) {
-                return candidate.absolutePath
-            }
+            adbCandidatePaths(directory, platformFolder, adbBinary)
+                .firstOrNull { it.exists() }
+                ?.let { return it.absolutePath }
         }
 
         return adbBinary
@@ -191,6 +187,32 @@ object AdbShell {
             }
             .toList()
     }
+}
+
+internal fun adbCandidatePaths(
+    directory: File,
+    platformFolder: String,
+    adbBinary: String,
+): List<File> {
+    return listOf(
+        directory.resolve("plugins")
+            .resolve("android")
+            .resolve("platform-tools")
+            .resolve(platformFolder)
+            .resolve("platform-tools")
+            .resolve(adbBinary),
+        directory.resolve("resources")
+            .resolve("plugins")
+            .resolve("android")
+            .resolve("platform-tools")
+            .resolve(platformFolder)
+            .resolve("platform-tools")
+            .resolve(adbBinary),
+        directory.resolve("platform-tools")
+            .resolve(platformFolder)
+            .resolve("platform-tools")
+            .resolve(adbBinary),
+    )
 }
 
 internal fun parseHardwareSerialFromTransport(transportId: String): String {

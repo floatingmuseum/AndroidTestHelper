@@ -5,6 +5,7 @@ import com.floatingmuseum.android.test.helper.adb.AdbShell
 import com.floatingmuseum.android.test.helper.localization.commandError
 import com.floatingmuseum.android.test.helper.localization.commandStatus
 import com.floatingmuseum.android.test.helper.localization.localized
+import com.floatingmuseum.android.test.helper.scrcpy.ScrcpyShell
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -18,6 +19,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipFile
 
 actual fun createDeviceAdb(): DeviceAdb = JvmDeviceAdb()
@@ -261,12 +263,18 @@ private class JvmDeviceAdb : DeviceAdb {
         deviceSerial: String,
         outputDirectoryPath: String,
         logCommand: (String) -> Unit,
+        onRecordingStarted: () -> Unit,
     ): ScreenRecordResult {
+        val capturedAt = LocalDateTime.now()
         val plan = buildScreenRecordTransferPlan(
             deviceSerial = deviceSerial,
             outputDirectoryPath = outputDirectoryPath,
-            capturedAt = LocalDateTime.now(),
+            capturedAt = capturedAt,
         )
+        val scrcpyLocalPath = File(
+            outputDirectoryPath,
+            buildScrcpyRecordFileName(deviceSerial, capturedAt),
+        ).absolutePath
         val localDirectory = File(outputDirectoryPath)
         if (!localDirectory.exists() && !localDirectory.mkdirs()) {
             throw IllegalStateException(localized("device.unable_to_create_screen_record_output_directory_arg0", localDirectory.absolutePath))
@@ -275,6 +283,53 @@ private class JvmDeviceAdb : DeviceAdb {
             throw IllegalStateException(localized("device.screen_record_output_path_is_not_a_directory_arg0", localDirectory.absolutePath))
         }
 
+        screenRecordStopRequested = false
+        val scrcpyPath = ScrcpyShell.scrcpyPath
+        val scrcpyVersion = ScrcpyShell.readScrcpyVersion(scrcpyPath)
+        if (screenRecordStopRequested) {
+            return ScreenRecordResult(
+                remotePath = "",
+                localPath = scrcpyLocalPath,
+                endState = ScreenRecordEndState.STOPPED,
+                message = localized("device.screen_record.stopped"),
+            )
+        }
+        if (scrcpyVersion.isSuccess) {
+            val outcome = runScrcpyRecordCommand(
+                command = buildScrcpyRecordCommand(
+                    scrcpyPath = scrcpyPath,
+                    deviceSerial = deviceSerial,
+                    localPath = scrcpyLocalPath,
+                ),
+                logCommand = logCommand,
+                onRecordingStarted = onRecordingStarted,
+            )
+            return ScreenRecordResult(
+                remotePath = "",
+                localPath = scrcpyLocalPath,
+                endState = outcome.endState,
+                message = outcome.message,
+            )
+        }
+
+        logCommand(commandStatus(localized(
+            "device.screen_record.scrcpy_unavailable_fallback_arg0",
+            scrcpyVersion.exceptionOrNull()?.displayMessage() ?: localized("common.unknown_error"),
+        )))
+        return recordScreenWithAdbScreenrecord(
+            deviceSerial = deviceSerial,
+            plan = plan,
+            logCommand = logCommand,
+            onRecordingStarted = onRecordingStarted,
+        )
+    }
+
+    private suspend fun recordScreenWithAdbScreenrecord(
+        deviceSerial: String,
+        plan: ScreenRecordTransferPlan,
+        logCommand: (String) -> Unit,
+        onRecordingStarted: () -> Unit,
+    ): ScreenRecordResult {
         screenRecordStopRequested = false
         var lastInterruptedResult: ScreenRecordResult? = null
         for (remotePath in plan.remotePaths) {
@@ -296,6 +351,7 @@ private class JvmDeviceAdb : DeviceAdb {
             val outcome = runScreenRecordCommand(
                 command = buildScreenRecordCommand(deviceSerial, remotePath),
                 logCommand = logCommand,
+                onRecordingStarted = onRecordingStarted,
             )
 
             if (outcome.endState == ScreenRecordEndState.INTERRUPTED) {
@@ -572,6 +628,7 @@ private class JvmDeviceAdb : DeviceAdb {
     private suspend fun runScreenRecordCommand(
         command: ScreenRecordCommand,
         logCommand: (String) -> Unit,
+        onRecordingStarted: () -> Unit,
     ): ScreenRecordCommandOutcome {
         logCommand(command.displayCommand)
         return withContext(Dispatchers.IO) {
@@ -579,6 +636,7 @@ private class JvmDeviceAdb : DeviceAdb {
                 .redirectErrorStream(true)
                 .start()
             activeScreenRecordProcess = process
+            onRecordingStarted()
             val outputReader = async(Dispatchers.IO) {
                 process.inputStream.bufferedReader(Charsets.UTF_8).readText()
             }
@@ -614,6 +672,80 @@ private class JvmDeviceAdb : DeviceAdb {
             }
         }
     }
+
+    private suspend fun runScrcpyRecordCommand(
+        command: ScrcpyRecordCommand,
+        logCommand: (String) -> Unit,
+        onRecordingStarted: () -> Unit,
+    ): ScreenRecordCommandOutcome {
+        logCommand(command.displayCommand)
+        return withContext(Dispatchers.IO) {
+            val scrcpyFile = File(command.scrcpyPath)
+            val processBuilder = ProcessBuilder(listOf(command.scrcpyPath) + command.args)
+                .redirectErrorStream(true)
+            scrcpyFile.parentFile?.takeIf { it.isDirectory }?.let { scrcpyDirectory ->
+                processBuilder.directory(scrcpyDirectory)
+                scrcpyDirectory.resolve("scrcpy-server").takeIf { it.isFile }?.let { serverFile ->
+                    processBuilder.environment()["SCRCPY_SERVER_PATH"] = serverFile.absolutePath
+                }
+            }
+            processBuilder.environment()["ADB"] = AdbShell.adbPath
+            val process = processBuilder.start()
+            activeScreenRecordProcess = process
+            val recordingStarted = AtomicBoolean(false)
+            val outputReader = async(Dispatchers.IO) {
+                val lines = mutableListOf<String>()
+                process.inputStream.bufferedReader(Charsets.UTF_8).useLines { outputLines ->
+                    outputLines.forEach { line ->
+                        lines += line
+                        if (isScrcpyRecordingStartedLine(line) && recordingStarted.compareAndSet(false, true)) {
+                            onRecordingStarted()
+                        }
+                    }
+                }
+                lines.joinToString("\n")
+            }
+            try {
+                while (!process.waitFor(100L, TimeUnit.MILLISECONDS)) {
+                    currentCoroutineContext().ensureActive()
+                }
+                val output = outputReader.await().trim()
+                val exitCode = process.exitValue()
+                when {
+                    screenRecordStopRequested -> ScreenRecordCommandOutcome(
+                        endState = ScreenRecordEndState.STOPPED,
+                        message = output.ifBlank { localized("device.screen_record.stopped") },
+                    )
+                    exitCode == 0 -> ScreenRecordCommandOutcome(
+                        endState = ScreenRecordEndState.COMPLETED,
+                        message = output.takeIf { it.isNotBlank() },
+                    )
+                    else -> ScreenRecordCommandOutcome(
+                        endState = ScreenRecordEndState.INTERRUPTED,
+                        message = localized("device.screen_record.scrcpy_interrupted_exit_code_arg0", exitCode) +
+                            output.takeIf { it.isNotBlank() }?.let { "\n$it" }.orEmpty(),
+                    )
+                }
+            } catch (error: CancellationException) {
+                process.destroyForcibly()
+                outputReader.cancel()
+                throw error
+            } finally {
+                if (activeScreenRecordProcess === process) {
+                    activeScreenRecordProcess = null
+                }
+            }
+        }
+    }
+}
+
+private fun Throwable.displayMessage(): String {
+    return message
+        ?.lineSequence()
+        ?.firstOrNull { it.isNotBlank() }
+        ?.trim()
+        ?: this::class.simpleName
+        ?: localized("common.unknown_error")
 }
 
 private fun String?.toDeviceInfoValue(): DeviceInfoValue {
@@ -975,6 +1107,14 @@ internal fun buildScreenRecordFileName(
     return "screenrecord_${safeSerial}_${capturedAt.format(ScreenshotTimestampFormatter)}.mp4"
 }
 
+internal fun buildScrcpyRecordFileName(
+    deviceSerial: String,
+    capturedAt: LocalDateTime,
+): String {
+    val safeSerial = deviceSerial.toScreenshotFileToken().ifBlank { "unknown_serial" }
+    return "screenrecord_${safeSerial}_${capturedAt.format(ScreenshotTimestampFormatter)}.mkv"
+}
+
 internal data class ScreenRecordCommand(
     val args: List<String>,
     val displayCommand: String,
@@ -988,6 +1128,39 @@ internal fun buildScreenRecordCommand(
         args = listOf("-s", deviceSerial, "shell", "screenrecord", remotePath),
         displayCommand = "adb -s $deviceSerial shell screenrecord $remotePath",
     )
+}
+
+internal data class ScrcpyRecordCommand(
+    val scrcpyPath: String,
+    val args: List<String>,
+    val displayCommand: String,
+)
+
+internal fun buildScrcpyRecordCommand(
+    scrcpyPath: String,
+    deviceSerial: String,
+    localPath: String,
+): ScrcpyRecordCommand {
+    return ScrcpyRecordCommand(
+        scrcpyPath = scrcpyPath,
+        args = listOf(
+            "--serial=$deviceSerial",
+            "--no-audio",
+            "--no-playback",
+            "--no-window",
+            "--no-control",
+            "--record-format=mkv",
+            "--record=$localPath",
+        ),
+        displayCommand = "\"$scrcpyPath\" --serial=$deviceSerial --no-audio --no-playback --no-window --no-control --record-format=mkv --record=\"$localPath\"",
+    )
+}
+
+internal fun isScrcpyRecordingStartedLine(line: String): Boolean {
+    val normalized = line.trim().lowercase()
+    return "recording" in normalized &&
+        "started" in normalized &&
+        ("to " in normalized || "file" in normalized || "record" in normalized)
 }
 
 private data class ScreenRecordCommandOutcome(

@@ -4,6 +4,7 @@ import com.floatingmuseum.android.test.helper.AndroidDevice
 import com.floatingmuseum.android.test.helper.settings.AppLanguage
 import com.floatingmuseum.android.test.helper.settings.AppSettings
 import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -116,6 +117,29 @@ class AdbDeviceManagerTest {
         )
 
         assertEquals("Android Debug Bridge version 1.0.41 / Version 36.0.0-13206524", version)
+    }
+
+    @Test
+    fun adbCandidatePathsPreferPluginsAndroidPlatformTools() {
+        val root = File("project-root").absoluteFile
+        val paths = adbCandidatePaths(
+            directory = root,
+            platformFolder = "platform-tools-latest-windows",
+            adbBinary = "adb.exe",
+        )
+
+        assertEquals(
+            root.resolve("plugins/android/platform-tools/platform-tools-latest-windows/platform-tools/adb.exe"),
+            paths[0],
+        )
+        assertEquals(
+            root.resolve("resources/plugins/android/platform-tools/platform-tools-latest-windows/platform-tools/adb.exe"),
+            paths[1],
+        )
+        assertEquals(
+            root.resolve("platform-tools/platform-tools-latest-windows/platform-tools/adb.exe"),
+            paths[2],
+        )
     }
 
     @Test

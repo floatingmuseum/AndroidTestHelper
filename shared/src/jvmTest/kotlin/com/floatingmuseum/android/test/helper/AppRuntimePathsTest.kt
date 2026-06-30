@@ -64,4 +64,24 @@ class AppRuntimePathsTest {
             tempRoot.deleteRecursively()
         }
     }
+
+    @Test
+    fun resolvesDevelopmentWorkingDirectoryToProjectRootWithPluginsAndroidPlatformTools() {
+        val tempRoot = Files.createTempDirectory("ath_paths_").toFile()
+        try {
+            val projectRoot = tempRoot.resolve("AndroidTestHelper").apply { mkdirs() }
+            projectRoot.resolve("plugins/android/platform-tools").mkdirs()
+            val nestedDir = projectRoot.resolve("shared/src").apply { mkdirs() }
+
+            val resolved = resolveApplicationInstallDirectory(
+                userDir = nestedDir,
+                commandPath = null,
+                codeSourcePath = null,
+            )
+
+            assertEquals(projectRoot.absoluteFile, resolved)
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
 }

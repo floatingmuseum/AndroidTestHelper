@@ -14,6 +14,9 @@ import com.floatingmuseum.android.test.helper.adb.AdbRuntimeInfo
 import com.floatingmuseum.android.test.helper.adb.checkAdbExecutable
 import com.floatingmuseum.android.test.helper.adb.loadAdbRuntimeInfo
 import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
+import com.floatingmuseum.android.test.helper.scrcpy.ScrcpyRuntimeInfo
+import com.floatingmuseum.android.test.helper.scrcpy.checkScrcpyExecutable
+import com.floatingmuseum.android.test.helper.scrcpy.loadScrcpyRuntimeInfo
 import com.floatingmuseum.android.test.helper.selectFiles
 import kotlinx.coroutines.launch
 
@@ -118,10 +121,18 @@ fun GeneralSettingsPanel(
     var adbRuntimeInfo by remember { mutableStateOf<AdbRuntimeInfo?>(null) }
     var adbActionMessage by remember { mutableStateOf<String?>(null) }
     var isCheckingAdb by remember { mutableStateOf(false) }
+    var scrcpyRuntimeInfo by remember { mutableStateOf<ScrcpyRuntimeInfo?>(null) }
+    var scrcpyActionMessage by remember { mutableStateOf<String?>(null) }
+    var isCheckingScrcpy by remember { mutableStateOf(false) }
 
     LaunchedEffect(settings.customAdbPath) {
         adbRuntimeInfo = null
         adbRuntimeInfo = loadAdbRuntimeInfo()
+    }
+
+    LaunchedEffect(settings.customScrcpyPath) {
+        scrcpyRuntimeInfo = null
+        scrcpyRuntimeInfo = loadScrcpyRuntimeInfo()
     }
     
     Column(
@@ -224,6 +235,113 @@ fun GeneralSettingsPanel(
                         onClick = {
                             AppSettingsShared.updateSettings(settings.copy(customAdbPath = null))
                             adbActionMessage = strings.t("settings.restored_bundled_adb")
+                        }
+                    ) {
+                        Text(strings.t("settings.restore_default"))
+                    }
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = strings.t("settings.scrcpy_configuration"),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = strings.t("settings.scrcpy_configuration_hint"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "${strings.t("settings.current_source")}: " +
+                        if (scrcpyRuntimeInfo?.isCustom == true) {
+                            strings.t("settings.custom")
+                        } else {
+                            strings.t("settings.bundled_or_path")
+                        },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "${strings.t("settings.path")}: ${scrcpyRuntimeInfo?.path ?: strings.t("common.loading")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "${strings.t("settings.version")}: " +
+                        (scrcpyRuntimeInfo?.version ?: if (scrcpyRuntimeInfo == null) {
+                            strings.t("common.loading")
+                        } else {
+                            strings.t("settings.unavailable")
+                        }),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (scrcpyRuntimeInfo?.version == null && scrcpyRuntimeInfo != null) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                scrcpyRuntimeInfo?.errorMessage?.let { errorMessage ->
+                    Text(
+                        text = "${strings.t("common.error")}: $errorMessage",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                scrcpyActionMessage?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        enabled = !isCheckingScrcpy,
+                        onClick = {
+                            coroutineScope.launch {
+                                isCheckingScrcpy = true
+                                scrcpyActionMessage = null
+                                try {
+                                    val selectedPath = selectFiles(
+                                        dialogTitle = strings.t("settings.select_scrcpy_executable"),
+                                        approveButtonText = strings.t("settings.use"),
+                                    ).firstOrNull()
+                                    if (selectedPath != null) {
+                                        val checkResult = checkScrcpyExecutable(selectedPath)
+                                        if (checkResult.isValid && checkResult.normalizedPath != null) {
+                                            AppSettingsShared.updateSettings(
+                                                settings.copy(customScrcpyPath = checkResult.normalizedPath)
+                                            )
+                                            scrcpyActionMessage = strings.t("settings.switched_to_custom_scrcpy")
+                                        } else {
+                                            scrcpyActionMessage = strings.t("settings.not_switched") +
+                                                ": ${checkResult.errorMessage ?: strings.t("settings.unable_to_read_scrcpy_version")}"
+                                        }
+                                    }
+                                } finally {
+                                    isCheckingScrcpy = false
+                                }
+                            }
+                        }
+                    ) {
+                        Text(if (isCheckingScrcpy) strings.t("settings.checking") else strings.t("common.change"))
+                    }
+                    OutlinedButton(
+                        enabled = settings.customScrcpyPath != null && !isCheckingScrcpy,
+                        onClick = {
+                            AppSettingsShared.updateSettings(settings.copy(customScrcpyPath = null))
+                            scrcpyActionMessage = strings.t("settings.restored_default_scrcpy")
                         }
                     ) {
                         Text(strings.t("settings.restore_default"))

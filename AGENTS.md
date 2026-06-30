@@ -4,7 +4,7 @@
 
 AndroidTestHelper is a Kotlin Multiplatform / Compose Desktop console for testing Android tablets and other Android devices through bundled Android platform-tools.
 
-The app is a desktop operations tool, not an Android app. It must support Windows, macOS, and Linux from one shared UI codebase, using the matching `adb` binary under the root `platform-tools/` directory or the packaged install directory.
+The app is a desktop operations tool, not an Android app. It must support Windows, macOS, and Linux from one shared UI codebase, using the matching `adb` binary under the root `plugins/android/platform-tools/` directory or the packaged install directory.
 
 ## Repository Layout
 
@@ -21,7 +21,7 @@ The app is a desktop operations tool, not an Android app. It must support Window
   - JVM tests for parsers, command builders, path resolution, cache naming, and desktop-specific logic.
 - `shared/src/commonMain/composeResources/`
   - Shared resources, including bundled ATHPlugin APK files under `files/`.
-- `platform-tools/`
+- `plugins/android/platform-tools/`
   - Bundled Android platform-tools for Windows, macOS, and Linux.
   - Do not ignore, delete, or casually replace this folder. The app depends on it at runtime.
 - `ATHPLUGIN_API.md`
@@ -160,9 +160,9 @@ When adding new test features, add or extend a test module instead of hard-codin
 - `AdbShell.executeAdb` and `executeAdbBinary` already handle process execution, logging, timing, cancellation polling, and forcible process cleanup. Reuse them for ordinary short-lived commands.
 - Long-running streaming commands may manage `ProcessBuilder` directly, but must still log the display command and destroy processes on stop/cancellation.
 - Resolve `adb` from bundled platform tools:
-  - Windows: `platform-tools/platform-tools-latest-windows/platform-tools/adb.exe`
-  - macOS: `platform-tools/platform-tools-latest-darwin/platform-tools/adb`
-  - Linux: `platform-tools/platform-tools-latest-linux/platform-tools/adb`
+  - Windows: `plugins/android/platform-tools/platform-tools-latest-windows/platform-tools/adb.exe`
+  - macOS: `plugins/android/platform-tools/platform-tools-latest-darwin/platform-tools/adb`
+  - Linux: `plugins/android/platform-tools/platform-tools-latest-linux/platform-tools/adb`
 - `AdbShell` searches from `AppRuntimePaths.installDirectory` and `user.dir` upward before falling back to plain `adb`.
 
 ## Runtime Files
@@ -298,7 +298,7 @@ Windows JVM verification can also fail from native memory pressure (`errno=1455`
 
 - Build outputs and IDE-local files are ignored.
 - Keep Gradle wrapper files tracked.
-- Keep `platform-tools/` tracked unless the distribution strategy changes intentionally.
+- Keep `plugins/android/platform-tools/` tracked unless the distribution strategy changes intentionally.
 - Keep bundled `ATHPlugin*.apk` resources tracked when the desktop app is expected to ship them.
 - Do not commit `.gradle/`, `.kotlin/`, `build/`, `.idea/`, `*.iml`, or `AndroidTestHelperData/`.
 - Before large refactors, check `git status --short` and avoid reverting user changes.

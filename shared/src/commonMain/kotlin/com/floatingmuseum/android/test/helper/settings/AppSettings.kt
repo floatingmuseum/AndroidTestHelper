@@ -24,6 +24,7 @@ data class AppSettings(
     val showCommandDuration: Boolean = false,
     val fileManagerDefaultRootPath: String = DEFAULT_FILE_MANAGER_ROOT_PATH,
     val customAdbPath: String? = null,
+    val customScrcpyPath: String? = null,
 )
 
 fun AppSettings.normalized(): AppSettings {
@@ -33,9 +34,13 @@ fun AppSettings.normalized(): AppSettings {
     val normalizedCustomAdbPath = customAdbPath
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
+    val normalizedCustomScrcpyPath = customScrcpyPath
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
     return copy(
         fileManagerDefaultRootPath = normalizedRootPath,
         customAdbPath = normalizedCustomAdbPath,
+        customScrcpyPath = normalizedCustomScrcpyPath,
     )
 }
 

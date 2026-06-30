@@ -15,11 +15,30 @@ dependencies {
     implementation(libs.compose.uiToolingPreview)
 }
 
+val portableAppResourcesDir = layout.buildDirectory.dir("portableAppResources")
+
+val preparePortableAppResources by tasks.registering(Copy::class) {
+    val pluginsDir = layout.projectDirectory.dir("../plugins")
+    from(pluginsDir) {
+        into("plugins")
+    }
+    into(portableAppResourcesDir)
+}
+
+tasks.matching {
+    it.name.startsWith("package") ||
+        it.name == "createDistributable" ||
+        it.name == "runDistributable"
+}.configureEach {
+    dependsOn(preparePortableAppResources)
+}
+
 compose.desktop {
     application {
         mainClass = "com.floatingmuseum.android.test.helper.MainKt"
 
         nativeDistributions {
+            appResourcesRootDir.set(portableAppResourcesDir)
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.floatingmuseum.android.test.helper"
             packageVersion = "1.0.0"

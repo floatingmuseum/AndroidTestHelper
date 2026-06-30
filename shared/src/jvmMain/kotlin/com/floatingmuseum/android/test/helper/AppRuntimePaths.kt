@@ -58,7 +58,8 @@ internal fun resolveApplicationInstallDirectory(
 internal fun findProjectRoot(start: File): File? {
     return generateSequence(start.absoluteFile) { it.parentFile }
         .firstOrNull { directory ->
-            directory.resolve("platform-tools").isDirectory ||
+            directory.resolve("plugins").resolve("android").resolve("platform-tools").isDirectory ||
+                directory.resolve("platform-tools").isDirectory ||
                 directory.resolve("settings.gradle.kts").isFile
         }
 }

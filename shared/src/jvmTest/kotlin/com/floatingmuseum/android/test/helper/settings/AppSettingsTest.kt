@@ -49,4 +49,18 @@ class AppSettingsTest {
 
         assertEquals("C:\\platform-tools\\adb.exe", settings.customAdbPath)
     }
+
+    @Test
+    fun customScrcpyPathRejectsBlankValues() {
+        val settings = AppSettings(customScrcpyPath = "   ").normalized()
+
+        assertEquals(null, settings.customScrcpyPath)
+    }
+
+    @Test
+    fun customScrcpyPathTrimsValue() {
+        val settings = AppSettings(customScrcpyPath = "  C:\\scrcpy\\scrcpy.exe  ").normalized()
+
+        assertEquals("C:\\scrcpy\\scrcpy.exe", settings.customScrcpyPath)
+    }
 }
