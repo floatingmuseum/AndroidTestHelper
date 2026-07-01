@@ -21,6 +21,20 @@ val preparePortableAppResources by tasks.registering(Copy::class) {
     val pluginsDir = layout.projectDirectory.dir("../plugins")
     from(pluginsDir) {
         into("plugins")
+        filesMatching(
+            listOf(
+                "scrcpy/darwin-*/adb",
+                "scrcpy/darwin-*/scrcpy",
+                "scrcpy/darwin-*/scrcpy-server",
+                "scrcpy/linux-*/adb",
+                "scrcpy/linux-*/scrcpy",
+                "scrcpy/linux-*/scrcpy-server",
+            ),
+        ) {
+            permissions {
+                unix("0755")
+            }
+        }
     }
     into(portableAppResourcesDir)
 }
