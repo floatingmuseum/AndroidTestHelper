@@ -517,6 +517,37 @@ class DeviceAdbTest {
     }
 
     @Test
+    fun testBuildScrcpyMirrorCommandUsesConfiguredVideoOptionsOnly() {
+        val command = buildScrcpyMirrorCommand(
+            scrcpyPath = "C:\\scrcpy\\scrcpy.exe",
+            deviceSerial = "R58M123ABC",
+            windowTitle = "AndroidTestHelper - Demo",
+            maxSize = ScreenRecordMaxSize.Size720,
+            bitRate = ScreenRecordBitRate.Mbps12,
+            maxFps = ScreenRecordMaxFps.Fps30,
+        )
+
+        assertEquals(
+            listOf(
+                "--serial=R58M123ABC",
+                "--no-audio",
+                "--max-size=720",
+                "--video-bit-rate=12M",
+                "--max-fps=30",
+                "--window-title=AndroidTestHelper - Demo",
+            ),
+            command.args,
+        )
+        assertEquals(false, "--no-control" in command.args)
+        assertEquals(false, "--no-window" in command.args)
+        assertEquals(false, command.args.any { it.startsWith("--record") })
+        assertEquals(
+            "\"C:\\scrcpy\\scrcpy.exe\" --serial=R58M123ABC --no-audio --max-size=720 --video-bit-rate=12M --max-fps=30 --window-title=\"AndroidTestHelper - Demo\"",
+            command.displayCommand,
+        )
+    }
+
+    @Test
     fun testBuildInstallApplicationCommandUsesExplicitDeviceAndApkPath() {
         val apkFile = File("local apps/demo.apk").absoluteFile
 

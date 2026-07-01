@@ -478,6 +478,7 @@ private class JvmDeviceAdb : DeviceAdb {
         onMirrorStarted: () -> Unit,
     ): DeviceMirrorResult {
         deviceMirrorStopRequested = false
+        val settings = AppSettingsShared.currentSettings
         val scrcpyPath = ScrcpyShell.scrcpyPath
         val scrcpyVersion = ScrcpyShell.readScrcpyVersion(scrcpyPath)
         if (scrcpyVersion.isFailure) {
@@ -491,6 +492,9 @@ private class JvmDeviceAdb : DeviceAdb {
                 scrcpyPath = scrcpyPath,
                 deviceSerial = deviceSerial,
                 windowTitle = windowTitle,
+                maxSize = settings.screenRecordMaxSize,
+                bitRate = settings.screenRecordBitRate,
+                maxFps = settings.screenRecordMaxFps,
             ),
             logCommand = logCommand,
             onMirrorStarted = onMirrorStarted,
@@ -1373,10 +1377,14 @@ private val ScreenRecordAudioMode.scrcpyArgs: List<String>
 
 private fun buildScrcpyDisplayCommand(scrcpyPath: String, args: List<String>): String {
     val displayArgs = args.joinToString(" ") { arg ->
-        if (arg.startsWith("--record=")) {
-            "--record=\"${arg.substringAfter('=').toDisplayCommandToken()}\""
-        } else {
-            arg
+        when {
+            arg.startsWith("--record=") -> {
+                "--record=\"${arg.substringAfter('=').toDisplayCommandToken()}\""
+            }
+            arg.startsWith("--window-title=") -> {
+                "--window-title=\"${arg.substringAfter('=').toDisplayCommandToken()}\""
+            }
+            else -> arg
         }
     }
     return "\"$scrcpyPath\" $displayArgs"
@@ -1599,15 +1607,22 @@ internal fun buildScrcpyMirrorCommand(
     scrcpyPath: String,
     deviceSerial: String,
     windowTitle: String,
+    maxSize: ScreenRecordMaxSize = ScreenRecordMaxSize.Original,
+    bitRate: ScreenRecordBitRate = ScreenRecordBitRate.Default,
+    maxFps: ScreenRecordMaxFps = ScreenRecordMaxFps.Default,
 ): ScrcpyMirrorCommand {
+    val args = buildList {
+        add("--serial=$deviceSerial")
+        add("--no-audio")
+        maxSize.scrcpyArg?.let { add(it) }
+        bitRate.scrcpyArg?.let { add(it) }
+        maxFps.scrcpyArg?.let { add(it) }
+        add("--window-title=$windowTitle")
+    }
     return ScrcpyMirrorCommand(
         scrcpyPath = scrcpyPath,
-        args = listOf(
-            "--serial=$deviceSerial",
-            "--no-audio",
-            "--window-title=$windowTitle",
-        ),
-        displayCommand = "\"$scrcpyPath\" --serial=$deviceSerial --no-audio --window-title=\"${windowTitle.toDisplayCommandToken()}\"",
+        args = args,
+        displayCommand = buildScrcpyDisplayCommand(scrcpyPath, args),
     )
 }
 
