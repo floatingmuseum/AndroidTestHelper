@@ -54,6 +54,14 @@ import com.floatingmuseum.android.test.helper.devicelog.LogCaptureFloatingButton
 import com.floatingmuseum.android.test.helper.devicelog.rememberDeviceLogModuleController
 import com.floatingmuseum.android.test.helper.filemanager.FileManagerModuleContent
 import com.floatingmuseum.android.test.helper.filemanager.rememberFileManagerModuleController
+import com.floatingmuseum.android.test.helper.intent.IntentExecutionResult
+import com.floatingmuseum.android.test.helper.intent.IntentTemplate
+import com.floatingmuseum.android.test.helper.intent.IntentTestForm
+import com.floatingmuseum.android.test.helper.intent.IntentTestPanel
+import com.floatingmuseum.android.test.helper.intent.buildIntentAdbCommand
+import com.floatingmuseum.android.test.helper.intent.createIntentAdb
+import com.floatingmuseum.android.test.helper.intent.createIntentTemplateRepository
+import com.floatingmuseum.android.test.helper.intent.validateIntentForm
 import com.floatingmuseum.android.test.helper.localization.commandError
 import com.floatingmuseum.android.test.helper.localization.commandStatus
 import com.floatingmuseum.android.test.helper.localization.localized
@@ -89,6 +97,8 @@ fun App() {
         val adbDeviceManager = remember { createAdbDeviceManager() }
         val appAdb = remember { createAppAdb() }
         val deviceAdb = remember { createDeviceAdb() }
+        val intentAdb = remember { createIntentAdb() }
+        val intentTemplateRepository = remember { createIntentTemplateRepository() }
         val appSettings = AppSettingsShared.currentSettings
 
         val scope = rememberCoroutineScope()
@@ -142,8 +152,20 @@ fun App() {
         var isDeviceMirroring by remember { mutableStateOf(false) }
         var deviceMirrorDeviceSerial by remember { mutableStateOf<String?>(null) }
         var deviceMirrorStopRequestedAtMillis by remember { mutableStateOf<Long?>(null) }
+        var intentForm by remember { mutableStateOf(IntentTestForm()) }
+        var intentTemplateName by remember { mutableStateOf("") }
+        var intentTemplates by remember { mutableStateOf(intentTemplateRepository.loadTemplates()) }
+        var lastIntentResult by remember { mutableStateOf<IntentExecutionResult?>(null) }
         val selectedDevice = devices.firstOrNull { it.transportId == selectedDeviceTransportId }
         val selectedReadyDevice = selectedDevice?.takeIf { it.isReady }
+        val intentValidationResult = validateIntentForm(intentForm)
+        val intentCommandPreview = buildIntentAdbCommand(
+            deviceSerial = selectedReadyDevice?.transportId ?: "<serial>",
+            form = intentForm,
+        ).displayCommand
+        val intentAppCandidates = remember(thirdPartyApps, systemApps) {
+            (thirdPartyApps + systemApps).distinctBy { it.packageName }
+        }
         var clearModuleDeviceState: () -> Unit = {}
         var shouldRefreshDevicesAfterAdbNotFound by remember { mutableStateOf(false) }
 
@@ -230,6 +252,64 @@ fun App() {
                 statusText = message
                 appendError(message)
                 null
+            }
+        }
+
+        fun saveIntentTemplate() {
+            val name = intentTemplateName.trim()
+            if (name.isBlank()) return
+            val template = IntentTemplate(
+                id = "intent-${System.currentTimeMillis()}",
+                name = name,
+                form = intentForm.normalized(),
+            )
+            intentTemplates = listOf(template) + intentTemplates
+            intentTemplateRepository.saveTemplates(intentTemplates)
+            intentTemplateName = ""
+            appendStatus(localized("intent.template.saved_arg0", name))
+        }
+
+        fun deleteIntentTemplate(template: IntentTemplate) {
+            intentTemplates = intentTemplates.filterNot { it.id == template.id }
+            intentTemplateRepository.saveTemplates(intentTemplates)
+            appendStatus(localized("intent.template.deleted_arg0", template.name))
+        }
+
+        fun runIntentCommand() {
+            val deviceSerial = selectedReadyTransportOrReport() ?: return
+            val validation = validateIntentForm(intentForm)
+            if (!validation.isValid) {
+                val message = localized("intent.validation.failed")
+                statusText = message
+                appendError(message)
+                return
+            }
+            scope.launch {
+                isRunning = true
+                statusText = localized("intent.running")
+                appendStatus(statusText)
+                try {
+                    val result = intentAdb.executeIntentCommand(
+                        deviceSerial = deviceSerial,
+                        form = intentForm,
+                        logCommand = ::appendCommand,
+                    )
+                    lastIntentResult = result
+                    val output = result.output.trim()
+                    if (result.isSuccess) {
+                        statusText = localized("intent.result.success")
+                        appendStatus(statusText)
+                        if (output.isNotBlank()) appendCommand(output)
+                    } else {
+                        statusText = localized("intent.result.failed")
+                        appendError(output.ifBlank { statusText })
+                    }
+                } catch (error: Throwable) {
+                    statusText = error.message ?: localized("intent.result.failed")
+                    appendError(localized("intent.result.failed") + " - ${error.message ?: unknownError()}")
+                } finally {
+                    isRunning = false
+                }
             }
         }
 
@@ -1465,6 +1545,30 @@ fun App() {
                                     controller = dataFillModule,
                                     isRunning = isRunning,
                                     hasReadyDevice = selectedReadyDevice != null,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+
+                            TestModule.Intent -> {
+                                IntentTestPanel(
+                                    selectedDevice = selectedDevice,
+                                    appCandidates = intentAppCandidates,
+                                    form = intentForm,
+                                    onFormChange = { intentForm = it },
+                                    templateName = intentTemplateName,
+                                    onTemplateNameChange = { intentTemplateName = it },
+                                    templates = intentTemplates,
+                                    onSaveTemplate = ::saveIntentTemplate,
+                                    onApplyTemplate = { template ->
+                                        intentForm = template.form
+                                        intentTemplateName = template.name
+                                    },
+                                    onDeleteTemplate = ::deleteIntentTemplate,
+                                    validationResult = intentValidationResult,
+                                    commandPreview = intentCommandPreview,
+                                    lastResult = lastIntentResult,
+                                    isRunning = isRunning,
+                                    onExecute = ::runIntentCommand,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }

@@ -5,6 +5,7 @@ import com.floatingmuseum.android.test.helper.localization.AppStrings
 internal enum class TestModule {
     Device,
     App,
+    Intent,
     DataFill,
     FileManager,
     Log,
@@ -14,6 +15,7 @@ internal enum class TestModule {
 internal fun TestModule.title(strings: AppStrings): String = when (this) {
     TestModule.Device -> strings.t("module.device")
     TestModule.App -> strings.t("common.apps")
+    TestModule.Intent -> strings.t("module.intent")
     TestModule.DataFill -> strings.t("module.data_fill")
     TestModule.FileManager -> strings.t("module.files")
     TestModule.Log -> strings.t("module.logs")
