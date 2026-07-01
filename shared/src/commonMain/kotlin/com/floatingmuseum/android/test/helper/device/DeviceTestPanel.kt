@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.floatingmuseum.android.test.helper.AndroidDevice
@@ -75,6 +76,7 @@ fun DeviceTestPanel(
     isDeviceMirroring: Boolean,
     isDeviceMirroringThisDevice: Boolean,
     lastScreenRecordResult: ScreenRecordResult?,
+    onRevealScreenRecordFile: (String) -> Unit,
     onBatteryControl: ((args: List<String>) -> Unit)? = null,
     onScreenSizeControl: ((String) -> Unit)? = null,
     onScreenDensityControl: ((String) -> Unit)? = null,
@@ -868,9 +870,13 @@ fun DeviceTestPanel(
                                 SelectionContainer {
                                     Text(
                                         text = lastScreenRecordResult.localPath,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onRevealScreenRecordFile(lastScreenRecordResult.localPath) },
                                         style = MaterialTheme.typography.bodySmall,
                                         fontFamily = FontFamily.Monospace,
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textDecoration = TextDecoration.Underline,
+                                        color = MaterialTheme.colorScheme.primary,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
                                     )

@@ -647,6 +647,19 @@ fun App() {
             deviceAdb.stopScreenRecording()
         }
 
+        fun revealScreenRecordFile(filePath: String) {
+            val opened = revealFileInDirectory(filePath)
+            if (opened) {
+                val message = localized("device.screen_record.opened_recording_directory")
+                statusText = message
+                appendStatus("$message - $filePath")
+            } else {
+                val message = localized("device.screen_record.unable_to_open_recording_directory")
+                statusText = message
+                appendError("$message - $filePath")
+            }
+        }
+
         fun startSelectedDeviceMirror(deviceSerial: String) {
             if (isDeviceMirroring) return
             scope.launch {
@@ -1382,6 +1395,7 @@ fun App() {
                                     isDeviceMirroring = isDeviceMirroring,
                                     isDeviceMirroringThisDevice = isDeviceMirroring && deviceMirrorDeviceSerial == selectedReadyDevice?.transportId,
                                     lastScreenRecordResult = lastScreenRecordResult,
+                                    onRevealScreenRecordFile = ::revealScreenRecordFile,
                                     onBatteryControl = { args ->
                                         selectedReadyTransportOrReport()?.let { transportId ->
                                             scope.launch {

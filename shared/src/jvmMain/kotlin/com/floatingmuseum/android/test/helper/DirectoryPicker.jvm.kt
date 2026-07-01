@@ -260,28 +260,14 @@ actual fun saveBytesToFile(directoryPath: String, fileName: String, bytes: ByteA
 }
 
 actual fun revealFileInDirectory(filePath: String): Boolean {
-    val file = File(filePath).absoluteFile
-    val parent = file.parentFile ?: return false
+    val command = buildRevealFileInDirectoryCommand(filePath) ?: return false
     return try {
-        val osName = System.getProperty("os.name").lowercase()
-        when {
-            osName.contains("win") -> {
-                ProcessBuilder("explorer.exe", "/select,${file.absolutePath}").start()
-                true
-            }
-            osName.contains("mac") || osName.contains("darwin") -> {
-                ProcessBuilder("open", "-R", file.absolutePath).start()
-                true
-            }
-            else -> {
-                ProcessBuilder("xdg-open", parent.absolutePath).start()
-                true
-            }
-        }
+        ProcessBuilder(command.args).start()
+        true
     } catch (error: Throwable) {
         try {
             if (Desktop.isDesktopSupported()) {
-                Desktop.getDesktop().open(parent)
+                Desktop.getDesktop().open(command.fallbackDirectory)
                 true
             } else {
                 false
@@ -290,4 +276,24 @@ actual fun revealFileInDirectory(filePath: String): Boolean {
             false
         }
     }
+}
+
+internal data class RevealFileInDirectoryCommand(
+    val args: List<String>,
+    val fallbackDirectory: File,
+)
+
+internal fun buildRevealFileInDirectoryCommand(
+    filePath: String,
+    osName: String = System.getProperty("os.name"),
+): RevealFileInDirectoryCommand? {
+    val file = File(filePath).absoluteFile
+    val parent = file.parentFile ?: return null
+    val normalizedOsName = osName.lowercase()
+    val args = when {
+        normalizedOsName.contains("win") -> listOf("explorer.exe", "/select,${file.absolutePath}")
+        normalizedOsName.contains("mac") || normalizedOsName.contains("darwin") -> listOf("open", "-R", file.absolutePath)
+        else -> listOf("xdg-open", parent.absolutePath)
+    }
+    return RevealFileInDirectoryCommand(args, parent)
 }
