@@ -37,6 +37,8 @@
   "app.list.manual_refresh_cache_hint": "Refresh manually to load the app list. System apps are cached locally after loading.",
   "app.loading_arg0_arg1_arg2": "Loading: {0} / {1} ({2}%)",
   "app.loading_arg0_info": "Loading {0} info...",
+  "app.manifest": "Manifest",
+  "app.manifest_file_not_found": "AndroidManifest.xml was not found in the APK",
   "app.matched_arg0_arg1_arg2": "Matched {0} / {1} {2}",
   "app.name": "App Name",
   "app.no_app_detail_returned_from_athplugin": "No app detail returned from ATHPlugin",

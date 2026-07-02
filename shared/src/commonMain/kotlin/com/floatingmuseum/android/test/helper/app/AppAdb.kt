@@ -74,6 +74,7 @@ internal fun PluginVersionInfo.pluginCheckIgnoreKey(): String {
 
 enum class ApplicationDetailSection(val pluginKey: String) {
     BASIC("basic"),
+    MANIFEST("manifest"),
     PERMISSIONS("permissions"),
     ACTIVITIES("activities"),
     SERVICES("services"),
@@ -84,6 +85,7 @@ enum class ApplicationDetailSection(val pluginKey: String) {
 
 fun ApplicationDetailSection.displayTitle(): String = when (this) {
     ApplicationDetailSection.BASIC -> localized("app.detail.basic")
+    ApplicationDetailSection.MANIFEST -> localized("app.manifest")
     ApplicationDetailSection.PERMISSIONS -> localized("app.permissions")
     ApplicationDetailSection.ACTIVITIES -> "Activity"
     ApplicationDetailSection.SERVICES -> "Service"

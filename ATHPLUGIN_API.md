@@ -33,6 +33,16 @@ Row: 0 json_data=<json>
 - 应用列表接口当前使用严格 JSON 解析，应用对象内不要返回未约定字段；新增字段前需要同步调整 AndroidTestHelper。
 - 应用详情接口允许额外字段，但桌面端当前只消费 `items[].label` 和 `items[].value`。
 
+## Content Read 返回格式
+
+桌面端通过 `adb exec-out content read` 读取二进制或文本流。该方式不经过 `MatrixCursor` 和 `json_data`，适合图标、清单文件等不应放进 JSON 的内容。
+
+约束：
+
+- 返回内容必须直接写入输出流，不包 JSON，不包 Base64。
+- 文本流统一使用 UTF-8 编码。
+- 找不到目标数据、包名不存在、权限不足或解析失败时，应让 Provider 调用失败或返回空流；桌面端会回退到标准 ADB 路径。
+
 ## 接口一览
 
 | 功能 | 调用方式 | URI |
@@ -40,6 +50,7 @@ Row: 0 json_data=<json>
 | 查询安装应用列表 | `content query` | `content://com.floatingmuseum.android.test.helper.plugin.provider/apps?isSystem=<true|false>` |
 | 查询应用详情 | `content query` | `content://com.floatingmuseum.android.test.helper.plugin.provider/details/<packageName>?section=<section>` |
 | 读取应用图标 | `content read` | `content://com.floatingmuseum.android.test.helper.plugin.provider/icon/<packageName>` |
+| 读取应用清单文件 | `content read` | `content://com.floatingmuseum.android.test.helper.plugin.provider/manifest/<packageName>` |
 
 ## 1. 查询安装应用列表
 
@@ -212,6 +223,68 @@ adb -s <serial> exec-out content read --uri "content://com.floatingmuseum.androi
 - 图标读取失败不影响应用列表显示。
 - 图标会按应用版本缓存；同包名版本变化后会重新读取。
 - 若 ATHPlugin 已安装但处于禁用状态，桌面端不会调用该接口，应用列表会直接走标准 ADB 模式下的 APK 图标解析。
+
+## 4. 读取应用清单文件
+
+作用：按包名读取应用 `AndroidManifest.xml` 的可读 XML 文本，供桌面端应用详情页“清单文件”分区显示。该接口用于替代桌面端 `pm path`、`adb pull base.apk`、本地解码 Manifest 的慢路径。
+
+调用命令：
+
+```bash
+adb -s <serial> exec-out content read --uri "content://com.floatingmuseum.android.test.helper.plugin.provider/manifest/com.example.app"
+```
+
+路径参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `packageName` | String | 是 | 应用包名。插件侧必须按精确包名查询应用。 |
+
+返回数据：
+
+- 直接返回 UTF-8 XML 文本流。
+- 不返回 APK 原始二进制。
+- 不返回二进制 AXML。
+- 不包 JSON，不包 Base64。
+- 推荐第一行包含 XML 声明：`<?xml version="1.0" encoding="utf-8"?>`。
+- 推荐输出已格式化 XML：4 空格缩进，多属性节点可每个属性单独换行，空节点可输出自闭合标签。
+
+返回示例：
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.app"
+    android:versionCode="123"
+    android:versionName="1.2.3">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application
+        android:label="Example"
+        android:theme="@0x7f120001">
+        <activity
+            android:name="com.example.app.MainActivity"
+            android:exported="true" />
+    </application>
+</manifest>
+```
+
+ATHPlugin 实现要求：
+
+- Provider 路由新增 `/manifest/<packageName>`，建议在 `openFile()` 中处理，和 `/icon/<packageName>` 保持同类流式实现。
+- 先用 `PackageManager` 按包名确认应用存在，并取得当前安装包的 `sourceDir` 或 `publicSourceDir`。
+- 只需读取 base APK 内的 `AndroidManifest.xml`；桌面端当前清单查看也以 base APK 为准。
+- APK 内的 `AndroidManifest.xml` 是 Android binary XML，插件侧必须解码成可读 XML 文本后再输出。
+- 输出文本必须 UTF-8 编码。建议使用 `ParcelFileDescriptor.createPipe()` 直接写出，或写入插件缓存文件后以只读 `ParcelFileDescriptor` 返回。
+- 建议按 `packageName + versionCode + lastUpdateTime` 缓存解码后的 XML 文本，应用升级后缓存自动失效。
+- 包名不存在、APK 路径不可读、Manifest 缺失或解码失败时，抛出 `FileNotFoundException` / 返回空流均可；桌面端会回退到 `adb pull base.apk` 后本地解码。
+- 不要通过 `/details/<packageName>?section=manifest` 返回 XML。长文本通过 `content query` 的 `json_data` 传输有截断、转义和 Cursor 输出限制风险。
+
+桌面端行为：
+
+- 若 ATHPlugin 已安装且启用，桌面端会优先调用该接口读取清单文件。
+- 该接口成功时，桌面端不需要拉取 APK，速度通常明显快于 `adb pull base.apk`，尤其是大型应用或 USB/无线 ADB 慢链路。
+- 该接口失败时，桌面端回退到标准 ADB 路径：`pm path` -> `adb pull base.apk` -> 本地解析 `AndroidManifest.xml`。
 
 ## 非 ContentProvider 操作
 

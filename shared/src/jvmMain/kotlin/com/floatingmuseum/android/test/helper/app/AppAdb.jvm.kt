@@ -367,6 +367,38 @@ private class JvmAppAdb : AppAdb {
         section: ApplicationDetailSection,
         logCommand: (String) -> Unit,
     ): ApplicationDetailContent = withContext(Dispatchers.IO) {
+        if (section == ApplicationDetailSection.MANIFEST) {
+            val canUsePluginProvider = isPluginProviderAvailable(deviceSerial, logCommand)
+            if (canUsePluginProvider) {
+                try {
+                    val manifestText = loadApplicationManifestTextWithPlugin(
+                        deviceSerial = deviceSerial,
+                        packageName = app.packageName,
+                        logCommand = logCommand,
+                    )
+                    return@withContext ApplicationDetailContent(
+                        section = section,
+                        source = ApplicationDetailSource.ATH_PLUGIN,
+                        items = listOf(ApplicationDetailItem("AndroidManifest.xml", manifestText)),
+                    )
+                } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    error.printStackTrace()
+                }
+            }
+
+            val manifestText = loadApplicationManifestText(
+                deviceSerial = deviceSerial,
+                packageName = app.packageName,
+                logCommand = logCommand,
+            )
+            return@withContext ApplicationDetailContent(
+                section = section,
+                source = ApplicationDetailSource.ADB,
+                items = listOf(ApplicationDetailItem("AndroidManifest.xml", manifestText)),
+            )
+        }
+
         val canUsePluginProvider = isPluginProviderAvailable(deviceSerial, logCommand)
         if (canUsePluginProvider) {
             try {
@@ -419,6 +451,19 @@ private class JvmAppAdb : AppAdb {
         section: ApplicationDetailSection,
         logCommand: (String) -> Unit,
     ): ApplicationDetailContent {
+        if (section == ApplicationDetailSection.MANIFEST) {
+            val manifestText = loadApplicationManifestText(
+                deviceSerial = deviceSerial,
+                packageName = app.packageName,
+                logCommand = logCommand,
+            )
+            return ApplicationDetailContent(
+                section = section,
+                source = ApplicationDetailSource.ADB,
+                items = listOf(ApplicationDetailItem("AndroidManifest.xml", manifestText)),
+            )
+        }
+
         val dumpsysOutput = AdbShell.executeAdb(
             args = listOf("-s", deviceSerial, "shell", "dumpsys", "package", app.packageName),
             displayCommand = "adb -s $deviceSerial shell dumpsys package ${app.packageName}",
@@ -435,6 +480,7 @@ private class JvmAppAdb : AppAdb {
                 packageName = app.packageName,
                 logCommand = logCommand,
             )
+            ApplicationDetailSection.MANIFEST,
             ApplicationDetailSection.SIGNATURES -> null
         }
         val items = buildApplicationDetailItems(
@@ -450,11 +496,70 @@ private class JvmAppAdb : AppAdb {
         )
     }
 
+    private suspend fun loadApplicationManifestText(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ): String {
+        return withBaseApplicationApkFile(
+            deviceSerial = deviceSerial,
+            packageName = packageName,
+            tempPrefix = "AndroidTestHelperAppManifest",
+            logCommand = logCommand,
+        ) { localApk ->
+            parseApkManifestXmlText(localApk, packageName)
+        }
+    }
+
+    private suspend fun loadApplicationManifestTextWithPlugin(
+        deviceSerial: String,
+        packageName: String,
+        logCommand: (String) -> Unit,
+    ): String {
+        val command = buildPluginManifestContentReadCommand(
+            deviceSerial = deviceSerial,
+            packageName = packageName,
+        )
+        val bytes = AdbShell.executeAdbBinary(
+            args = command.args,
+            displayCommand = command.displayCommand,
+            logCommand = logCommand,
+        )
+        return bytes.toString(Charsets.UTF_8)
+            .trim()
+            .takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException(localized("app.manifest_file_not_found"))
+    }
+
     private suspend fun loadApplicationManifestDetails(
         deviceSerial: String,
         packageName: String,
         logCommand: (String) -> Unit,
     ): ManifestDetails? {
+        return try {
+            withBaseApplicationApkFile(
+                deviceSerial = deviceSerial,
+                packageName = packageName,
+                tempPrefix = "AndroidTestHelperAppDetail",
+                logCommand = logCommand,
+            ) { localApk ->
+                parseApkManifestDetails(localApk, packageName)
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            error.printStackTrace()
+            null
+        }
+    }
+
+    private suspend fun <T> withBaseApplicationApkFile(
+        deviceSerial: String,
+        packageName: String,
+        tempPrefix: String,
+        logCommand: (String) -> Unit,
+        block: (File) -> T,
+    ): T {
         val pathOutput = AdbShell.executeAdb(
             args = listOf("-s", deviceSerial, "shell", "pm", "path", packageName),
             displayCommand = "adb -s $deviceSerial shell pm path $packageName",
@@ -462,8 +567,8 @@ private class JvmAppAdb : AppAdb {
         )
         val baseApkPath = parsePmPathOutput(pathOutput).firstOrNull { it.endsWith("/base.apk") }
             ?: parsePmPathOutput(pathOutput).firstOrNull()
-            ?: return null
-        val tempDirectory = AppRuntimePaths.createTempDirectory(prefix = "AndroidTestHelperAppDetail")
+            ?: throw IllegalStateException(localized("app.apk_path_not_found_arg0", packageName))
+        val tempDirectory = AppRuntimePaths.createTempDirectory(prefix = tempPrefix)
         val localApk = File(tempDirectory, "$packageName.apk")
         return try {
             AdbShell.executeAdb(
@@ -471,12 +576,7 @@ private class JvmAppAdb : AppAdb {
                 displayCommand = "adb -s $deviceSerial pull $baseApkPath ${localApk.absolutePath}",
                 logCommand = logCommand,
             )
-            parseApkManifestDetails(localApk, packageName)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
-            error.printStackTrace()
-            null
+            block(localApk)
         } finally {
             tempDirectory.deleteRecursively()
         }
@@ -1101,10 +1201,15 @@ private const val AndroidAttrAuthorities = 0x01010018
 private const val StringPoolChunk = 0x0001
 private const val TableChunk = 0x0002
 private const val XmlStartElementChunk = 0x0102
+private const val XmlEndElementChunk = 0x0103
+private const val XmlCdataChunk = 0x0104
 private const val TablePackageChunk = 0x0200
 private const val TableTypeChunk = 0x0201
 private const val ValueTypeReference = 0x01
 private const val ValueTypeString = 0x03
+private const val ValueTypeIntDecimal = 0x10
+private const val ValueTypeIntHex = 0x11
+private const val ValueTypeIntBoolean = 0x12
 private const val Utf8Flag = 0x00000100
 private const val NoIndex = -1
 
@@ -1294,6 +1399,7 @@ private fun buildApplicationDetailItems(
         ApplicationDetailSection.SERVICES -> buildApplicationComponentItems(manifestDetails?.services.orEmpty())
         ApplicationDetailSection.BROADCAST_RECEIVERS -> buildApplicationComponentItems(manifestDetails?.receivers.orEmpty())
         ApplicationDetailSection.CONTENT_PROVIDERS -> buildApplicationComponentItems(manifestDetails?.providers.orEmpty())
+        ApplicationDetailSection.MANIFEST -> emptyList()
         ApplicationDetailSection.SIGNATURES -> parsePackageDumpsysSigningItems(dumpsysOutput)
     }.ifEmpty {
         listOf(ApplicationDetailItem(localized("app.status"), localized("app.no_information_parsed_for_this_section")))
@@ -1471,6 +1577,153 @@ private fun parseApkManifestDetails(apkFile: File, fallbackPackageName: String):
         val manifestBytes = zipFile.getInputStream(manifestEntry).readBytes()
         val details = parseAndroidManifestMetadata(manifestBytes, fallbackPackageName).details
         details.copy(packageName = details.packageName.ifBlank { fallbackPackageName })
+    }
+}
+
+internal fun parseApkManifestXmlText(apkFile: File, fallbackPackageName: String = ""): String {
+    return ZipFile(apkFile).use { zipFile ->
+        val manifestEntry = zipFile.getEntry("AndroidManifest.xml")
+            ?: throw IllegalStateException(localized("app.manifest_file_not_found"))
+        val manifestBytes = zipFile.getInputStream(manifestEntry).readBytes()
+        decodeAndroidBinaryXml(manifestBytes, fallbackPackageName)
+    }
+}
+
+internal fun decodeAndroidBinaryXml(
+    bytes: ByteArray,
+    fallbackPackageName: String = "",
+): String {
+    val buffer = bytes.asLittleEndianBuffer()
+    var offset = 8
+    var strings = emptyList<String>()
+    var resourceMap = emptyList<Int>()
+    var depth = 0
+    var pendingStartTag: RenderedXmlStartTag? = null
+    val output = StringBuilder()
+    output.appendLine("""<?xml version="1.0" encoding="utf-8"?>""")
+
+    fun flushPendingStartTag() {
+        val pending = pendingStartTag ?: return
+        output.append(renderXmlStartTag(pending, selfClosing = false))
+        output.appendLine(">")
+        depth = pending.depth + 1
+        pendingStartTag = null
+    }
+
+    while (offset + 8 <= bytes.size) {
+        val type = buffer.uShort(offset)
+        val chunkSize = buffer.getInt(offset + 4)
+        if (chunkSize <= 0 || offset + chunkSize > bytes.size) break
+
+        when (type) {
+            StringPoolChunk -> strings = parseStringPool(buffer, offset)
+            0x0180 -> resourceMap = parseXmlResourceMap(buffer, offset, chunkSize)
+            XmlStartElementChunk -> {
+                val tagNameIndex = buffer.getInt(offset + 20)
+                val tagName = strings.getOrNull(tagNameIndex)?.takeIf { it.isNotBlank() } ?: "unknown"
+                val attrStart = buffer.uShort(offset + 24)
+                val attrSize = buffer.uShort(offset + 26)
+                val attrCount = buffer.uShort(offset + 28)
+                val attrsOffset = offset + 16 + attrStart
+                val attrs = (0 until attrCount).map { index ->
+                    val attrOffset = attrsOffset + index * attrSize
+                    val attrNameIndex = buffer.getInt(attrOffset + 4)
+                    XmlAttribute(
+                        name = strings.getOrNull(attrNameIndex),
+                        resourceId = resourceMap.getOrNull(attrNameIndex),
+                        value = parseXmlAttributeValue(buffer, strings, attrOffset),
+                    )
+                }
+                val renderedAttributes = attrs.mapNotNull { attr ->
+                    val name = attr.xmlDisplayName() ?: return@mapNotNull null
+                    val value = attr.value.asManifestXmlValue(strings)
+                    """$name="${value.xmlEscaped()}""""
+                }
+                val fallbackPackageAttribute = if (
+                    tagName == "manifest" &&
+                    fallbackPackageName.isNotBlank() &&
+                    renderedAttributes.none { it.startsWith("package=") }
+                ) {
+                    listOf("""package="${fallbackPackageName.xmlEscaped()}"""")
+                } else {
+                    emptyList()
+                }
+                val namespaceAttribute = if (tagName == "manifest") {
+                    listOf("""xmlns:android="http://schemas.android.com/apk/res/android"""")
+                } else {
+                    emptyList()
+                }
+                val attributes = namespaceAttribute + fallbackPackageAttribute + renderedAttributes
+                flushPendingStartTag()
+                pendingStartTag = RenderedXmlStartTag(
+                    name = tagName,
+                    attributes = attributes,
+                    depth = depth,
+                )
+            }
+            XmlEndElementChunk -> {
+                val tagNameIndex = buffer.getInt(offset + 20)
+                val tagName = strings.getOrNull(tagNameIndex)?.takeIf { it.isNotBlank() } ?: "unknown"
+                val pending = pendingStartTag
+                if (pending != null && pending.name == tagName) {
+                    output.append(renderXmlStartTag(pending, selfClosing = true))
+                    output.appendLine()
+                    pendingStartTag = null
+                } else {
+                    flushPendingStartTag()
+                    depth = (depth - 1).coerceAtLeast(0)
+                    output.append("    ".repeat(depth))
+                        .append("</")
+                        .append(tagName)
+                        .appendLine(">")
+                }
+            }
+            XmlCdataChunk -> {
+                flushPendingStartTag()
+                val textIndex = buffer.getInt(offset + 16)
+                val text = strings.getOrNull(textIndex)?.takeIf { it.isNotBlank() }
+                if (text != null) {
+                    output.append("    ".repeat(depth))
+                        .appendLine(text.xmlEscaped())
+                }
+            }
+        }
+
+        offset += chunkSize
+    }
+
+    flushPendingStartTag()
+    return output.toString().trimEnd()
+}
+
+private data class RenderedXmlStartTag(
+    val name: String,
+    val attributes: List<String>,
+    val depth: Int,
+)
+
+private fun renderXmlStartTag(
+    tag: RenderedXmlStartTag,
+    selfClosing: Boolean,
+): String {
+    val indent = "    ".repeat(tag.depth)
+    val close = if (selfClosing) " />" else ""
+    if (tag.attributes.isEmpty()) {
+        return "$indent<${tag.name}$close"
+    }
+    if (tag.attributes.size == 1) {
+        return "$indent<${tag.name} ${tag.attributes.single()}$close"
+    }
+    return buildString {
+        append(indent)
+        append("<")
+        append(tag.name)
+        tag.attributes.forEach { attribute ->
+            appendLine()
+            append("    ".repeat(tag.depth + 1))
+            append(attribute)
+        }
+        append(close)
     }
 }
 
@@ -1667,9 +1920,51 @@ private fun AttributeValue.asDisplayString(strings: List<String>): String? {
     rawString?.takeIf { it.isNotBlank() }?.let { return it }
     strings.getOrNull(data)?.takeIf { it.isNotBlank() }?.let { return it }
     return when (dataType) {
-        0x12 -> if (data != 0) "true" else "false"
+        ValueTypeIntBoolean -> if (data != 0) "true" else "false"
         ValueTypeReference -> "@0x${data.toUInt().toString(16)}"
         else -> data.toString()
+    }
+}
+
+private fun XmlAttribute.xmlDisplayName(): String? {
+    val rawName = name?.takeIf { it.isNotBlank() }
+        ?: resourceId?.let { "0x${it.toUInt().toString(16)}" }
+        ?: return null
+    val id = resourceId ?: return rawName
+    return if ((id ushr 24) == 0x01 && ":" !in rawName) {
+        "android:$rawName"
+    } else {
+        rawName
+    }
+}
+
+private fun AttributeValue.asManifestXmlValue(strings: List<String>): String {
+    rawString?.takeIf { it.isNotBlank() }?.let { return it }
+    if (dataType == ValueTypeString) {
+        strings.getOrNull(data)?.takeIf { it.isNotBlank() }?.let { return it }
+    }
+    return when (dataType) {
+        ValueTypeReference -> "@0x${data.toUInt().toString(16)}"
+        ValueTypeIntBoolean -> if (data != 0) "true" else "false"
+        ValueTypeIntHex -> "0x${data.toUInt().toString(16)}"
+        ValueTypeIntDecimal -> data.toString()
+        in 0x1C..0x1F -> "#%08x".format(data)
+        else -> strings.getOrNull(data)?.takeIf { it.isNotBlank() } ?: data.toString()
+    }
+}
+
+private fun String.xmlEscaped(): String {
+    return buildString(length) {
+        this@xmlEscaped.forEach { char ->
+            when (char) {
+                '&' -> append("&amp;")
+                '<' -> append("&lt;")
+                '>' -> append("&gt;")
+                '"' -> append("&quot;")
+                '\'' -> append("&apos;")
+                else -> append(char)
+            }
+        }
     }
 }
 
@@ -1910,6 +2205,22 @@ internal data class ApplicationCacheClearCommand(
     val args: List<String>,
     val displayCommand: String,
 )
+
+internal data class PluginManifestContentReadCommand(
+    val args: List<String>,
+    val displayCommand: String,
+)
+
+internal fun buildPluginManifestContentReadCommand(
+    deviceSerial: String,
+    packageName: String,
+): PluginManifestContentReadCommand {
+    val uri = "content://com.floatingmuseum.android.test.helper.plugin.provider/manifest/$packageName"
+    return PluginManifestContentReadCommand(
+        args = listOf("-s", deviceSerial, "exec-out", "content", "read", "--uri", uri),
+        displayCommand = "adb -s $deviceSerial exec-out content read --uri \"$uri\"",
+    )
+}
 
 internal fun buildClearApplicationCacheCommand(
     deviceSerial: String,

@@ -52,6 +52,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -889,6 +890,56 @@ private fun ApplicationDetailInfoPanel(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                    selectedSection == ApplicationDetailSection.MANIFEST -> {
+                        val manifestText = content.items.joinToString("\n\n") { it.value }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                text = strings.t("app.source_arg0", content.source.displayTitle()),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                shape = RoundedCornerShape(4.dp),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                SelectionContainer(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState())
+                                        .padding(10.dp),
+                                ) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        val lines = manifestText.lines()
+                                        Text(
+                                            text = lines.indices.joinToString("\n") { (it + 1).toString() },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            textAlign = TextAlign.End,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Text(
+                                            text = manifestText,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            softWrap = false,
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                     else -> {
                         val displayItems = content.toDisplayDetailItems(selectedSection)

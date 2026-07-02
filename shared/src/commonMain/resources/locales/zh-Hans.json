@@ -37,6 +37,8 @@
   "app.list.manual_refresh_cache_hint": "请手动刷新获取应用列表。系统应用获取后将自动缓存至本地。",
   "app.loading_arg0_arg1_arg2": "获取中: {0} / {1} ({2}%)",
   "app.loading_arg0_info": "正在获取{0}信息...",
+  "app.manifest": "清单文件",
+  "app.manifest_file_not_found": "APK 中未找到 AndroidManifest.xml",
   "app.matched_arg0_arg1_arg2": "匹配 {0} / {1} 个{2}",
   "app.name": "应用名",
   "app.no_app_detail_returned_from_athplugin": "未从 ATHPlugin 获取应用详情",

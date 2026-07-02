@@ -335,6 +335,25 @@ class AppTest {
     }
 
     @Test
+    fun decodesBundledApkManifestAsReadableXml() {
+        val filesDirectory = File("shared/src/commonMain/composeResources/files")
+        val apkFile = filesDirectory
+            .listFiles()
+            ?.firstOrNull { it.isFile && it.name.startsWith("ATHPlugin") && it.name.endsWith(".apk") }
+            ?: return
+
+        val manifestText = parseApkManifestXmlText(
+            apkFile = apkFile,
+            fallbackPackageName = "com.floatingmuseum.android.test.helper.plugin",
+        )
+
+        kotlin.test.assertContains(manifestText, """<?xml version="1.0" encoding="utf-8"?>""")
+        kotlin.test.assertContains(manifestText, "<manifest")
+        kotlin.test.assertContains(manifestText, """package="com.floatingmuseum.android.test.helper.plugin"""")
+        kotlin.test.assertContains(manifestText, "<application")
+    }
+
+    @Test
     fun buildsClearApplicationCacheCommandWithExplicitSerial() {
         val command = buildClearApplicationCacheCommand(
             deviceSerial = "serial-123",
@@ -347,6 +366,24 @@ class AppTest {
         )
         assertEquals(
             "adb -s serial-123 shell pm clear --cache-only com.example.app",
+            command.displayCommand,
+        )
+    }
+
+    @Test
+    fun buildsPluginManifestContentReadCommandWithExplicitSerial() {
+        val command = buildPluginManifestContentReadCommand(
+            deviceSerial = "serial-123",
+            packageName = "com.example.app",
+        )
+        val uri = "content://com.floatingmuseum.android.test.helper.plugin.provider/manifest/com.example.app"
+
+        assertEquals(
+            listOf("-s", "serial-123", "exec-out", "content", "read", "--uri", uri),
+            command.args,
+        )
+        assertEquals(
+            "adb -s serial-123 exec-out content read --uri \"$uri\"",
             command.displayCommand,
         )
     }
