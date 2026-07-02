@@ -427,13 +427,13 @@ private fun FileTreeRow(
     val entry = row.entry
     val normalizedEntryPath = normalizeRemotePath(entry.path)
     val dropTargetPath = remoteDropTargetDirectoryPath(entry)
+    val previewEnabled = !isRunning && !entry.isDirectory && getPreviewFileType(entry.name) != PreviewFileType.Unsupported
     var dropTargeted by remember(normalizedEntryPath) { mutableStateOf(false) }
-    var lastClickTime by remember(entry.path) { mutableStateOf(0L) }
     FileManagerEntryContextMenu(
         enabled = !isRunning,
         createEnabled = !isRunning && entry.isDirectory,
         deleteEnabled = !isRunning && row.depth > 0,
-        previewEnabled = !isRunning && !entry.isDirectory && getPreviewFileType(entry.name) != PreviewFileType.Unsupported,
+        previewEnabled = previewEnabled,
         onPreview = onOpenPreview,
         onRefresh = onRefresh,
         onExport = onExport,
@@ -490,11 +490,9 @@ private fun FileTreeRow(
                                 onToggle()
                             } else {
                                 onSelect()
-                                val now = System.currentTimeMillis()
-                                if (now - lastClickTime < 500L) {
+                                if (previewEnabled) {
                                     onOpenPreview()
                                 }
-                                lastClickTime = now
                             }
                         },
                     )
