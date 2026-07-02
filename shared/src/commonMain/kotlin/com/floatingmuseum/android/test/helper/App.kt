@@ -33,6 +33,7 @@ import com.floatingmuseum.android.test.helper.app.ApplicationDetailSource
 import com.floatingmuseum.android.test.helper.app.ApplicationDetailItem
 import com.floatingmuseum.android.test.helper.app.PluginVersionInfo
 import com.floatingmuseum.android.test.helper.app.ApplicationTestPanel
+import com.floatingmuseum.android.test.helper.app.ApplicationTestPanelState
 import com.floatingmuseum.android.test.helper.app.PluginCheckBanner
 import com.floatingmuseum.android.test.helper.app.applicationActionLabel
 import com.floatingmuseum.android.test.helper.app.createAppAdb
@@ -49,6 +50,7 @@ import com.floatingmuseum.android.test.helper.device.ScreenRecordFloatingButton
 import com.floatingmuseum.android.test.helper.device.SystemProperty
 import com.floatingmuseum.android.test.helper.device.createDeviceAdb
 import com.floatingmuseum.android.test.helper.device.DeviceTestPanel
+import com.floatingmuseum.android.test.helper.device.DeviceTestPanelState
 import com.floatingmuseum.android.test.helper.device.displayLabel
 import com.floatingmuseum.android.test.helper.devicelog.DeviceLogPanel
 import com.floatingmuseum.android.test.helper.devicelog.LogCaptureFloatingButton
@@ -70,6 +72,7 @@ import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.localization.unknownError
 import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
 import com.floatingmuseum.android.test.helper.settings.SettingsModuleContent
+import com.floatingmuseum.android.test.helper.settings.SettingsModuleState
 import com.floatingmuseum.android.test.helper.getCurrentTimeFormatted
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -120,6 +123,9 @@ fun App() {
         var commandLog by remember { mutableStateOf<List<String>>(emptyList()) }
         var bottomPanelHeightPx by remember { mutableStateOf<Float?>(null) }
         var selectedTestModule by remember { mutableStateOf(TestModule.Device) }
+        var deviceTestPanelState by remember { mutableStateOf(DeviceTestPanelState()) }
+        var applicationTestPanelState by remember { mutableStateOf(ApplicationTestPanelState()) }
+        var settingsModuleState by remember { mutableStateOf(SettingsModuleState()) }
         var thirdPartyApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
         var systemApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
         var thirdPartyLoadedSerial by remember { mutableStateOf<String?>(null) }
@@ -225,6 +231,11 @@ fun App() {
             applicationDetailPackageName = null
             applicationDetailSections = emptyMap()
             loadingApplicationDetailSection = null
+            applicationTestPanelState = applicationTestPanelState.copy(
+                selectedAppPackageName = null,
+                selectedDetailSection = ApplicationDetailSection.BASIC,
+                detailSearchQuery = "",
+            )
             deviceSystemInfo = null
             systemProperties = emptyList()
             deviceSystemInfoLoadedSerial = null
@@ -428,6 +439,11 @@ fun App() {
                     applicationDetailPackageName = null
                     applicationDetailSections = emptyMap()
                     loadingApplicationDetailSection = null
+                    applicationTestPanelState = applicationTestPanelState.copy(
+                        selectedAppPackageName = null,
+                        selectedDetailSection = ApplicationDetailSection.BASIC,
+                        detailSearchQuery = "",
+                    )
                     deviceSystemInfo = null
                     systemProperties = emptyList()
                     deviceSystemInfoLoadedSerial = null
@@ -1606,6 +1622,8 @@ fun App() {
                                             }
                                         }
                                     },
+                                    state = deviceTestPanelState,
+                                    onStateChange = { deviceTestPanelState = it },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -1698,12 +1716,16 @@ fun App() {
                                     onLoadApplicationDetail = ::loadApplicationDetail,
                                     onTestIntent = ::openIntentTestFromApplicationDetail,
                                     isRunning = isRunning,
+                                    state = applicationTestPanelState,
+                                    onStateChange = { applicationTestPanelState = it },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
 
                             TestModule.Settings -> {
                                 SettingsModuleContent(
+                                    state = settingsModuleState,
+                                    onStateChange = { settingsModuleState = it },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -1740,6 +1762,11 @@ fun App() {
                                     applicationDetailPackageName = null
                                     applicationDetailSections = emptyMap()
                                     loadingApplicationDetailSection = null
+                                    applicationTestPanelState = applicationTestPanelState.copy(
+                                        selectedAppPackageName = null,
+                                        selectedDetailSection = ApplicationDetailSection.BASIC,
+                                        detailSearchQuery = "",
+                                    )
 
                                     deviceSystemInfo = null
                                     systemProperties = emptyList()

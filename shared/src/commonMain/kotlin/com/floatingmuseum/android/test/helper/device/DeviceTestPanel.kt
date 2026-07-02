@@ -30,10 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -45,13 +42,22 @@ import com.floatingmuseum.android.test.helper.AndroidDevice
 import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 
-private enum class InfoSection {
+enum class DeviceInfoSection {
     BASIC,
     HARDWARE,
     SCREEN,
     BATTERY,
     PROPERTIES
 }
+
+data class DeviceTestPanelState(
+    val searchQuery: String = "",
+    val selectedSection: DeviceInfoSection = DeviceInfoSection.BASIC,
+    val mockScreenSize: String = "",
+    val mockScreenDensity: String = "",
+    val mockBatteryLevel: String = "",
+    val mockBatteryTemperature: String = "",
+)
 
 @Composable
 fun DeviceTestPanel(
@@ -80,11 +86,13 @@ fun DeviceTestPanel(
     onBatteryControl: ((args: List<String>) -> Unit)? = null,
     onScreenSizeControl: ((String) -> Unit)? = null,
     onScreenDensityControl: ((String) -> Unit)? = null,
+    state: DeviceTestPanelState = DeviceTestPanelState(),
+    onStateChange: (DeviceTestPanelState) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val strings = rememberAppStrings()
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedSection by remember { mutableStateOf(InfoSection.BASIC) }
+    val searchQuery = state.searchQuery
+    val selectedSection = state.selectedSection
 
     val filteredProperties = remember(systemProperties, searchQuery) {
         val query = searchQuery.trim().lowercase()
@@ -132,17 +140,17 @@ fun DeviceTestPanel(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        InfoSection.values().forEach { section ->
+                        DeviceInfoSection.values().forEach { section ->
                             val isSelected = selectedSection == section
                             val title = when (section) {
-                                InfoSection.BASIC -> strings.t("device.info.basic")
-                                InfoSection.HARDWARE -> strings.t("device.info.hardware_label")
-                                InfoSection.SCREEN -> strings.t("device.display")
-                                InfoSection.BATTERY -> strings.t("device.battery")
-                                InfoSection.PROPERTIES -> strings.t("device.properties")
+                                DeviceInfoSection.BASIC -> strings.t("device.info.basic")
+                                DeviceInfoSection.HARDWARE -> strings.t("device.info.hardware_label")
+                                DeviceInfoSection.SCREEN -> strings.t("device.display")
+                                DeviceInfoSection.BATTERY -> strings.t("device.battery")
+                                DeviceInfoSection.PROPERTIES -> strings.t("device.properties")
                             }
                             
-                            val isSecProperties = section == InfoSection.PROPERTIES
+                            val isSecProperties = section == DeviceInfoSection.PROPERTIES
                             val isLoading = if (isSecProperties) isLoadingProperties else isLoadingInfo
                             val onRefresh = if (isSecProperties) onRefreshProperties else onRefreshInfo
 
@@ -154,13 +162,13 @@ fun DeviceTestPanel(
                                     )
                                     .clickable {
                                         if (isSelected) {
-                                            if (!isLoading && !isRunning && hasReadyDevice) {
-                                                onRefresh()
-                                            }
-                                        } else {
-                                            selectedSection = section
+                                        if (!isLoading && !isRunning && hasReadyDevice) {
+                                            onRefresh()
                                         }
+                                    } else {
+                                        onStateChange(state.copy(selectedSection = section))
                                     }
+                                }
                                     .border(
                                         width = 1.dp,
                                         color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
@@ -220,7 +228,7 @@ fun DeviceTestPanel(
                                 .padding(16.dp)
                         ) {
                             when (selectedSection) {
-                                InfoSection.BASIC -> {
+                                DeviceInfoSection.BASIC -> {
                                     if (systemInfo != null) {
                                         Column(
                                             modifier = Modifier
@@ -253,7 +261,7 @@ fun DeviceTestPanel(
                                     }
                                 }
 
-                                InfoSection.HARDWARE -> {
+                                DeviceInfoSection.HARDWARE -> {
                                     if (systemInfo != null) {
                                         Column(
                                             modifier = Modifier
@@ -325,7 +333,7 @@ fun DeviceTestPanel(
                                     }
                                 }
 
-                                InfoSection.SCREEN -> {
+                                DeviceInfoSection.SCREEN -> {
                                     if (systemInfo != null) {
                                         Column(
                                             modifier = Modifier
@@ -397,7 +405,6 @@ fun DeviceTestPanel(
                                                         )
 
                                                         if (onScreenSizeControl != null) {
-                                                            var mockSizeText by remember { mutableStateOf("") }
                                                             Row(
                                                                 modifier = Modifier.fillMaxWidth(),
                                                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -409,19 +416,21 @@ fun DeviceTestPanel(
                                                                     verticalAlignment = Alignment.CenterVertically
                                                                 ) {
                                                                     OutlinedTextField(
-                                                                        value = mockSizeText,
-                                                                        onValueChange = { mockSizeText = it },
+                                                                        value = state.mockScreenSize,
+                                                                        onValueChange = {
+                                                                            onStateChange(state.copy(mockScreenSize = it))
+                                                                        },
                                                                         modifier = Modifier.width(150.dp),
                                                                         singleLine = true,
                                                                         placeholder = { Text(strings.t("device.wxh")) }
                                                                     )
                                                                     Button(
                                                                         onClick = {
-                                                                            if (mockSizeText.trim().isNotEmpty()) {
-                                                                                onScreenSizeControl(mockSizeText.trim())
+                                                                            if (state.mockScreenSize.trim().isNotEmpty()) {
+                                                                                onScreenSizeControl(state.mockScreenSize.trim())
                                                                             }
                                                                         },
-                                                                        enabled = !isRunning && hasReadyDevice && mockSizeText.isNotEmpty(),
+                                                                        enabled = !isRunning && hasReadyDevice && state.mockScreenSize.isNotEmpty(),
                                                                         modifier = Modifier.height(36.dp)
                                                                     ) {
                                                                         Text(strings.t("common.change"))
@@ -440,7 +449,6 @@ fun DeviceTestPanel(
 
                                                         if (onScreenDensityControl != null) {
                                                             Spacer(modifier = Modifier.height(8.dp))
-                                                            var mockDensityText by remember { mutableStateOf("") }
                                                             Row(
                                                                 modifier = Modifier.fillMaxWidth(),
                                                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -452,19 +460,21 @@ fun DeviceTestPanel(
                                                                     verticalAlignment = Alignment.CenterVertically
                                                                 ) {
                                                                     OutlinedTextField(
-                                                                        value = mockDensityText,
-                                                                        onValueChange = { mockDensityText = it.filter { c -> c.isDigit() } },
+                                                                        value = state.mockScreenDensity,
+                                                                        onValueChange = {
+                                                                            onStateChange(state.copy(mockScreenDensity = it.filter { c -> c.isDigit() }))
+                                                                        },
                                                                         modifier = Modifier.width(150.dp),
                                                                         singleLine = true,
                                                                         placeholder = { Text("DPI") }
                                                                     )
                                                                     Button(
                                                                         onClick = {
-                                                                            if (mockDensityText.trim().isNotEmpty()) {
-                                                                                onScreenDensityControl(mockDensityText.trim())
+                                                                            if (state.mockScreenDensity.trim().isNotEmpty()) {
+                                                                                onScreenDensityControl(state.mockScreenDensity.trim())
                                                                             }
                                                                         },
-                                                                        enabled = !isRunning && hasReadyDevice && mockDensityText.isNotEmpty(),
+                                                                        enabled = !isRunning && hasReadyDevice && state.mockScreenDensity.isNotEmpty(),
                                                                         modifier = Modifier.height(36.dp)
                                                                     ) {
                                                                         Text(strings.t("common.change"))
@@ -497,7 +507,7 @@ fun DeviceTestPanel(
                                     }
                                 }
 
-                                InfoSection.BATTERY -> {
+                                DeviceInfoSection.BATTERY -> {
                                     if (systemInfo != null) {
                                         Column(
                                             modifier = Modifier
@@ -589,7 +599,6 @@ fun DeviceTestPanel(
                                                             }
                                                         }
 
-                                                        var mockLevelText by remember { mutableStateOf("") }
                                                         Row(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -601,20 +610,22 @@ fun DeviceTestPanel(
                                                                 verticalAlignment = Alignment.CenterVertically
                                                             ) {
                                                                 OutlinedTextField(
-                                                                    value = mockLevelText,
-                                                                    onValueChange = { mockLevelText = it.filter { c -> c.isDigit() } },
+                                                                    value = state.mockBatteryLevel,
+                                                                    onValueChange = {
+                                                                        onStateChange(state.copy(mockBatteryLevel = it.filter { c -> c.isDigit() }))
+                                                                    },
                                                                     modifier = Modifier.width(100.dp),
                                                                     singleLine = true,
                                                                     placeholder = { Text("0-100") }
                                                                 )
                                                                 Button(
                                                                     onClick = {
-                                                                        val lvl = mockLevelText.toIntOrNull()
+                                                                        val lvl = state.mockBatteryLevel.toIntOrNull()
                                                                         if (lvl != null && lvl in 0..100) {
                                                                             onBatteryControl(listOf("set", "level", lvl.toString()))
                                                                         }
                                                                     },
-                                                                    enabled = !isRunning && hasReadyDevice && mockLevelText.isNotEmpty(),
+                                                                    enabled = !isRunning && hasReadyDevice && state.mockBatteryLevel.isNotEmpty(),
                                                                     modifier = Modifier.height(36.dp)
                                                                 ) {
                                                                     Text(strings.t("device.set"))
@@ -622,7 +633,6 @@ fun DeviceTestPanel(
                                                             }
                                                         }
 
-                                                        var mockTempText by remember { mutableStateOf("") }
                                                         Row(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -634,21 +644,23 @@ fun DeviceTestPanel(
                                                                 verticalAlignment = Alignment.CenterVertically
                                                             ) {
                                                                 OutlinedTextField(
-                                                                    value = mockTempText,
-                                                                    onValueChange = { mockTempText = it },
+                                                                    value = state.mockBatteryTemperature,
+                                                                    onValueChange = {
+                                                                        onStateChange(state.copy(mockBatteryTemperature = it))
+                                                                    },
                                                                     modifier = Modifier.width(100.dp),
                                                                     singleLine = true,
                                                                     placeholder = { Text(strings.t("device.example_32")) }
                                                                 )
                                                                 Button(
                                                                     onClick = {
-                                                                        val tempDouble = mockTempText.toDoubleOrNull()
+                                                                        val tempDouble = state.mockBatteryTemperature.toDoubleOrNull()
                                                                         if (tempDouble != null) {
                                                                             val tempInt = (tempDouble * 10).toInt()
                                                                             onBatteryControl(listOf("set", "temp", tempInt.toString()))
                                                                         }
                                                                     },
-                                                                    enabled = !isRunning && hasReadyDevice && mockTempText.isNotEmpty(),
+                                                                    enabled = !isRunning && hasReadyDevice && state.mockBatteryTemperature.isNotEmpty(),
                                                                     modifier = Modifier.height(36.dp)
                                                                 ) {
                                                                     Text(strings.t("device.set"))
@@ -720,14 +732,14 @@ fun DeviceTestPanel(
                                     }
                                 }
 
-                                InfoSection.PROPERTIES -> {
+                                DeviceInfoSection.PROPERTIES -> {
                                     Column(
                                         modifier = Modifier.fillMaxSize(),
                                         verticalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
                                         OutlinedTextField(
                                             value = searchQuery,
-                                            onValueChange = { searchQuery = it },
+                                            onValueChange = { onStateChange(state.copy(searchQuery = it)) },
                                             label = { Text(strings.t("device.search_properties_for_example_ro_product")) },
                                             modifier = Modifier.fillMaxWidth(),
                                             singleLine = true

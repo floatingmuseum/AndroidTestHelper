@@ -26,12 +26,18 @@ enum class SettingCategory {
     FileManager,
 }
 
+data class SettingsModuleState(
+    val selectedCategory: SettingCategory = SettingCategory.General,
+)
+
 @Composable
 fun SettingsModuleContent(
+    state: SettingsModuleState = SettingsModuleState(),
+    onStateChange: (SettingsModuleState) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val strings = rememberAppStrings()
-    var selectedCategory by remember { mutableStateOf(SettingCategory.General) }
+    val selectedCategory = state.selectedCategory
     
     Row(
         modifier = modifier
@@ -70,7 +76,7 @@ fun SettingsModuleContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
-                            .clickable { selectedCategory = category },
+                            .clickable { onStateChange(state.copy(selectedCategory = category)) },
                         shape = MaterialTheme.shapes.medium,
                         color = backgroundColor,
                         contentColor = contentColor

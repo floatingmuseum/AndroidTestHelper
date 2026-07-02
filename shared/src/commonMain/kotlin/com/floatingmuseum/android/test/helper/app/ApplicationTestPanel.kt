@@ -64,6 +64,15 @@ import com.floatingmuseum.android.test.helper.settings.AppLanguage
 private val SearchMatchBackground = Color(0xFFFFFF00)
 private val SearchMatchContent = Color(0xFF111111)
 
+data class ApplicationTestPanelState(
+    val isThirdPartyExpanded: Boolean = true,
+    val isSystemExpanded: Boolean = true,
+    val searchQuery: String = "",
+    val selectedAppPackageName: String? = null,
+    val selectedDetailSection: ApplicationDetailSection = ApplicationDetailSection.BASIC,
+    val detailSearchQuery: String = "",
+)
+
 @Composable
 fun ApplicationTestPanel(
     thirdPartyApps: List<InstalledAppInfo>,
@@ -88,22 +97,20 @@ fun ApplicationTestPanel(
     onLoadApplicationDetail: (InstalledAppInfo, ApplicationDetailSection) -> Unit,
     onTestIntent: (InstalledAppInfo, ApplicationDetailSection, String) -> Unit,
     isRunning: Boolean,
+    state: ApplicationTestPanelState = ApplicationTestPanelState(),
+    onStateChange: (ApplicationTestPanelState) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val strings = rememberAppStrings()
-    var isThirdPartyExpanded by remember { mutableStateOf(true) }
-    var isSystemExpanded by remember { mutableStateOf(true) }
-    var appSearchQuery by remember { mutableStateOf("") }
-    var selectedAppPackageName by remember(selectedDevice?.transportId) { mutableStateOf<String?>(null) }
-    val filteredThirdPartyApps = remember(thirdPartyApps, appSearchQuery) {
-        filterInstalledApps(thirdPartyApps, appSearchQuery)
+    val filteredThirdPartyApps = remember(thirdPartyApps, state.searchQuery) {
+        filterInstalledApps(thirdPartyApps, state.searchQuery)
     }
-    val filteredSystemApps = remember(systemApps, appSearchQuery) {
-        filterInstalledApps(systemApps, appSearchQuery)
+    val filteredSystemApps = remember(systemApps, state.searchQuery) {
+        filterInstalledApps(systemApps, state.searchQuery)
     }
     val allApps = thirdPartyApps + systemApps
-    val selectedApp = allApps.firstOrNull { it.packageName == selectedAppPackageName }
-    val isSearching = appSearchQuery.trim().isNotEmpty()
+    val selectedApp = allApps.firstOrNull { it.packageName == state.selectedAppPackageName }
+    val isSearching = state.searchQuery.trim().isNotEmpty()
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
@@ -114,8 +121,8 @@ fun ApplicationTestPanel(
         ) {
             if (selectedApp == null) {
                 ApplicationListHeader(
-                    searchQuery = appSearchQuery,
-                    onSearchQueryChange = { appSearchQuery = it },
+                    searchQuery = state.searchQuery,
+                    onSearchQueryChange = { onStateChange(state.copy(searchQuery = it)) },
                     thirdPartyApps = thirdPartyApps,
                     systemApps = systemApps,
                     filteredThirdPartyApps = filteredThirdPartyApps,
@@ -134,7 +141,7 @@ fun ApplicationTestPanel(
                 selectedApp != null -> {
                     ApplicationDetailPanel(
                         app = selectedApp,
-                        onBack = { selectedAppPackageName = null },
+                        onBack = { onStateChange(state.copy(selectedAppPackageName = null)) },
                         onAction = { action -> onApplicationAction(selectedApp, action) },
                         detailPackageName = applicationDetailPackageName,
                         detailSections = applicationDetailSections,
@@ -142,6 +149,17 @@ fun ApplicationTestPanel(
                         onLoadDetailSection = { section -> onLoadApplicationDetail(selectedApp, section) },
                         onTestIntent = { section, className -> onTestIntent(selectedApp, section, className) },
                         isRunning = isRunning,
+                        selectedDetailSection = state.selectedDetailSection,
+                        onSelectedDetailSectionChange = { section ->
+                            onStateChange(
+                                state.copy(
+                                    selectedDetailSection = section,
+                                    detailSearchQuery = "",
+                                )
+                            )
+                        },
+                        detailSearchQuery = state.detailSearchQuery,
+                        onDetailSearchQueryChange = { onStateChange(state.copy(detailSearchQuery = it)) },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -161,12 +179,14 @@ fun ApplicationTestPanel(
                                 title = strings.t("app.third_party_apps"),
                                 count = if (thirdPartyApps.isNotEmpty()) filteredThirdPartyApps.size else null,
                                 isLoading = isLoadingThirdParty,
-                                isExpanded = isThirdPartyExpanded,
+                                isExpanded = state.isThirdPartyExpanded,
                                 onRefresh = onRefreshThirdParty,
-                                onToggle = { isThirdPartyExpanded = !isThirdPartyExpanded },
+                                onToggle = {
+                                    onStateChange(state.copy(isThirdPartyExpanded = !state.isThirdPartyExpanded))
+                                },
                             )
                         }
-                        if (isThirdPartyExpanded) {
+                        if (state.isThirdPartyExpanded) {
                             if (isLoadingThirdParty) {
                                 item(
                                     key = "third-party-loading",
@@ -223,8 +243,16 @@ fun ApplicationTestPanel(
                                 ) { app ->
                                     ApplicationTile(
                                         app = app,
-                                        searchQuery = appSearchQuery,
-                                        onClick = { selectedAppPackageName = app.packageName },
+                                        searchQuery = state.searchQuery,
+                                        onClick = {
+                                            onStateChange(
+                                                state.copy(
+                                                    selectedAppPackageName = app.packageName,
+                                                    selectedDetailSection = ApplicationDetailSection.BASIC,
+                                                    detailSearchQuery = "",
+                                                )
+                                            )
+                                        },
                                     )
                                 }
                             }
@@ -238,13 +266,15 @@ fun ApplicationTestPanel(
                                 title = strings.t("app.system_apps"),
                                 count = if (systemApps.isNotEmpty()) filteredSystemApps.size else null,
                                 isLoading = isLoadingSystem,
-                                isExpanded = isSystemExpanded,
+                                isExpanded = state.isSystemExpanded,
                                 cacheTime = systemAppsCacheFormattedTime,
                                 onRefresh = onRefreshSystem,
-                                onToggle = { isSystemExpanded = !isSystemExpanded },
+                                onToggle = {
+                                    onStateChange(state.copy(isSystemExpanded = !state.isSystemExpanded))
+                                },
                             )
                         }
-                        if (isSystemExpanded) {
+                        if (state.isSystemExpanded) {
                             if (isLoadingSystem) {
                                 item(
                                     key = "system-loading",
@@ -301,8 +331,16 @@ fun ApplicationTestPanel(
                                 ) { app ->
                                     ApplicationTile(
                                         app = app,
-                                        searchQuery = appSearchQuery,
-                                        onClick = { selectedAppPackageName = app.packageName },
+                                        searchQuery = state.searchQuery,
+                                        onClick = {
+                                            onStateChange(
+                                                state.copy(
+                                                    selectedAppPackageName = app.packageName,
+                                                    selectedDetailSection = ApplicationDetailSection.BASIC,
+                                                    detailSearchQuery = "",
+                                                )
+                                            )
+                                        },
                                     )
                                 }
                             }
@@ -561,12 +599,15 @@ private fun ApplicationDetailPanel(
     onLoadDetailSection: (ApplicationDetailSection) -> Unit,
     onTestIntent: (ApplicationDetailSection, String) -> Unit,
     isRunning: Boolean,
+    selectedDetailSection: ApplicationDetailSection,
+    onSelectedDetailSectionChange: (ApplicationDetailSection) -> Unit,
+    detailSearchQuery: String,
+    onDetailSearchQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val strings = rememberAppStrings()
     var showDangerousActionConfirmDialog by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<String?>(null) }
-    var selectedDetailSection by remember(app.packageName) { mutableStateOf(ApplicationDetailSection.BASIC) }
     val visibleDetailSections = if (detailPackageName == app.packageName) {
         detailSections
     } else {
@@ -659,10 +700,12 @@ private fun ApplicationDetailPanel(
                             onLoadDetailSection(section)
                         }
                     } else {
-                        selectedDetailSection = section
+                        onSelectedDetailSectionChange(section)
                     }
                 },
                 onTestIntent = onTestIntent,
+                detailSearchQuery = detailSearchQuery,
+                onDetailSearchQueryChange = onDetailSearchQueryChange,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
@@ -755,10 +798,11 @@ private fun ApplicationDetailInfoPanel(
     isRunning: Boolean,
     onSelectSection: (ApplicationDetailSection) -> Unit,
     onTestIntent: (ApplicationDetailSection, String) -> Unit,
+    detailSearchQuery: String,
+    onDetailSearchQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val strings = rememberAppStrings()
-    var detailSearchQuery by remember(selectedSection) { mutableStateOf("") }
     val isSearchableSection = selectedSection.isSearchableDetailSection()
     val isComponentSection = selectedSection.isApplicationComponentSection()
 
@@ -979,7 +1023,7 @@ private fun ApplicationDetailInfoPanel(
                             if (isSearchableSection) {
                                 OutlinedTextField(
                                     value = detailSearchQuery,
-                                    onValueChange = { detailSearchQuery = it },
+                                    onValueChange = onDetailSearchQueryChange,
                                     label = {
                                         Text(
                                             if (selectedSection == ApplicationDetailSection.PERMISSIONS) {
