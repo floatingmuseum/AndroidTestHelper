@@ -31,20 +31,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.floatingmuseum.android.test.helper.AndroidDevice
 import com.floatingmuseum.android.test.helper.app.InstalledAppInfo
+import com.floatingmuseum.android.test.helper.app.filterInstalledApps
 import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
+
+private val SearchMatchBackground = Color(0xFFFFFF00)
+private val SearchMatchContent = Color(0xFF111111)
 
 @Composable
 internal fun IntentTestPanel(
     selectedDevice: AndroidDevice?,
     appCandidates: List<InstalledAppInfo>,
+    classNameCandidates: List<String>,
     form: IntentTestForm,
     onFormChange: (IntentTestForm) -> Unit,
     templateName: String,
@@ -86,6 +95,7 @@ internal fun IntentTestPanel(
                 IntentFormColumn(
                     selectedDevice = selectedDevice,
                     appCandidates = appCandidates,
+                    classNameCandidates = classNameCandidates,
                     form = form,
                     onFormChange = onFormChange,
                     validationResult = validationResult,
@@ -119,6 +129,7 @@ internal fun IntentTestPanel(
                 IntentFormColumn(
                     selectedDevice = selectedDevice,
                     appCandidates = appCandidates,
+                    classNameCandidates = classNameCandidates,
                     form = form,
                     onFormChange = onFormChange,
                     validationResult = validationResult,
@@ -257,6 +268,7 @@ private fun TemplateColumn(
 private fun IntentFormColumn(
     selectedDevice: AndroidDevice?,
     appCandidates: List<InstalledAppInfo>,
+    classNameCandidates: List<String>,
     form: IntentTestForm,
     onFormChange: (IntentTestForm) -> Unit,
     validationResult: IntentValidationResult,
@@ -311,6 +323,7 @@ private fun IntentFormColumn(
 
             PackageFields(
                 appCandidates = appCandidates,
+                classNameCandidates = classNameCandidates,
                 form = form,
                 onFormChange = onFormChange,
             )
@@ -389,11 +402,25 @@ private fun ModeSwitcher(
 @Composable
 private fun PackageFields(
     appCandidates: List<InstalledAppInfo>,
+    classNameCandidates: List<String>,
     form: IntentTestForm,
     onFormChange: (IntentTestForm) -> Unit,
 ) {
     val strings = rememberAppStrings()
     var showAppPicker by remember { mutableStateOf(false) }
+    var showClassPicker by remember { mutableStateOf(false) }
+    var appPickerSearchQuery by remember { mutableStateOf("") }
+    val filteredAppCandidates = remember(appCandidates, appPickerSearchQuery) {
+        filterInstalledApps(appCandidates, appPickerSearchQuery)
+            .sortedWith(compareBy({ it.appName.lowercase() }, { it.packageName.lowercase() }))
+    }
+    val classOptions = remember(classNameCandidates) {
+        classNameCandidates
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -413,13 +440,25 @@ private fun PackageFields(
             Text(strings.t("intent.select_app"))
         }
     }
-    OutlinedTextField(
-        value = form.className,
-        onValueChange = { onFormChange(form.copy(className = it)) },
-        label = { Text(strings.t("intent.class_name")) },
-        singleLine = true,
+    Row(
         modifier = Modifier.fillMaxWidth(),
-    )
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedTextField(
+            value = form.className,
+            onValueChange = { onFormChange(form.copy(className = it)) },
+            label = { Text(strings.t("intent.class_name")) },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(
+            onClick = { showClassPicker = true },
+            enabled = classOptions.isNotEmpty(),
+        ) {
+            Text(strings.t("intent.select_class_name"))
+        }
+    }
 
     if (showAppPicker) {
         AlertDialog(
@@ -427,26 +466,60 @@ private fun PackageFields(
             title = { Text(strings.t("intent.select_app")) },
             text = {
                 Column(
-                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    appCandidates.sortedBy { it.appName.lowercase() }.forEach { app ->
-                        TextButton(
-                            onClick = {
-                                onFormChange(form.copy(packageName = app.packageName))
-                                showAppPicker = false
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(app.appName.ifBlank { app.packageName }, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(
-                                    text = app.packageName,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+                    OutlinedTextField(
+                        value = appPickerSearchQuery,
+                        onValueChange = { appPickerSearchQuery = it },
+                        label = { Text(strings.t("app.search_app_name_or_package")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (filteredAppCandidates.isEmpty()) {
+                            Text(
+                                text = strings.t("intent.no_matching_apps"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            filteredAppCandidates.forEach { app ->
+                                TextButton(
+                                    onClick = {
+                                        onFormChange(
+                                            form.copy(
+                                                packageName = app.packageName,
+                                                className = form.className
+                                                    .takeIf { form.packageName == app.packageName }
+                                                    .orEmpty(),
+                                            )
+                                        )
+                                        showAppPicker = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                            text = highlightedSearchText(
+                                                app.appName.ifBlank { app.packageName },
+                                                appPickerSearchQuery,
+                                            ),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = highlightedSearchText(app.packageName, appPickerSearchQuery),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -454,6 +527,42 @@ private fun PackageFields(
             },
             confirmButton = {
                 TextButton(onClick = { showAppPicker = false }) {
+                    Text(strings.t("common.cancel"))
+                }
+            },
+        )
+    }
+
+    if (showClassPicker) {
+        AlertDialog(
+            onDismissRequest = { showClassPicker = false },
+            title = { Text(strings.t("intent.select_class_name")) },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    classOptions.forEach { className ->
+                        TextButton(
+                            onClick = {
+                                onFormChange(form.copy(className = className))
+                                showClassPicker = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = className,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showClassPicker = false }) {
                     Text(strings.t("common.cancel"))
                 }
             },
@@ -467,48 +576,79 @@ private fun FlagSection(
     onFormChange: (IntentTestForm) -> Unit,
 ) {
     val strings = rememberAppStrings()
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabels = when (form.mode) {
+        IntentCommandMode.Start -> form.startFlags.map { strings.t(intentStartFlagLabelKey(it)) }
+        IntentCommandMode.Broadcast -> form.broadcastFlags.map { strings.t(intentBroadcastFlagLabelKey(it)) }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = strings.t("intent.flags"),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
         )
-        when (form.mode) {
-            IntentCommandMode.Start -> IntentStartFlag.entries.forEach { flag ->
-                FlagRow(
-                    checked = flag in form.startFlags,
-                    label = strings.t(intentStartFlagLabelKey(flag)),
-                    onCheckedChange = { checked ->
-                        val next = if (checked) form.startFlags + flag else form.startFlags - flag
-                        onFormChange(form.copy(startFlags = next))
-                    },
+        Box {
+            OutlinedButton(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = selectedLabels.joinToString(", ").ifBlank { strings.t("intent.flags.none_selected") },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            IntentCommandMode.Broadcast -> IntentBroadcastFlag.entries.forEach { flag ->
-                FlagRow(
-                    checked = flag in form.broadcastFlags,
-                    label = strings.t(intentBroadcastFlagLabelKey(flag)),
-                    onCheckedChange = { checked ->
-                        val next = if (checked) form.broadcastFlags + flag else form.broadcastFlags - flag
-                        onFormChange(form.copy(broadcastFlags = next))
-                    },
-                )
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                when (form.mode) {
+                    IntentCommandMode.Start -> IntentStartFlag.entries.forEach { flag ->
+                        val checked = flag in form.startFlags
+                        DropdownMenuItem(
+                            text = {
+                                FlagMenuItem(
+                                    checked = checked,
+                                    label = strings.t(intentStartFlagLabelKey(flag)),
+                                )
+                            },
+                            onClick = {
+                                val next = if (checked) form.startFlags - flag else form.startFlags + flag
+                                onFormChange(form.copy(startFlags = next))
+                            },
+                        )
+                    }
+                    IntentCommandMode.Broadcast -> IntentBroadcastFlag.entries.forEach { flag ->
+                        val checked = flag in form.broadcastFlags
+                        DropdownMenuItem(
+                            text = {
+                                FlagMenuItem(
+                                    checked = checked,
+                                    label = strings.t(intentBroadcastFlagLabelKey(flag)),
+                                )
+                            },
+                            onClick = {
+                                val next = if (checked) form.broadcastFlags - flag else form.broadcastFlags + flag
+                                onFormChange(form.copy(broadcastFlags = next))
+                            },
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun FlagRow(
+private fun FlagMenuItem(
     checked: Boolean,
     label: String,
-    onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Checkbox(checked = checked, onCheckedChange = null)
         Text(label, style = MaterialTheme.typography.bodyMedium)
     }
 }
@@ -724,6 +864,41 @@ private fun intentStartFlagLabelKey(flag: IntentStartFlag): String = when (flag)
 private fun intentBroadcastFlagLabelKey(flag: IntentBroadcastFlag): String = when (flag) {
     IntentBroadcastFlag.ReceiverForeground -> "intent.flag.receiver_foreground"
     IntentBroadcastFlag.ReceiverIncludeBackground -> "intent.flag.receiver_include_background"
+}
+
+private fun highlightedSearchText(
+    text: String,
+    query: String,
+) = buildAnnotatedString {
+    val keyword = query.trim()
+    if (keyword.isEmpty()) {
+        append(text)
+        return@buildAnnotatedString
+    }
+
+    var cursor = 0
+    while (cursor < text.length) {
+        val matchStart = text.indexOf(keyword, startIndex = cursor, ignoreCase = true)
+        if (matchStart < 0) {
+            append(text.substring(cursor))
+            break
+        }
+
+        if (matchStart > cursor) {
+            append(text.substring(cursor, matchStart))
+        }
+
+        val matchEnd = matchStart + keyword.length
+        withStyle(
+            SpanStyle(
+                background = SearchMatchBackground,
+                color = SearchMatchContent,
+            )
+        ) {
+            append(text.substring(matchStart, matchEnd))
+        }
+        cursor = matchEnd
+    }
 }
 
 @Composable

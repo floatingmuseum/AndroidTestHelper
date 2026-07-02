@@ -34,6 +34,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -84,6 +85,7 @@ fun ApplicationTestPanel(
     applicationDetailSections: Map<ApplicationDetailSection, ApplicationDetailContent>,
     loadingApplicationDetailSection: ApplicationDetailSection?,
     onLoadApplicationDetail: (InstalledAppInfo, ApplicationDetailSection) -> Unit,
+    onTestIntent: (InstalledAppInfo, ApplicationDetailSection, String) -> Unit,
     isRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -137,6 +139,7 @@ fun ApplicationTestPanel(
                         detailSections = applicationDetailSections,
                         loadingDetailSection = loadingApplicationDetailSection,
                         onLoadDetailSection = { section -> onLoadApplicationDetail(selectedApp, section) },
+                        onTestIntent = { section, className -> onTestIntent(selectedApp, section, className) },
                         isRunning = isRunning,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -555,6 +558,7 @@ private fun ApplicationDetailPanel(
     detailSections: Map<ApplicationDetailSection, ApplicationDetailContent>,
     loadingDetailSection: ApplicationDetailSection?,
     onLoadDetailSection: (ApplicationDetailSection) -> Unit,
+    onTestIntent: (ApplicationDetailSection, String) -> Unit,
     isRunning: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -657,6 +661,7 @@ private fun ApplicationDetailPanel(
                         selectedDetailSection = section
                     }
                 },
+                onTestIntent = onTestIntent,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
@@ -748,6 +753,7 @@ private fun ApplicationDetailInfoPanel(
     loadingSection: ApplicationDetailSection?,
     isRunning: Boolean,
     onSelectSection: (ApplicationDetailSection) -> Unit,
+    onTestIntent: (ApplicationDetailSection, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val strings = rememberAppStrings()
@@ -959,6 +965,11 @@ private fun ApplicationDetailInfoPanel(
                                     ApplicationDetailRow(
                                         item = item,
                                         searchQuery = detailSearchQuery.takeIf { isSearchableSection }.orEmpty(),
+                                        onTestIntent = item.intentClassName
+                                            ?.takeIf { selectedSection.canOpenIntentTest() }
+                                            ?.let { className ->
+                                                { onTestIntent(selectedSection, className) }
+                                            },
                                     )
                                 }
                             }
@@ -974,6 +985,7 @@ internal data class DisplayApplicationDetailItem(
     val title: String,
     val body: String,
     val searchableName: String,
+    val intentClassName: String? = null,
 )
 
 internal fun ApplicationDetailContent.toDisplayDetailItems(
@@ -1000,6 +1012,7 @@ internal fun ApplicationDetailItem.toDisplayDetailItem(
                 title = title,
                 body = removeDetailAttribute(value, "name").ifBlank { localized("app.declared") },
                 searchableName = title,
+                intentClassName = title.takeIf { it.isNotBlank() },
             )
         }
         section == ApplicationDetailSection.PERMISSIONS -> {
@@ -1142,6 +1155,11 @@ private fun ApplicationDetailSection.isApplicationComponentSection(): Boolean {
         this == ApplicationDetailSection.CONTENT_PROVIDERS
 }
 
+private fun ApplicationDetailSection.canOpenIntentTest(): Boolean {
+    return this == ApplicationDetailSection.ACTIVITIES ||
+        this == ApplicationDetailSection.BROADCAST_RECEIVERS
+}
+
 private fun extractDetailAttribute(
     text: String,
     attributeName: String,
@@ -1167,7 +1185,9 @@ private fun removeDetailAttribute(
 private fun ApplicationDetailRow(
     item: DisplayApplicationDetailItem,
     searchQuery: String,
+    onTestIntent: (() -> Unit)?,
 ) {
+    val strings = rememberAppStrings()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1183,13 +1203,31 @@ private fun ApplicationDetailRow(
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        SelectionContainer {
-            Text(
-                text = highlightedSearchText(item.title, searchQuery),
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SelectionContainer(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = highlightedSearchText(item.title, searchQuery),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (onTestIntent != null) {
+                OutlinedButton(
+                    onClick = onTestIntent,
+                    contentPadding = ButtonDefaults.TextButtonContentPadding,
+                    modifier = Modifier.height(32.dp),
+                ) {
+                    Text(
+                        text = strings.t("intent.test"),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
         }
         SelectionContainer {
             Text(

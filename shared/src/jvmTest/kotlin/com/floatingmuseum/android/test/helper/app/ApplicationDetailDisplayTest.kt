@@ -66,6 +66,18 @@ class ApplicationDetailDisplayTest {
     }
 
     @Test
+    fun exposesComponentClassNameForIntentTesting() = withLanguage(AppLanguage.English) {
+        val item = ApplicationDetailItem(
+            label = "com.example.app.MainActivity",
+            value = "exported=true",
+        ).toDisplayDetailItem(ApplicationDetailSection.ACTIVITIES)
+
+        assertEquals("com.example.app.MainActivity", item.title)
+        assertEquals("com.example.app.MainActivity", item.intentClassName)
+        assertEquals("exported=true", item.body)
+    }
+
+    @Test
     fun keepsUnknownPluginDetailContentUntouched() = withLanguage(AppLanguage.English) {
         val item = ApplicationDetailItem("自定义标签", "真实中文内容")
             .toDisplayDetailItem(ApplicationDetailSection.BASIC)

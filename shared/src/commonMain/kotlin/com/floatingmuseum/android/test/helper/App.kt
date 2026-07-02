@@ -39,6 +39,7 @@ import com.floatingmuseum.android.test.helper.app.createAppAdb
 import com.floatingmuseum.android.test.helper.app.displayTitle
 import com.floatingmuseum.android.test.helper.app.pluginCheckIgnoreKey
 import com.floatingmuseum.android.test.helper.app.removeInstalledApp
+import com.floatingmuseum.android.test.helper.app.toDisplayDetailItems
 import com.floatingmuseum.android.test.helper.device.DeviceSystemInfo
 import com.floatingmuseum.android.test.helper.device.DeviceQuickAction
 import com.floatingmuseum.android.test.helper.device.DeviceMirrorEndState
@@ -55,6 +56,7 @@ import com.floatingmuseum.android.test.helper.devicelog.rememberDeviceLogModuleC
 import com.floatingmuseum.android.test.helper.filemanager.FileManagerModuleContent
 import com.floatingmuseum.android.test.helper.filemanager.rememberFileManagerModuleController
 import com.floatingmuseum.android.test.helper.intent.IntentExecutionResult
+import com.floatingmuseum.android.test.helper.intent.IntentCommandMode
 import com.floatingmuseum.android.test.helper.intent.IntentTemplate
 import com.floatingmuseum.android.test.helper.intent.IntentTestForm
 import com.floatingmuseum.android.test.helper.intent.IntentTestPanel
@@ -165,6 +167,29 @@ fun App() {
         ).displayCommand
         val intentAppCandidates = remember(thirdPartyApps, systemApps) {
             (thirdPartyApps + systemApps).distinctBy { it.packageName }
+        }
+        val intentClassNameDetailSection = when (intentForm.mode) {
+            IntentCommandMode.Start -> ApplicationDetailSection.ACTIVITIES
+            IntentCommandMode.Broadcast -> ApplicationDetailSection.BROADCAST_RECEIVERS
+        }
+        val intentSelectedApp = remember(intentAppCandidates, intentForm.packageName) {
+            intentAppCandidates.firstOrNull { it.packageName == intentForm.packageName.trim() }
+        }
+        val intentClassNameCandidates = remember(
+            intentForm.packageName,
+            intentClassNameDetailSection,
+            applicationDetailPackageName,
+            applicationDetailSections,
+        ) {
+            if (intentForm.packageName.isNotBlank() && applicationDetailPackageName == intentForm.packageName.trim()) {
+                applicationDetailSections[intentClassNameDetailSection]
+                    ?.toDisplayDetailItems(intentClassNameDetailSection)
+                    ?.mapNotNull { it.intentClassName }
+                    ?.distinct()
+                    .orEmpty()
+            } else {
+                emptyList()
+            }
         }
         var clearModuleDeviceState: () -> Unit = {}
         var shouldRefreshDevicesAfterAdbNotFound by remember { mutableStateOf(false) }
@@ -311,6 +336,27 @@ fun App() {
                     isRunning = false
                 }
             }
+        }
+
+        fun openIntentTestFromApplicationDetail(
+            app: InstalledAppInfo,
+            section: ApplicationDetailSection,
+            className: String,
+        ) {
+            val mode = when (section) {
+                ApplicationDetailSection.ACTIVITIES -> IntentCommandMode.Start
+                ApplicationDetailSection.BROADCAST_RECEIVERS -> IntentCommandMode.Broadcast
+                else -> return
+            }
+            intentForm = IntentTestForm(
+                mode = mode,
+                packageName = app.packageName,
+                className = className,
+                action = "",
+            )
+            selectedTestModule = TestModule.Intent
+            statusText = localized("intent.prefilled_from_app_detail_arg0", className)
+            appendStatus(statusText)
         }
 
         val dataFillModule = rememberDataFillModuleController(
@@ -1266,7 +1312,7 @@ fun App() {
                     if (devicePropertiesLoadedSerial != deviceTransportId) {
                         loadDeviceSystemProperties(deviceTransportId)
                     }
-                } else if (selectedTestModule == TestModule.App) {
+                } else if (selectedTestModule == TestModule.App || selectedTestModule == TestModule.Intent) {
                     if (systemLoadedSerial != deviceSerial) {
                         val cached = appAdb.loadCachedSystemApps(deviceSerial)
                         if (cached != null) {
@@ -1302,7 +1348,7 @@ fun App() {
         ) {
             val deviceSerial = selectedReadyDevice?.serialNumber
             val deviceTransportId = selectedReadyDevice?.transportId
-            if (selectedTestModule == TestModule.App &&
+            if ((selectedTestModule == TestModule.App || selectedTestModule == TestModule.Intent) &&
                 deviceSerial != null &&
                 deviceTransportId != null &&
                 !isRunning &&
@@ -1323,7 +1369,7 @@ fun App() {
         ) {
             val deviceSerial = selectedReadyDevice?.serialNumber
             val deviceTransportId = selectedReadyDevice?.transportId
-            if (selectedTestModule == TestModule.App &&
+            if ((selectedTestModule == TestModule.App || selectedTestModule == TestModule.Intent) &&
                 deviceSerial != null &&
                 deviceTransportId != null &&
                 !isRunning &&
@@ -1332,6 +1378,30 @@ fun App() {
             ) {
                 thirdPartyAutoRefreshAttemptedSerial = deviceSerial
                 loadThirdPartyApps(deviceSerial, deviceTransportId)
+            }
+        }
+
+        LaunchedEffect(
+            selectedTestModule,
+            selectedReadyDevice?.transportId,
+            isRunning,
+            intentSelectedApp?.packageName,
+            intentClassNameDetailSection,
+            applicationDetailPackageName,
+            applicationDetailSections,
+            loadingApplicationDetailSection,
+        ) {
+            val app = intentSelectedApp ?: return@LaunchedEffect
+            if (selectedTestModule == TestModule.Intent &&
+                selectedReadyDevice != null &&
+                !isRunning &&
+                loadingApplicationDetailSection != intentClassNameDetailSection &&
+                (
+                    applicationDetailPackageName != app.packageName ||
+                        applicationDetailSections[intentClassNameDetailSection] == null
+                    )
+            ) {
+                loadApplicationDetail(app, intentClassNameDetailSection)
             }
         }
 
@@ -1553,6 +1623,7 @@ fun App() {
                                 IntentTestPanel(
                                     selectedDevice = selectedDevice,
                                     appCandidates = intentAppCandidates,
+                                    classNameCandidates = intentClassNameCandidates,
                                     form = intentForm,
                                     onFormChange = { intentForm = it },
                                     templateName = intentTemplateName,
@@ -1625,6 +1696,7 @@ fun App() {
                                     applicationDetailSections = applicationDetailSections,
                                     loadingApplicationDetailSection = loadingApplicationDetailSection,
                                     onLoadApplicationDetail = ::loadApplicationDetail,
+                                    onTestIntent = ::openIntentTestFromApplicationDetail,
                                     isRunning = isRunning,
                                     modifier = Modifier.fillMaxSize(),
                                 )
