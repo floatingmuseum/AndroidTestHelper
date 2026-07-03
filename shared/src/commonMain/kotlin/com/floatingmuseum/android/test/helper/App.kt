@@ -91,6 +91,13 @@ internal fun extractAdbDeviceNotFoundTransport(message: String): String? {
         ?.takeIf { it.isNotBlank() }
 }
 
+private fun buildManifestExportFileName(packageName: String): String {
+    val safePackageName = packageName
+        .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        .ifBlank { "application" }
+    return "${safePackageName}_AndroidManifest.xml"
+}
+
 @Composable
 @Preview
 fun App() {
@@ -1130,6 +1137,41 @@ fun App() {
             return nextSystemApps
         }
 
+        fun exportApplicationManifest(app: InstalledAppInfo, manifestText: String) {
+            if (isRunning) return
+            if (manifestText.isBlank()) {
+                statusText = localized("shell.manifest_export_failed_empty")
+                appendError(statusText)
+                return
+            }
+
+            scope.launch {
+                isRunning = true
+                val fileName = buildManifestExportFileName(app.packageName)
+                statusText = localized("shell.select_manifest_export_path")
+                appendStatus(localized("shell.select_manifest_export_path_for_arg0", app.packageName))
+                try {
+                    val outputPath = selectDirectory(
+                        dialogTitle = localized("shell.select_manifest_export_path"),
+                        approveButtonText = localized("file_manager.export"),
+                    )
+                    if (outputPath == null) {
+                        statusText = localized("shell.manifest_export_cancelled")
+                        appendStatus(statusText)
+                    } else {
+                        saveBytesToFile(outputPath, fileName, manifestText.encodeToByteArray())
+                        statusText = localized("shell.exported_manifest_to_arg0_arg1", outputPath, fileName)
+                        appendStatus(statusText)
+                    }
+                } catch (error: Throwable) {
+                    statusText = localized("shell.manifest_export_failed_arg0", error.message ?: unknownError())
+                    appendError(statusText)
+                } finally {
+                    isRunning = false
+                }
+            }
+        }
+
         fun runApplicationAction(app: InstalledAppInfo, action: String) {
             if (isRunning) return
             val deviceSerial = selectedReadyDevice?.serialNumber
@@ -1710,6 +1752,7 @@ fun App() {
                                     },
                                     onClearCache = ::clearApplicationListCache,
                                     onApplicationAction = ::runApplicationAction,
+                                    onExportManifest = ::exportApplicationManifest,
                                     applicationDetailPackageName = applicationDetailPackageName,
                                     applicationDetailSections = applicationDetailSections,
                                     loadingApplicationDetailSection = loadingApplicationDetailSection,

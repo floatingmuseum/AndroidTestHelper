@@ -108,6 +108,7 @@ fun ApplicationTestPanel(
     onRefreshSystem: () -> Unit,
     onClearCache: () -> Unit,
     onApplicationAction: (InstalledAppInfo, String) -> Unit,
+    onExportManifest: (InstalledAppInfo, String) -> Unit,
     applicationDetailPackageName: String?,
     applicationDetailSections: Map<ApplicationDetailSection, ApplicationDetailContent>,
     loadingApplicationDetailSection: ApplicationDetailSection?,
@@ -160,6 +161,7 @@ fun ApplicationTestPanel(
                         app = selectedApp,
                         onBack = { onStateChange(state.copy(selectedAppPackageName = null)) },
                         onAction = { action -> onApplicationAction(selectedApp, action) },
+                        onExportManifest = { manifestText -> onExportManifest(selectedApp, manifestText) },
                         detailPackageName = applicationDetailPackageName,
                         detailSections = applicationDetailSections,
                         loadingDetailSection = loadingApplicationDetailSection,
@@ -624,6 +626,7 @@ private fun ApplicationDetailPanel(
     app: InstalledAppInfo,
     onBack: () -> Unit,
     onAction: (String) -> Unit,
+    onExportManifest: (String) -> Unit,
     detailPackageName: String?,
     detailSections: Map<ApplicationDetailSection, ApplicationDetailContent>,
     loadingDetailSection: ApplicationDetailSection?,
@@ -737,6 +740,7 @@ private fun ApplicationDetailPanel(
                     }
                 },
                 onTestIntent = onTestIntent,
+                onExportManifest = onExportManifest,
                 detailSearchQuery = detailSearchQuery,
                 onDetailSearchQueryChange = onDetailSearchQueryChange,
                 detailSearchMatchIndex = detailSearchMatchIndex,
@@ -833,6 +837,7 @@ private fun ApplicationDetailInfoPanel(
     isRunning: Boolean,
     onSelectSection: (ApplicationDetailSection) -> Unit,
     onTestIntent: (ApplicationDetailSection, String) -> Unit,
+    onExportManifest: (String) -> Unit,
     detailSearchQuery: String,
     onDetailSearchQueryChange: (String) -> Unit,
     detailSearchMatchIndex: Int,
@@ -1024,6 +1029,18 @@ private fun ApplicationDetailInfoPanel(
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.weight(1f))
+                                OutlinedButton(
+                                    onClick = { onExportManifest(manifestText) },
+                                    enabled = !isRunning && manifestText.isNotBlank(),
+                                    contentPadding = ButtonDefaults.TextButtonContentPadding,
+                                    modifier = Modifier.height(32.dp),
+                                ) {
+                                    Text(
+                                        text = strings.t("app.export_manifest"),
+                                        style = MaterialTheme.typography.labelSmall,
                                     )
                                 }
                             }
