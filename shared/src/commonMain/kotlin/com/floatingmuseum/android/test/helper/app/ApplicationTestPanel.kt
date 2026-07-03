@@ -3,11 +3,16 @@ package com.floatingmuseum.android.test.helper.app
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,13 +21,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -44,10 +54,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -55,14 +67,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.floatingmuseum.android.test.helper.AndroidDevice
 import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 import com.floatingmuseum.android.test.helper.settings.AppLanguage
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private val SearchMatchBackground = Color(0xFFFFFF00)
 private val SearchMatchContent = Color(0xFF111111)
+private val SearchCurrentMatchBackground = Color(0xFFFFB300)
 
 data class ApplicationTestPanelState(
     val isThirdPartyExpanded: Boolean = true,
@@ -71,6 +87,7 @@ data class ApplicationTestPanelState(
     val selectedAppPackageName: String? = null,
     val selectedDetailSection: ApplicationDetailSection = ApplicationDetailSection.BASIC,
     val detailSearchQuery: String = "",
+    val detailSearchMatchIndex: Int = 0,
 )
 
 @Composable
@@ -155,11 +172,23 @@ fun ApplicationTestPanel(
                                 state.copy(
                                     selectedDetailSection = section,
                                     detailSearchQuery = "",
+                                    detailSearchMatchIndex = 0,
                                 )
                             )
                         },
                         detailSearchQuery = state.detailSearchQuery,
-                        onDetailSearchQueryChange = { onStateChange(state.copy(detailSearchQuery = it)) },
+                        onDetailSearchQueryChange = {
+                            onStateChange(
+                                state.copy(
+                                    detailSearchQuery = it,
+                                    detailSearchMatchIndex = 0,
+                                )
+                            )
+                        },
+                        detailSearchMatchIndex = state.detailSearchMatchIndex,
+                        onDetailSearchMatchIndexChange = {
+                            onStateChange(state.copy(detailSearchMatchIndex = it))
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -250,6 +279,7 @@ fun ApplicationTestPanel(
                                                     selectedAppPackageName = app.packageName,
                                                     selectedDetailSection = ApplicationDetailSection.BASIC,
                                                     detailSearchQuery = "",
+                                                    detailSearchMatchIndex = 0,
                                                 )
                                             )
                                         },
@@ -338,6 +368,7 @@ fun ApplicationTestPanel(
                                                     selectedAppPackageName = app.packageName,
                                                     selectedDetailSection = ApplicationDetailSection.BASIC,
                                                     detailSearchQuery = "",
+                                                    detailSearchMatchIndex = 0,
                                                 )
                                             )
                                         },
@@ -603,6 +634,8 @@ private fun ApplicationDetailPanel(
     onSelectedDetailSectionChange: (ApplicationDetailSection) -> Unit,
     detailSearchQuery: String,
     onDetailSearchQueryChange: (String) -> Unit,
+    detailSearchMatchIndex: Int,
+    onDetailSearchMatchIndexChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val strings = rememberAppStrings()
@@ -706,6 +739,8 @@ private fun ApplicationDetailPanel(
                 onTestIntent = onTestIntent,
                 detailSearchQuery = detailSearchQuery,
                 onDetailSearchQueryChange = onDetailSearchQueryChange,
+                detailSearchMatchIndex = detailSearchMatchIndex,
+                onDetailSearchMatchIndexChange = onDetailSearchMatchIndexChange,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
@@ -800,6 +835,8 @@ private fun ApplicationDetailInfoPanel(
     onTestIntent: (ApplicationDetailSection, String) -> Unit,
     detailSearchQuery: String,
     onDetailSearchQueryChange: (String) -> Unit,
+    detailSearchMatchIndex: Int,
+    onDetailSearchMatchIndexChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val strings = rememberAppStrings()
@@ -937,17 +974,92 @@ private fun ApplicationDetailInfoPanel(
                     }
                     selectedSection == ApplicationDetailSection.MANIFEST -> {
                         val manifestText = content.items.joinToString("\n\n") { it.value }
+                        val manifestLines = remember(manifestText) { manifestText.lines() }
+                        val manifestSearchMatches = remember(manifestLines, detailSearchQuery) {
+                            findManifestSearchMatches(manifestLines, detailSearchQuery)
+                        }
+                        val activeMatchIndex = normalizedManifestSearchMatchIndex(
+                            requestedIndex = detailSearchMatchIndex,
+                            matchCount = manifestSearchMatches.size,
+                        )
+                        val manifestMatchesByLine = remember(manifestSearchMatches) {
+                            manifestSearchMatches.withIndex().groupBy { indexedMatch ->
+                                indexedMatch.value.lineIndex
+                            }
+                        }
+                        val manifestListState = rememberLazyListState()
+                        val manifestHorizontalScrollState = rememberScrollState()
+
+                        LaunchedEffect(manifestSearchMatches, activeMatchIndex) {
+                            val activeMatch = manifestSearchMatches.getOrNull(activeMatchIndex) ?: return@LaunchedEffect
+                            manifestListState.scrollToItem((activeMatch.lineIndex - 3).coerceAtLeast(0))
+                        }
+
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .verticalScroll(rememberScrollState()),
+                                .padding(bottom = 1.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Text(
-                                text = strings.t("app.source_arg0", content.source.displayTitle()),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = strings.t("app.source_arg0", content.source.displayTitle()),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (detailSearchQuery.isNotBlank()) {
+                                    Text(
+                                        text = if (manifestSearchMatches.isEmpty()) {
+                                            strings.t("app.manifest.no_matches")
+                                        } else {
+                                            strings.t(
+                                                "app.manifest.match_position",
+                                                activeMatchIndex + 1,
+                                                manifestSearchMatches.size,
+                                            )
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                OutlinedTextField(
+                                    value = detailSearchQuery,
+                                    onValueChange = onDetailSearchQueryChange,
+                                    label = { Text(strings.t("app.manifest.search_keyword")) },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                )
+                                OutlinedButton(
+                                    onClick = {
+                                        onDetailSearchMatchIndexChange(activeMatchIndex - 1)
+                                    },
+                                    enabled = manifestSearchMatches.isNotEmpty(),
+                                    contentPadding = ButtonDefaults.TextButtonContentPadding,
+                                    modifier = Modifier.height(40.dp),
+                                ) {
+                                    Text(strings.t("app.manifest.previous_match"))
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        onDetailSearchMatchIndexChange(activeMatchIndex + 1)
+                                    },
+                                    enabled = manifestSearchMatches.isNotEmpty(),
+                                    contentPadding = ButtonDefaults.TextButtonContentPadding,
+                                    modifier = Modifier.height(40.dp),
+                                ) {
+                                    Text(strings.t("app.manifest.next_match"))
+                                }
+                            }
                             Surface(
                                 color = MaterialTheme.colorScheme.surface,
                                 contentColor = MaterialTheme.colorScheme.onSurface,
@@ -956,31 +1068,37 @@ private fun ApplicationDetailInfoPanel(
                                     width = 1.dp,
                                     color = MaterialTheme.colorScheme.outlineVariant,
                                 ),
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
                             ) {
-                                SelectionContainer(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState())
-                                        .padding(10.dp),
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
                                 ) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        val lines = manifestText.lines()
-                                        Text(
-                                            text = lines.indices.joinToString("\n") { (it + 1).toString() },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontFamily = FontFamily.Monospace,
-                                            textAlign = TextAlign.End,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        Text(
-                                            text = manifestText,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            softWrap = false,
-                                        )
+                                    LazyColumn(
+                                        state = manifestListState,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(top = 8.dp, bottom = 8.dp, end = 14.dp),
+                                    ) {
+                                        itemsIndexed(
+                                            items = manifestLines,
+                                            key = { index, _ -> index },
+                                        ) { index, line ->
+                                            ManifestLineRow(
+                                                lineNumber = index + 1,
+                                                lineText = line,
+                                                matches = manifestMatchesByLine[index].orEmpty(),
+                                                activeMatchIndex = activeMatchIndex,
+                                                horizontalScrollState = manifestHorizontalScrollState,
+                                            )
+                                        }
                                     }
+                                    ManifestLineScrollbar(
+                                        listState = manifestListState,
+                                        totalLines = manifestLines.size,
+                                        modifier = Modifier.align(Alignment.CenterEnd),
+                                    )
                                 }
                             }
                         }
@@ -1255,6 +1373,119 @@ private fun ApplicationDetailSection.canOpenIntentTest(): Boolean {
         this == ApplicationDetailSection.BROADCAST_RECEIVERS
 }
 
+@Composable
+private fun ManifestLineRow(
+    lineNumber: Int,
+    lineText: String,
+    matches: List<IndexedValue<ManifestSearchMatch>>,
+    activeMatchIndex: Int,
+    horizontalScrollState: ScrollState,
+) {
+    SelectionContainer {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 1.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text(
+                text = lineNumber.toString(),
+                modifier = Modifier.width(56.dp),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.End,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = highlightedManifestLineText(
+                    text = lineText,
+                    matches = matches,
+                    activeMatchIndex = activeMatchIndex,
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(horizontalScrollState),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurface,
+                softWrap = false,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ManifestLineScrollbar(
+    listState: LazyListState,
+    totalLines: Int,
+    modifier: Modifier = Modifier,
+) {
+    if (totalLines <= 0) return
+
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    var dragRemainderPx by remember { mutableStateOf(0f) }
+    val visibleLineCount = listState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+    val scrollableLineCount = (totalLines - visibleLineCount).coerceAtLeast(0)
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(12.dp)
+            .padding(vertical = 4.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        val trackHeightPx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
+        val visibleFraction = (visibleLineCount.toFloat() / totalLines.toFloat()).coerceIn(0.04f, 1f)
+        val thumbHeight = (maxHeight * visibleFraction).coerceAtLeast(32.dp).coerceAtMost(maxHeight)
+        val thumbHeightPx = with(density) { thumbHeight.toPx() }
+        val thumbTravelPx = (trackHeightPx - thumbHeightPx).coerceAtLeast(0f)
+        val firstVisibleLine = listState.firstVisibleItemIndex.coerceIn(0, scrollableLineCount)
+        val thumbOffsetPx = if (scrollableLineCount == 0 || thumbTravelPx == 0f) {
+            0
+        } else {
+            (thumbTravelPx * firstVisibleLine / scrollableLineCount).roundToInt()
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(4.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    shape = RoundedCornerShape(999.dp),
+                ),
+        )
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(0, thumbOffsetPx) }
+                .width(8.dp)
+                .height(thumbHeight)
+                .background(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+                    shape = RoundedCornerShape(999.dp),
+                )
+                .draggable(
+                    enabled = scrollableLineCount > 0,
+                    orientation = Orientation.Vertical,
+                    state = rememberDraggableState { delta ->
+                        dragRemainderPx += delta
+                        val lineDelta = (dragRemainderPx / trackHeightPx * totalLines).roundToInt()
+                        if (lineDelta != 0) {
+                            dragRemainderPx = 0f
+                            val targetLine = (listState.firstVisibleItemIndex + lineDelta)
+                                .coerceIn(0, scrollableLineCount)
+                            scope.launch {
+                                listState.scrollToItem(targetLine)
+                            }
+                        }
+                    },
+                ),
+        )
+    }
+}
+
 private fun extractDetailAttribute(
     text: String,
     attributeName: String,
@@ -1424,5 +1655,91 @@ private fun highlightedSearchText(
             append(text.substring(matchStart, matchEnd))
         }
         cursor = matchEnd
+    }
+}
+
+internal data class ManifestSearchMatch(
+    val start: Int,
+    val end: Int,
+    val lineIndex: Int,
+)
+
+internal fun findManifestSearchMatches(
+    text: String,
+    query: String,
+): List<ManifestSearchMatch> {
+    return findManifestSearchMatches(text.lines(), query)
+}
+
+internal fun findManifestSearchMatches(
+    lines: List<String>,
+    query: String,
+): List<ManifestSearchMatch> {
+    val keyword = query.trim()
+    if (keyword.isEmpty()) return emptyList()
+
+    val matches = mutableListOf<ManifestSearchMatch>()
+
+    lines.forEachIndexed { lineIndex, line ->
+        var cursor = 0
+        while (cursor < line.length) {
+            val matchStart = line.indexOf(keyword, startIndex = cursor, ignoreCase = true)
+            if (matchStart < 0) break
+
+            matches += ManifestSearchMatch(
+                start = matchStart,
+                end = matchStart + keyword.length,
+                lineIndex = lineIndex,
+            )
+            cursor = matchStart + keyword.length
+        }
+    }
+
+    return matches
+}
+
+internal fun normalizedManifestSearchMatchIndex(
+    requestedIndex: Int,
+    matchCount: Int,
+): Int {
+    if (matchCount <= 0) return 0
+    return ((requestedIndex % matchCount) + matchCount) % matchCount
+}
+
+private fun highlightedManifestLineText(
+    text: String,
+    matches: List<IndexedValue<ManifestSearchMatch>>,
+    activeMatchIndex: Int,
+) = buildAnnotatedString {
+    if (matches.isEmpty()) {
+        append(text)
+        return@buildAnnotatedString
+    }
+
+    var cursor = 0
+
+    matches.forEach { indexedMatch ->
+        val match = indexedMatch.value
+        if (match.start > cursor) {
+            append(text.substring(cursor, match.start))
+        }
+
+        withStyle(
+            SpanStyle(
+                background = if (indexedMatch.index == activeMatchIndex) {
+                    SearchCurrentMatchBackground
+                } else {
+                    SearchMatchBackground
+                },
+                color = SearchMatchContent,
+            )
+        ) {
+            append(text.substring(match.start, match.end))
+        }
+        cursor = match.end
+    }
+
+    if (cursor < text.length) {
+        append(text.substring(cursor))
     }
 }

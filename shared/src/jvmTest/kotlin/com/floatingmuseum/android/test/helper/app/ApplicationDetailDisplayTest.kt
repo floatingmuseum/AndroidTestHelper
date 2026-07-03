@@ -86,6 +86,44 @@ class ApplicationDetailDisplayTest {
         assertEquals("真实中文内容", item.body)
     }
 
+    @Test
+    fun findsManifestSearchMatchesIgnoringCaseAndTracksLines() {
+        val manifestText = """
+            <manifest package="com.example">
+                <uses-permission android:name="android.permission.INTERNET" />
+                <application>
+                    <activity android:name=".MainActivity" />
+                </application>
+            </manifest>
+        """.trimIndent()
+
+        val matches = findManifestSearchMatches(manifestText, "ANDROID:NAME")
+
+        assertEquals(2, matches.size)
+        assertEquals(1, matches[0].lineIndex)
+        assertEquals(3, matches[1].lineIndex)
+        assertEquals(
+            "android:name",
+            manifestText.lines()[matches[0].lineIndex].substring(matches[0].start, matches[0].end),
+        )
+    }
+
+    @Test
+    fun trimsManifestSearchKeywordAndIgnoresBlankSearch() {
+        val manifestText = """<manifest package="com.example" />"""
+
+        assertEquals(1, findManifestSearchMatches(manifestText, " package ").size)
+        assertEquals(emptyList(), findManifestSearchMatches(manifestText, "   "))
+    }
+
+    @Test
+    fun normalizesManifestSearchMatchNavigationIndex() {
+        assertEquals(0, normalizedManifestSearchMatchIndex(0, 0))
+        assertEquals(0, normalizedManifestSearchMatchIndex(3, 3))
+        assertEquals(2, normalizedManifestSearchMatchIndex(-1, 3))
+        assertEquals(1, normalizedManifestSearchMatchIndex(4, 3))
+    }
+
     private fun withLanguage(language: AppLanguage, block: () -> Unit) {
         val previousSettings = AppSettingsShared.currentSettings
         try {
