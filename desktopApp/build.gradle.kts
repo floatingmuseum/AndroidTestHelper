@@ -1,3 +1,4 @@
+import java.util.Properties
 import org.gradle.api.tasks.bundling.Zip
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
@@ -17,8 +18,15 @@ dependencies {
 }
 
 val portableAppResourcesDir = layout.buildDirectory.dir("portableAppResources")
+val appInfoPropertiesFile = rootProject.layout.projectDirectory
+    .file("shared/src/commonMain/resources/app-info.properties")
+    .asFile
+val appInfoProperties = Properties().apply {
+    appInfoPropertiesFile.inputStream().use(::load)
+}
 val appName = "AndroidTestHelper"
-val appVersion = "0.1.0"
+val appVersion = appInfoProperties.getProperty("versionName")?.takeIf { it.isNotBlank() }
+    ?: error("Missing versionName in ${appInfoPropertiesFile.path}")
 val portableOsName = System.getProperty("os.name").lowercase()
 val portableOsArch = System.getProperty("os.arch").lowercase().replace("-", "_")
 val portableArchiveClassifier = when {

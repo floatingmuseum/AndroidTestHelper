@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.floatingmuseum.android.test.helper.loadAppInfo
 import com.floatingmuseum.android.test.helper.adb.AdbRuntimeInfo
 import com.floatingmuseum.android.test.helper.adb.checkAdbExecutable
 import com.floatingmuseum.android.test.helper.adb.loadAdbRuntimeInfo
@@ -24,6 +25,7 @@ enum class SettingCategory {
     General,
     ScreenRecordMirror,
     FileManager,
+    About,
 }
 
 data class SettingsModuleState(
@@ -92,6 +94,7 @@ fun SettingsModuleContent(
                                     SettingCategory.General -> strings.t("settings.general")
                                     SettingCategory.ScreenRecordMirror -> strings.t("settings.screen_record_mirror")
                                     SettingCategory.FileManager -> strings.t("settings.file_manager")
+                                    SettingCategory.About -> strings.t("settings.about")
                                 },
                                 style = MaterialTheme.typography.titleMedium
                             )
@@ -115,6 +118,9 @@ fun SettingsModuleContent(
                 }
                 SettingCategory.FileManager -> {
                     FileManagerSettingsPanel(modifier = Modifier.fillMaxSize())
+                }
+                SettingCategory.About -> {
+                    AboutSettingsPanel(modifier = Modifier.fillMaxSize())
                 }
             }
         }
@@ -690,5 +696,62 @@ fun FileManagerSettingsPanel(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun AboutSettingsPanel(
+    modifier: Modifier = Modifier,
+) {
+    val strings = rememberAppStrings()
+    val appInfo = remember { loadAppInfo() }
+
+    Column(
+        modifier = modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = strings.t("settings.about"),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                AboutInfoRow(
+                    label = strings.t("settings.software_version"),
+                    value = appInfo.versionName,
+                )
+                AboutInfoRow(
+                    label = strings.t("settings.author"),
+                    value = appInfo.author,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutInfoRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }
