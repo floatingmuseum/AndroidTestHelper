@@ -11,8 +11,19 @@ actual fun loadAppInfo(): AppInfo {
 
     resourceStream?.use(properties::load)
 
-    return AppInfo(
-        versionName = properties.getProperty("versionName")?.takeIf { it.isNotBlank() } ?: "unknown",
-        author = properties.getProperty("author")?.takeIf { it.isNotBlank() } ?: "unknown",
-    )
+    return appInfoFromProperties(properties)
 }
+
+internal fun appInfoFromProperties(properties: Properties): AppInfo = AppInfo(
+    appName = properties.requiredAppInfo("appName"),
+    versionName = properties.requiredAppInfo("versionName"),
+    author = properties.requiredAppInfo("author"),
+    vendor = properties.requiredAppInfo("vendor"),
+    description = properties.requiredAppInfo("description"),
+    windowsUpgradeUuid = properties.requiredAppInfo("windowsUpgradeUuid"),
+    macosBundleID = properties.requiredAppInfo("macosBundleID"),
+    linuxPackageID = properties.requiredAppInfo("linuxPackageID"),
+)
+
+private fun Properties.requiredAppInfo(key: String): String =
+    getProperty(key)?.trim()?.takeIf { it.isNotBlank() } ?: "unknown"

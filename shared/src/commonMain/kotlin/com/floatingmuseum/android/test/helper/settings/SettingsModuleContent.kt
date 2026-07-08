@@ -718,8 +718,12 @@ fun AboutSettingsPanel(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = strings.t("settings.about"),
+                    text = appInfo.appName,
                     style = MaterialTheme.typography.titleMedium
+                )
+                AboutInfoRow(
+                    label = strings.t("settings.application"),
+                    value = appInfo.appName,
                 )
                 AboutInfoRow(
                     label = strings.t("settings.software_version"),
@@ -728,6 +732,14 @@ fun AboutSettingsPanel(
                 AboutInfoRow(
                     label = strings.t("settings.author"),
                     value = appInfo.author,
+                )
+                AboutInfoRow(
+                    label = strings.t("settings.vendor"),
+                    value = appInfo.vendor,
+                )
+                AboutInfoRow(
+                    label = strings.t("settings.description"),
+                    value = appInfo.description,
                 )
             }
         }
@@ -739,10 +751,9 @@ private fun AboutInfoRow(
     label: String,
     value: String,
 ) {
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
             text = label,

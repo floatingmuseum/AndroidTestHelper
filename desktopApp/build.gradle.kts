@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.util.UUID
 import org.gradle.api.tasks.bundling.Zip
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
@@ -24,9 +25,17 @@ val appInfoPropertiesFile = rootProject.layout.projectDirectory
 val appInfoProperties = Properties().apply {
     appInfoPropertiesFile.inputStream().use(::load)
 }
-val appName = "AndroidTestHelper"
-val appVersion = appInfoProperties.getProperty("versionName")?.takeIf { it.isNotBlank() }
-    ?: error("Missing versionName in ${appInfoPropertiesFile.path}")
+fun appInfoValue(key: String): String =
+    appInfoProperties.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }
+        ?: error("Missing $key in ${appInfoPropertiesFile.path}")
+
+val appName = appInfoValue("appName")
+val appVersion = appInfoValue("versionName")
+val appVendor = appInfoValue("vendor")
+val appDescription = appInfoValue("description")
+val windowsUpgradeUuid = appInfoValue("windowsUpgradeUuid")
+val macosBundleID = appInfoValue("macosBundleID")
+val linuxPackageID = appInfoValue("linuxPackageID")
 val appIconPng = layout.projectDirectory.file("src/main/resources/icons/android-test-helper.png")
 val appIconIco = layout.projectDirectory.file("src/main/resources/icons/android-test-helper.ico")
 val appIconIcns = layout.projectDirectory.file("src/main/resources/icons/android-test-helper.icns")
@@ -87,6 +96,41 @@ tasks.matching {
     dependsOn(preparePortableAppResources)
 }
 
+val verifyDesktopReleaseMetadata by tasks.registering {
+    group = "verification"
+    description = "Validates desktop release metadata from shared app-info.properties."
+
+    inputs.file(appInfoPropertiesFile)
+
+    doLast {
+        val releaseIdentityPattern = Regex("""[A-Za-z0-9][A-Za-z0-9.-]*""")
+        val requiredKeys = listOf(
+            "appName",
+            "versionName",
+            "author",
+            "vendor",
+            "description",
+            "windowsUpgradeUuid",
+            "macosBundleID",
+            "linuxPackageID",
+        )
+        requiredKeys.forEach(::appInfoValue)
+
+        UUID.fromString(windowsUpgradeUuid)
+
+        require(releaseIdentityPattern.matches(macosBundleID)) {
+            "macosBundleID must use a reverse-DNS compatible value: $macosBundleID"
+        }
+        require(releaseIdentityPattern.matches(linuxPackageID)) {
+            "linuxPackageID must use a package compatible value: $linuxPackageID"
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(verifyDesktopReleaseMetadata)
+}
+
 //免安装Portable版打包任务
 tasks.register<Zip>("packagePortableZip") {
     group = "compose desktop"
@@ -119,36 +163,23 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = appName
             packageVersion = appVersion
+            vendor = appVendor
+            description = appDescription
 
             windows {
                 iconFile.set(appIconIco)
+                upgradeUuid = windowsUpgradeUuid
             }
 
             macOS {
                 iconFile.set(appIconIcns)
+                bundleID = macosBundleID
             }
 
             linux {
                 iconFile.set(appIconPng)
+                packageName = linuxPackageID
             }
         }
-
-        // 真正的应用唯一标识（类似 Android 的 ApplicationId）
-        // 对于 Linux/Debian，它叫 linux { packageID = "..." }
-        // 对于 macOS，它叫 macos { bundleID = "..." }
-        // 对于 Windows，如果你不配置，它会默认根据你的 vendor 和 packageName 自动生成一个 GUID 标识。
-
-        // macOS 专属唯一标识
-//            macOS {
-//                bundleID = "org.floatingmuseum.android.log.helper"
-//            }
-
-        // Linux 专属唯一标识
-//            linux {
-//                packageID = "org.floatingmuseum.android.log.helper"
-//            }
-
-        // Windows 专属（一般不需要写，除非你要上架微软商店）
-        // windows { ... }
     }
 }
