@@ -1,5 +1,6 @@
 package com.floatingmuseum.android.test.helper
 
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -10,6 +11,7 @@ fun main() = application {
         onCloseRequest = ::exitApplication,
         state = rememberWindowState(width = 1280.dp, height = 860.dp),
         title = "AndroidTestHelper",
+        icon = painterResource("icons/android-test-helper.png"),
     ) {
         App()
     }

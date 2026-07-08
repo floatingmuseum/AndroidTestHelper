@@ -27,6 +27,9 @@ val appInfoProperties = Properties().apply {
 val appName = "AndroidTestHelper"
 val appVersion = appInfoProperties.getProperty("versionName")?.takeIf { it.isNotBlank() }
     ?: error("Missing versionName in ${appInfoPropertiesFile.path}")
+val appIconPng = layout.projectDirectory.file("src/main/resources/icons/android-test-helper.png")
+val appIconIco = layout.projectDirectory.file("src/main/resources/icons/android-test-helper.ico")
+val appIconIcns = layout.projectDirectory.file("src/main/resources/icons/android-test-helper.icns")
 val portableOsName = System.getProperty("os.name").lowercase()
 val portableOsArch = System.getProperty("os.arch").lowercase().replace("-", "_")
 val portableArchiveClassifier = when {
@@ -116,6 +119,18 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = appName
             packageVersion = appVersion
+
+            windows {
+                iconFile.set(appIconIco)
+            }
+
+            macOS {
+                iconFile.set(appIconIcns)
+            }
+
+            linux {
+                iconFile.set(appIconPng)
+            }
         }
 
         // 真正的应用唯一标识（类似 Android 的 ApplicationId）
