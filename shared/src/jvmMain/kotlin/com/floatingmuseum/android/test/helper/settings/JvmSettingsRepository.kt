@@ -1,24 +1,28 @@
 package com.floatingmuseum.android.test.helper.settings
 
 import com.floatingmuseum.android.test.helper.AppRuntimePaths
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import java.io.File
 import java.util.Locale
 
-class JvmSettingsRepository : SettingsRepository {
-    private val settingsFile: File
-        get() = AppRuntimePaths.cacheDirectory().resolve("settings.json")
-
+class JvmSettingsRepository(
+    private val settingsFileProvider: () -> File = {
+        AppRuntimePaths.cacheDirectory().resolve("settings.json")
+    },
+) : SettingsRepository {
     private val json = Json { 
         prettyPrint = true
         ignoreUnknownKeys = true
     }
 
     override fun loadSettings(): AppSettings {
+        val settingsFile = settingsFileProvider()
         if (!settingsFile.exists()) return AppSettings()
         return try {
-            json.decodeFromString<AppSettings>(settingsFile.readText())
+            val jsonText = settingsFile.readText()
+            migrateLoadedSettings(jsonText, json.decodeFromString<AppSettings>(jsonText))
         } catch (e: Exception) {
             e.printStackTrace()
             AppSettings()
@@ -27,12 +31,22 @@ class JvmSettingsRepository : SettingsRepository {
 
     override fun saveSettings(settings: AppSettings) {
         try {
+            val settingsFile = settingsFileProvider()
             settingsFile.parentFile?.mkdirs()
             val jsonText = json.encodeToString(settings)
             settingsFile.writeText(jsonText)
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    private fun migrateLoadedSettings(jsonText: String, settings: AppSettings): AppSettings {
+        val root = json.parseToJsonElement(jsonText).jsonObject
+        val hasStoredFormat = root.containsKey("screenRecordFormat")
+        return settings.copy(
+            screenRecordFormat = if (hasStoredFormat) settings.screenRecordFormat else ScreenRecordFormat.Mp4,
+            screenRecordFormatUserSelected = settings.screenRecordFormatUserSelected || hasStoredFormat,
+        )
     }
 }
 

@@ -322,15 +322,15 @@ class DeviceAdbTest {
     }
 
     @Test
-    fun testBuildScrcpyRecordFileNameUsesMkvContainer() {
+    fun testBuildScrcpyRecordFileNameUsesMp4Container() {
         val capturedAt = LocalDateTime.of(2026, 6, 17, 9, 8, 7)
 
         assertEquals(
-            "screenrecord_R58M123ABC_20260617_090807.mkv",
+            "screenrecord_R58M123ABC_20260617_090807.mp4",
             buildScrcpyRecordFileName("R58M123ABC", capturedAt)
         )
         assertEquals(
-            "screenrecord_192.168.1.5_5555_20260617_090807.mkv",
+            "screenrecord_192.168.1.5_5555_20260617_090807.mp4",
             buildScrcpyRecordFileName("192.168.1.5:5555", capturedAt)
         )
     }
@@ -432,7 +432,7 @@ class DeviceAdbTest {
 
     @Test
     fun testBuildScrcpyRecordCommandWritesLocalFileWithoutDeviceStorage() {
-        val localFile = File("recordings/demo.mkv").absolutePath
+        val localFile = File("recordings/demo.mp4").absolutePath
         val command = buildScrcpyRecordCommand(
             scrcpyPath = "C:\\scrcpy\\scrcpy.exe",
             deviceSerial = "R58M123ABC",
@@ -447,13 +447,13 @@ class DeviceAdbTest {
                 "--no-playback",
                 "--no-window",
                 "--no-control",
-                "--record-format=mkv",
+                "--record-format=mp4",
                 "--record=$localFile",
             ),
             command.args,
         )
         assertEquals(
-            "\"C:\\scrcpy\\scrcpy.exe\" --serial=R58M123ABC --no-audio --no-playback --no-window --no-control --record-format=mkv --record=\"$localFile\"",
+            "\"C:\\scrcpy\\scrcpy.exe\" --serial=R58M123ABC --no-audio --no-playback --no-window --no-control --record-format=mp4 --record=\"$localFile\"",
             command.displayCommand,
         )
     }

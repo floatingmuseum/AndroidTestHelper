@@ -507,7 +507,12 @@ fun ScreenRecordMirrorSettingsPanel(
             selected = settings.screenRecordFormat,
             optionLabel = { strings.screenRecordFormatLabel(it) },
             onSelected = { format ->
-                AppSettingsShared.updateSettings(settings.copy(screenRecordFormat = format))
+                AppSettingsShared.updateSettings(
+                    settings.copy(
+                        screenRecordFormat = format,
+                        screenRecordFormatUserSelected = true,
+                    )
+                )
             },
         )
 

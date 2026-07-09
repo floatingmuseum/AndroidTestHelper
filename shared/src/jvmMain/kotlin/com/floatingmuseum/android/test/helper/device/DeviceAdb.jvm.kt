@@ -1278,7 +1278,7 @@ internal fun buildScreenRecordFileName(
 internal fun buildScrcpyRecordFileName(
     deviceSerial: String,
     capturedAt: LocalDateTime,
-    format: ScreenRecordFormat = ScreenRecordFormat.Mkv,
+    format: ScreenRecordFormat = ScreenRecordFormat.Mp4,
 ): String {
     val safeSerial = deviceSerial.toScreenshotFileToken().ifBlank { "unknown_serial" }
     return "screenrecord_${safeSerial}_${capturedAt.format(ScreenshotTimestampFormatter)}.${format.fileExtension}"
@@ -1309,7 +1309,7 @@ internal fun buildScrcpyRecordCommand(
     scrcpyPath: String,
     deviceSerial: String,
     localPath: String,
-    format: ScreenRecordFormat = ScreenRecordFormat.Mkv,
+    format: ScreenRecordFormat = ScreenRecordFormat.Mp4,
     maxSize: ScreenRecordMaxSize = ScreenRecordMaxSize.Original,
     bitRate: ScreenRecordBitRate = ScreenRecordBitRate.Default,
     maxFps: ScreenRecordMaxFps = ScreenRecordMaxFps.Default,

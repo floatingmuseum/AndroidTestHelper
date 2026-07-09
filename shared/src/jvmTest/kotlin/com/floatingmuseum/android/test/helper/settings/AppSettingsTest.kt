@@ -13,7 +13,8 @@ class AppSettingsTest {
     fun screenRecordSettingsUseOperationalDefaults() {
         val settings = AppSettings()
 
-        assertEquals(ScreenRecordFormat.Mkv, settings.screenRecordFormat)
+        assertEquals(ScreenRecordFormat.Mp4, settings.screenRecordFormat)
+        assertEquals(false, settings.screenRecordFormatUserSelected)
         assertEquals(ScreenRecordMaxSize.Original, settings.screenRecordMaxSize)
         assertEquals(ScreenRecordBitRate.Default, settings.screenRecordBitRate)
         assertEquals(ScreenRecordMaxFps.Default, settings.screenRecordMaxFps)
