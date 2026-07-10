@@ -335,4 +335,12 @@ tasks.register<Zip>("packagePortableZip") {
     archiveClassifier.set(portableArchiveClassifier)
     isPreserveFileTimestamps = true
     destinationDirectory.set(layout.buildDirectory.dir("compose/binaries/main"))
+
+    doLast {
+        val zipFile = archiveFile.get().asFile
+        val outputDirectory = destinationDirectory.get().asFile
+        logger.lifecycle("Portable ZIP generated successfully:")
+        logger.lifecycle("  ZIP file: ${zipFile.toURI()}")
+        logger.lifecycle("  Output folder: ${outputDirectory.toURI()}")
+    }
 }
