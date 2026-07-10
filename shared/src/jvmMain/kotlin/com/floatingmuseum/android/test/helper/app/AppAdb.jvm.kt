@@ -958,75 +958,34 @@ private class JvmAppAdb : AppAdb {
     }
 
     override suspend fun getLocalPluginApkBytes(): ByteArray? = withContext(Dispatchers.IO) {
-        // 1. Check development directories relative to working directory
-        val pathsToCheck = listOf(
-            "shared/src/commonMain/composeResources/files",
-            "../shared/src/commonMain/composeResources/files"
-        )
-        val devCandidates = mutableListOf<LocalPluginApkCandidate>()
-        for (path in pathsToCheck) {
-            val devDir = File(path)
-            if (devDir.exists() && devDir.isDirectory) {
-                devCandidates += readLocalPluginApkFileCandidates(devDir)
+        selectLatestLocalPluginApkCandidate(
+            findBundledPluginApkCandidates(
+                searchRoots = listOf(
+                    AppRuntimePaths.installDirectory,
+                    File(System.getProperty("user.dir")),
+                ),
+            ),
+        )?.bytes
+    }
+}
+
+internal fun findBundledPluginApkCandidates(searchRoots: List<File>): List<LocalPluginApkCandidate> {
+    val relativeDirectories = listOf(
+        "plugins/athplugin",
+        "app/resources/plugins/athplugin",
+        "resources/plugins/athplugin",
+    )
+    return searchRoots.asSequence()
+        .map { it.absoluteFile }
+        .flatMap { root ->
+            generateSequence(root) { it.parentFile }.flatMap { directory ->
+                relativeDirectories.asSequence().map(directory::resolve)
             }
         }
-        selectLatestLocalPluginApkCandidate(devCandidates)?.let { return@withContext it.bytes }
-
-        // 2. Scan JVM classpath directories and JAR files (covers Gradle dev runs and packaged runs)
-        val classpathApk = scanClasspathForPluginApk()
-        if (classpathApk != null) {
-            return@withContext classpathApk
-        }
-
-        // 3. Fallback to standard classloader resource streams
-        val classLoader = Thread.currentThread().contextClassLoader ?: JvmAppAdb::class.java.classLoader
-        return@withContext tryFallbackResource(classLoader)
-    }
-
-    private fun scanClasspathForPluginApk(): ByteArray? {
-        val classpath = System.getProperty("java.class.path") ?: return null
-        val paths = classpath.split(File.pathSeparator)
-        val candidates = mutableListOf<LocalPluginApkCandidate>()
-        for (path in paths) {
-            val file = File(path)
-            if (!file.exists()) continue
-            if (file.isDirectory) {
-                val targetDir = File(file, "composeResources/files")
-                if (targetDir.exists() && targetDir.isDirectory) {
-                    candidates += readLocalPluginApkFileCandidates(targetDir)
-                }
-            } else if (file.isFile && file.name.endsWith(".jar")) {
-                try {
-                    ZipFile(file).use { zip ->
-                        val entries = zip.entries()
-                        while (entries.hasMoreElements()) {
-                            val entry = entries.nextElement()
-                            val name = entry.name
-                            if (name.startsWith("composeResources/files/ATHPlugin") && name.endsWith(".apk")) {
-                                val bytes = zip.getInputStream(entry).use { input -> input.readBytes() }
-                                candidates += LocalPluginApkCandidate(
-                                    name = File(name).name,
-                                    bytes = bytes,
-                                    versionInfo = parsePluginVersionInfo(bytes),
-                                )
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    // Ignore
-                }
-            }
-        }
-        return selectLatestLocalPluginApkCandidate(candidates)?.bytes
-    }
-
-    private fun tryFallbackResource(classLoader: ClassLoader): ByteArray? {
-        return try {
-            classLoader.getResourceAsStream("composeResources/files/ATHPlugin.apk")?.use { it.readBytes() }
-        } catch (e: Exception) {
-            null
-        }
-    }
+        .filter(File::isDirectory)
+        .distinctBy { it.absolutePath }
+        .flatMap { directory -> readLocalPluginApkFileCandidates(directory).asSequence() }
+        .toList()
 }
 
 internal data class LocalPluginApkCandidate(

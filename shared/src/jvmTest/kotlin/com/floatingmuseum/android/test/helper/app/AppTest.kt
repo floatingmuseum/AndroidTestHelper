@@ -305,8 +305,34 @@ class AppTest {
     }
 
     @Test
-    fun loadsBundledPluginApkVersionFromComposeResourcesWhenPresent() = kotlinx.coroutines.runBlocking {
-        val filesDirectory = File("shared/src/commonMain/composeResources/files")
+    fun findsBundledPluginApkInPortableResourcesDirectory() {
+        val portableRoot = File.createTempFile("android-test-helper-portable", "").apply {
+            delete()
+            mkdirs()
+        }
+        try {
+            val apkFile = portableRoot
+                .resolve("app/resources/plugins/athplugin/ATHPlugin_1.0.8.apk")
+                .apply {
+                    parentFile.mkdirs()
+                    writeBytes(byteArrayOf(1, 2, 3))
+                }
+
+            val candidates = findBundledPluginApkCandidates(listOf(portableRoot))
+
+            assertEquals(
+                listOf("ATHPlugin_1.0.8.apk"),
+                candidates.map { it.name },
+            )
+            assertContentEquals(apkFile.readBytes(), candidates.single().bytes)
+        } finally {
+            portableRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun loadsBundledPluginApkVersionFromPluginDirectoryWhenPresent() = kotlinx.coroutines.runBlocking {
+        val filesDirectory = File("plugins/athplugin")
         val apkFiles = filesDirectory
             .listFiles()
             ?.filter { it.isFile && it.name.startsWith("ATHPlugin") && it.name.endsWith(".apk") }
@@ -322,9 +348,6 @@ class AppTest {
                 versionInfo = appAdb.getApkVersionInfo(fileBytes),
             )
         }
-        candidates.firstOrNull { it.name == "ATHPlugin_1.0.5.apk" }?.let { candidate ->
-            assertEquals("1.0.5", assertNotNull(candidate.versionInfo).versionName)
-        }
 
         val expected = assertNotNull(selectLatestLocalPluginApkCandidate(candidates))
         val bytes = assertNotNull(appAdb.getLocalPluginApkBytes())
@@ -336,7 +359,7 @@ class AppTest {
 
     @Test
     fun decodesBundledApkManifestAsReadableXml() {
-        val filesDirectory = File("shared/src/commonMain/composeResources/files")
+        val filesDirectory = File("plugins/athplugin")
         val apkFile = filesDirectory
             .listFiles()
             ?.firstOrNull { it.isFile && it.name.startsWith("ATHPlugin") && it.name.endsWith(".apk") }

@@ -95,8 +95,11 @@ AndroidTestHelper/
 │   ├── src/commonMain/                 # Compose UI、模块状态、公共模型、expect 声明
 │   ├── src/jvmMain/                    # ADB 执行、文件系统、native picker、desktop interop
 │   ├── src/jvmTest/                    # JVM 单元测试
-│   └── src/commonMain/composeResources # SVG 资源与内置 ATHPlugin APK
-├── platform-tools/                     # 预置 Windows/macOS/Linux platform-tools
+│   └── src/commonMain/composeResources # SVG 与 Compose 共享资源
+├── plugins/                             # 随应用发行的运行时插件资产
+│   ├── android/platform-tools/          # 预置 Windows/macOS/Linux platform-tools
+│   ├── scrcpy/                          # scrcpy 运行时文件
+│   └── athplugin/                       # 内置 ATHPlugin*.apk
 ├── ATHPLUGIN_API.md                    # ATHPlugin ContentProvider 合同
 ├── AGENTS.md                           # 仓库开发规约
 └── build.gradle.kts                    # 根项目构建脚本
@@ -183,5 +186,5 @@ Windows PowerShell：
 - 所有设备动作必须显式带 serial。
 - 不要用前端假数据代替设备状态。读不到就显示不可用或错误。
 - 长任务必须可停止，并清理正在运行的 ADB 子进程。
-- `plugins/android/platform-tools/`、Gradle Wrapper、内置 `ATHPlugin*.apk` 是运行所需资产，不要随意删除。
+- `plugins/android/platform-tools/`、`plugins/athplugin/`、Gradle Wrapper 是运行所需资产，不要随意删除。
 - 不要提交 `.gradle/`、`.kotlin/`、`build/`、`.idea/`、`*.iml`、`AndroidTestHelperData/`。

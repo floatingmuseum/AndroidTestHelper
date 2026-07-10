@@ -20,7 +20,9 @@ The app is a desktop operations tool, not an Android app. It must support Window
 - `shared/src/jvmTest/`
   - JVM tests for parsers, command builders, path resolution, cache naming, and desktop-specific logic.
 - `shared/src/commonMain/composeResources/`
-  - Shared resources, including bundled ATHPlugin APK files under `files/`.
+  - Shared Compose resources such as icons and localized assets.
+- `plugins/athplugin/`
+  - Bundled ATHPlugin APK files used by development runs and desktop distributions.
 - `plugins/android/platform-tools/`
   - Bundled Android platform-tools for Windows, macOS, and Linux.
   - Do not ignore, delete, or casually replace this folder. The app depends on it at runtime.
@@ -205,7 +207,7 @@ Rules:
 - Icons are binary streams read through `exec-out content read`; do not wrap them in JSON or Base64.
 - If ATHPlugin is missing, disabled, outdated, or any provider call fails, preserve standard ADB fallback behavior.
 - Plugin ignore state is tied to the bundled ATHPlugin APK version via `pluginCheckIgnoreKey()`, not the desktop app version.
-- Bundled APK selection should prefer the newest `ATHPlugin*.apk` candidate from compose resources/classpath based on parsed version info.
+- Bundled APK selection should prefer the newest `ATHPlugin*.apk` candidate from `plugins/athplugin` or the packaged `resources/plugins/athplugin` directory based on parsed version info.
 
 ## Application Fallback Behavior
 
@@ -299,7 +301,7 @@ Windows JVM verification can also fail from native memory pressure (`errno=1455`
 - Build outputs and IDE-local files are ignored.
 - Keep Gradle wrapper files tracked.
 - Keep `plugins/android/platform-tools/` tracked unless the distribution strategy changes intentionally.
-- Keep bundled `ATHPlugin*.apk` resources tracked when the desktop app is expected to ship them.
+- Keep bundled `plugins/athplugin/ATHPlugin*.apk` assets tracked when the desktop app is expected to ship them.
 - Do not commit `.gradle/`, `.kotlin/`, `build/`, `.idea/`, `*.iml`, or `AndroidTestHelperData/`.
 - Before large refactors, check `git status --short` and avoid reverting user changes.
 

@@ -70,6 +70,7 @@ val portableScrcpyPluginRelativePaths = portableScrcpyFolders.map { scrcpyFolder
 }
 val appImageDir = layout.buildDirectory.dir("compose/binaries/main/app/$appName")
 val pluginsDir = layout.projectDirectory.dir("../plugins")
+val portableAthPluginRelativePath = "athplugin"
 
 fun normalizePortableArch(rawArch: String): String {
     return when (val normalized = rawArch.lowercase().replace("-", "_")) {
@@ -98,6 +99,10 @@ val preparePortableAppResources by tasks.registering(Sync::class) {
                 }
             }
         }
+    }
+
+    from(pluginsDir.dir(portableAthPluginRelativePath)) {
+        into("common/plugins/$portableAthPluginRelativePath")
     }
     into(portableAppResourcesDir)
 }
@@ -168,6 +173,9 @@ abstract class VerifyPortableZipInputsTask : DefaultTask() {
     @get:Input
     abstract val scrcpyBinary: Property<String>
 
+    @get:Input
+    abstract val athPluginRelativePath: Property<String>
+
     @get:InputFile
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val iconFile: RegularFileProperty
@@ -228,6 +236,25 @@ abstract class VerifyPortableZipInputsTask : DefaultTask() {
             "$currentPlatformId packaged app/resources/plugins platform-tools adb",
         )
 
+        val athPluginSourceDirectory = pluginsRootDirectory.resolve(athPluginRelativePath.get())
+        val athPluginPreparedDirectory = preparedPlugins.resolve(athPluginRelativePath.get())
+        val athPluginPackagedDirectory = packagedPlugins.resolve(athPluginRelativePath.get())
+        listOf(
+            athPluginSourceDirectory to "$currentPlatformId ATHPlugin source",
+            athPluginPreparedDirectory to "$currentPlatformId prepared ATHPlugin",
+            athPluginPackagedDirectory to "$currentPlatformId packaged ATHPlugin",
+        ).forEach { (directory, label) ->
+            requireDirectory(directory, label)
+            val apkFiles = directory.listFiles()
+                ?.filter { file -> file.isFile && file.name.startsWith("ATHPlugin") && file.name.endsWith(".apk", ignoreCase = true) }
+                .orEmpty()
+            if (apkFiles.isEmpty()) {
+                missing += "$label directory does not contain an ATHPlugin*.apk file: ${directory.path}"
+            } else {
+                apkFiles.forEach { file -> requireFile(file, "$label ${file.name}") }
+            }
+        }
+
         scrcpyPluginRelativePaths.get().forEach { scrcpyRelativePath ->
             val sourceDirectory = pluginsRootDirectory.resolve(scrcpyRelativePath)
             val preparedDirectory = preparedPlugins.resolve(scrcpyRelativePath)
@@ -280,6 +307,7 @@ val verifyPortableZipInputs by tasks.registering(VerifyPortableZipInputsTask::cl
     adbPluginRelativePath.set(portableAdbPluginRelativePath)
     scrcpyPluginRelativePaths.set(portableScrcpyPluginRelativePaths)
     scrcpyBinary.set(portableScrcpyBinary)
+    athPluginRelativePath.set(portableAthPluginRelativePath)
     iconFile.set(portableIconFile)
     pluginsRoot.set(pluginsDir)
     preparedResourcesRoot.set(portableAppResourcesDir)
