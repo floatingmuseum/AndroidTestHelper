@@ -195,6 +195,8 @@
   "device.max_charging_voltage": "最大充电电压",
   "device.memory_info_proc_meminfo": "内存信息 (/proc/meminfo)",
   "device.menu": "菜单键",
+  "device.mirror.apk_install_failed_arg0": "镜像 APK 安装失败：{0}",
+  "device.mirror.apk_install_succeeded_arg0": "通过镜像桌面安装 APK 成功：{0}",
   "device.mirror.interrupted_exit_code_arg0": "scrcpy 镜像异常停止。退出码：{0}",
   "device.mirror.running_hint": "设备镜像窗口已打开。可在副窗口中使用鼠标点击、滑动和键盘输入操作设备。",
   "device.mirror.scrcpy_unavailable_arg0": "scrcpy 不可用，无法启动设备镜像：{0}",

@@ -195,6 +195,8 @@
   "device.max_charging_voltage": "Max Charging Voltage",
   "device.memory_info_proc_meminfo": "Memory Info (/proc/meminfo)",
   "device.menu": "Menu",
+  "device.mirror.apk_install_failed_arg0": "Mirror APK installation failed: {0}",
+  "device.mirror.apk_install_succeeded_arg0": "APK installed successfully via the mirror desktop: {0}",
   "device.mirror.interrupted_exit_code_arg0": "scrcpy mirror stopped unexpectedly. Exit code: {0}",
   "device.mirror.running_hint": "The device mirror window is open. Use mouse clicks, swipes, and keyboard input in the secondary window to control the device.",
   "device.mirror.scrcpy_unavailable_arg0": "scrcpy is unavailable; unable to start device mirror: {0}",

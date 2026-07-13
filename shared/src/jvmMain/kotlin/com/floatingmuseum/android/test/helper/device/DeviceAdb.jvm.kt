@@ -496,6 +496,7 @@ private class JvmDeviceAdb : DeviceAdb {
                 bitRate = settings.screenRecordBitRate,
                 maxFps = settings.screenRecordMaxFps,
             ),
+            deviceSerial = deviceSerial,
             logCommand = logCommand,
             onMirrorStarted = onMirrorStarted,
         )
@@ -852,6 +853,7 @@ private class JvmDeviceAdb : DeviceAdb {
 
     private suspend fun runScrcpyMirrorCommand(
         command: ScrcpyMirrorCommand,
+        deviceSerial: String,
         logCommand: (String) -> Unit,
         onMirrorStarted: () -> Unit,
     ): DeviceMirrorResult {
@@ -871,7 +873,18 @@ private class JvmDeviceAdb : DeviceAdb {
             activeDeviceMirrorProcess = process
             onMirrorStarted()
             val outputReader = async(Dispatchers.IO) {
-                process.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                buildString {
+                    process.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+                        lines.forEach { line ->
+                            logScrcpyMirrorInstallEvent(
+                                line = line,
+                                deviceSerial = deviceSerial,
+                                logCommand = logCommand,
+                            )
+                            append(line).append('\n')
+                        }
+                    }
+                }
             }
             try {
                 while (!process.waitFor(100L, TimeUnit.MILLISECONDS)) {
@@ -1395,6 +1408,54 @@ internal fun isScrcpyRecordingStartedLine(line: String): Boolean {
     return "recording" in normalized &&
         "started" in normalized &&
         ("to " in normalized || "file" in normalized || "record" in normalized)
+}
+
+internal enum class ScrcpyMirrorInstallEventType {
+    INSTALLING,
+    SUCCEEDED,
+    FAILED,
+}
+
+internal data class ScrcpyMirrorInstallEvent(
+    val type: ScrcpyMirrorInstallEventType,
+    val filePath: String,
+)
+
+internal fun parseScrcpyMirrorInstallEvent(line: String): ScrcpyMirrorInstallEvent? {
+    val message = line.substringAfterLast(": ", line).trim()
+    Regex("""Installing (.+)\.\.\.""", RegexOption.IGNORE_CASE).matchEntire(message)?.let {
+        return ScrcpyMirrorInstallEvent(ScrcpyMirrorInstallEventType.INSTALLING, it.groupValues[1])
+    }
+    Regex("""(.+) successfully installed""", RegexOption.IGNORE_CASE).matchEntire(message)?.let {
+        return ScrcpyMirrorInstallEvent(ScrcpyMirrorInstallEventType.SUCCEEDED, it.groupValues[1])
+    }
+    Regex("""Failed to install (.+)""", RegexOption.IGNORE_CASE).matchEntire(message)?.let {
+        return ScrcpyMirrorInstallEvent(ScrcpyMirrorInstallEventType.FAILED, it.groupValues[1])
+    }
+    return null
+}
+
+internal fun buildScrcpyApkInstallDisplayCommand(deviceSerial: String, apkFilePath: String): String {
+    return "adb -s $deviceSerial install -r \"${apkFilePath.toDisplayCommandToken()}\""
+}
+
+private fun logScrcpyMirrorInstallEvent(
+    line: String,
+    deviceSerial: String,
+    logCommand: (String) -> Unit,
+) {
+    val event = parseScrcpyMirrorInstallEvent(line) ?: return
+    when (event.type) {
+        ScrcpyMirrorInstallEventType.INSTALLING -> {
+            logCommand(buildScrcpyApkInstallDisplayCommand(deviceSerial, event.filePath))
+        }
+        ScrcpyMirrorInstallEventType.SUCCEEDED -> {
+            logCommand(commandStatus(localized("device.mirror.apk_install_succeeded_arg0", event.filePath)))
+        }
+        ScrcpyMirrorInstallEventType.FAILED -> {
+            logCommand(commandError(localized("device.mirror.apk_install_failed_arg0", event.filePath)))
+        }
+    }
 }
 
 private enum class ScreenRecordStopMode {

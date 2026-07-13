@@ -386,6 +386,31 @@ class DeviceAdbTest {
     }
 
     @Test
+    fun testParseScrcpyMirrorInstallEvents() {
+        assertEquals(
+            ScrcpyMirrorInstallEvent(ScrcpyMirrorInstallEventType.INSTALLING, "C:\\Apks\\demo.apk"),
+            parseScrcpyMirrorInstallEvent("INFO: Installing C:\\Apks\\demo.apk..."),
+        )
+        assertEquals(
+            ScrcpyMirrorInstallEvent(ScrcpyMirrorInstallEventType.SUCCEEDED, "C:\\Apks\\demo.apk"),
+            parseScrcpyMirrorInstallEvent("INFO: C:\\Apks\\demo.apk successfully installed"),
+        )
+        assertEquals(
+            ScrcpyMirrorInstallEvent(ScrcpyMirrorInstallEventType.FAILED, "C:\\Apks\\demo.apk"),
+            parseScrcpyMirrorInstallEvent("ERROR: Failed to install C:\\Apks\\demo.apk"),
+        )
+        assertNull(parseScrcpyMirrorInstallEvent("INFO: Server connected"))
+    }
+
+    @Test
+    fun testBuildScrcpyApkInstallDisplayCommand() {
+        assertEquals(
+            "adb -s emulator-5554 install -r \"C:\\Apks\\demo.apk\"",
+            buildScrcpyApkInstallDisplayCommand("emulator-5554", "C:\\Apks\\demo.apk"),
+        )
+    }
+
+    @Test
     fun testBuildScreenRecordTransferPlanUsesRemoteAndLocalTargets() {
         val capturedAt = LocalDateTime.of(2026, 6, 17, 9, 8, 7)
         val outputDirectory = File("recordings").absolutePath
