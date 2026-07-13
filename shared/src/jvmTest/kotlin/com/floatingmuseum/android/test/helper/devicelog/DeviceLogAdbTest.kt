@@ -71,6 +71,24 @@ class DeviceLogAdbTest {
     }
 
     @Test
+    fun defaultTemplatesCoverFiveCommonLogcatScenarios() {
+        val templates = defaultLogCommandTemplates()
+
+        assertEquals(5, templates.size)
+        assertTrue(templates.all { it.preset.parts.size == it.parameterExplanationKeys.size })
+        assertTrue(templates.all { it.prefixExplanationKey.isNotBlank() })
+
+        val commands = templates.map {
+            buildLogcatAdbCommand("R58M123ABC", it.preset).displayCommand
+        }
+        assertTrue(commands.any { it.contains("-b all") })
+        assertTrue(commands.any { it.contains("ActivityManager:I") })
+        assertTrue(commands.any { it.contains("-b crash") })
+        assertTrue(commands.any { it.contains("-T 500") })
+        assertTrue(commands.any { it.contains("FATAL EXCEPTION") })
+    }
+
+    @Test
     fun logCommandPartsAllowRepeatedTypesAndPreserveOrder() {
         val preset = LogCommandPreset(
             id = "custom",

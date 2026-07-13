@@ -11,6 +11,7 @@ import com.floatingmuseum.android.test.helper.localization.commandStatus
 import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.localization.unknownError
 import com.floatingmuseum.android.test.helper.revealFileInDirectory
+import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -274,9 +275,18 @@ internal class DeviceLogModuleController(
 
     fun applyCommandPreset(preset: LogCommandPreset) {
         currentCommandPreset = preset.normalized()
-        val message = localized("log.command.applied_arg0", preset.name)
+        val message = localized("log.command.applied_arg0", displayLogCommandPresetName(preset))
         setStatusText(message)
         appendCommand(commandStatus(message))
+    }
+
+    fun setDefaultLogCommandTemplatesExpanded(expanded: Boolean) {
+        if (AppSettingsShared.currentSettings.defaultLogCommandTemplatesExpanded == expanded) return
+        AppSettingsShared.updateSettings(
+            AppSettingsShared.currentSettings.copy(
+                defaultLogCommandTemplatesExpanded = expanded,
+            ),
+        )
     }
 
     fun deleteCommandPreset(preset: LogCommandPreset) {

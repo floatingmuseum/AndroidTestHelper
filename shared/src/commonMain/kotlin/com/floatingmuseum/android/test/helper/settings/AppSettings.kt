@@ -102,6 +102,7 @@ data class AppSettings(
     val screenRecordBitRate: ScreenRecordBitRate = ScreenRecordBitRate.Default,
     val screenRecordMaxFps: ScreenRecordMaxFps = ScreenRecordMaxFps.Default,
     val screenRecordAudioMode: ScreenRecordAudioMode = ScreenRecordAudioMode.Disabled,
+    val defaultLogCommandTemplatesExpanded: Boolean = true,
 )
 
 fun AppSettings.normalized(): AppSettings {

@@ -41,6 +41,7 @@ fun DeviceLogPanel(
     lastResult: DeviceLogCaptureResult?,
     currentCommandPreset: LogCommandPreset,
     savedCommandPresets: List<LogCommandPreset>,
+    defaultLogCommandTemplatesExpanded: Boolean,
     isCommandEditorOpen: Boolean,
     editorCommandName: String,
     editorCommandNameHasError: Boolean,
@@ -73,6 +74,7 @@ fun DeviceLogPanel(
     onSaveEditorCommandPreset: (Boolean) -> Unit,
     onApplyCommandPreset: (LogCommandPreset) -> Unit,
     onDeleteCommandPreset: (LogCommandPreset) -> Unit,
+    onDefaultLogCommandTemplatesExpandedChange: (Boolean) -> Unit,
     onRestoreDefaultCommandPreset: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -113,6 +115,14 @@ fun DeviceLogPanel(
                 isRunning = isRunning,
                 onOpenCommandEditor = onOpenCommandEditor,
                 onRestoreDefaultCommandPreset = onRestoreDefaultCommandPreset,
+            )
+
+            DefaultLogCommandTemplatesCard(
+                selectedDevice = selectedDevice,
+                isRunning = isRunning,
+                expanded = defaultLogCommandTemplatesExpanded,
+                onExpandedChange = onDefaultLogCommandTemplatesExpandedChange,
+                onApplyCommandPreset = onApplyCommandPreset,
             )
 
             SavedCommandsCard(
@@ -157,6 +167,155 @@ fun DeviceLogPanel(
                 onSaveEditorCommandPreset = onSaveEditorCommandPreset,
             )
         }
+    }
+}
+
+@Composable
+private fun DefaultLogCommandTemplatesCard(
+    selectedDevice: AndroidDevice,
+    isRunning: Boolean,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onApplyCommandPreset: (LogCommandPreset) -> Unit,
+) {
+    val strings = rememberAppStrings()
+    val templates = defaultLogCommandTemplates()
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = strings.t("log.command.default_templates"),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = strings.t("log.command.default_templates_hint", templates.size),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = { onExpandedChange(!expanded) }) {
+                    Text(
+                        if (expanded) {
+                            strings.t("log.command.default_templates_collapse")
+                        } else {
+                            strings.t("log.command.default_templates_expand")
+                        },
+                    )
+                }
+            }
+
+            if (expanded) {
+                templates.forEachIndexed { index, template ->
+                    if (index > 0) {
+                        androidx.compose.material3.HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                        )
+                    }
+                    DefaultLogCommandTemplateRow(
+                        selectedDevice = selectedDevice,
+                        template = template,
+                        enabled = !isRunning,
+                        onApply = { onApplyCommandPreset(template.preset) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DefaultLogCommandTemplateRow(
+    selectedDevice: AndroidDevice,
+    template: DefaultLogCommandTemplate,
+    enabled: Boolean,
+    onApply: () -> Unit,
+) {
+    val strings = rememberAppStrings()
+    val command = buildLogcatAdbCommand(selectedDevice.transportId, template.preset)
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = strings.t(template.titleKey),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedButton(onClick = onApply, enabled = enabled) {
+                    Text(strings.t("log.command.apply"))
+                }
+            }
+            Text(
+                text = "${strings.t("log.command.default_template.scenario")}: ${strings.t(template.scenarioKey)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            CommandPreviewLine(command.displayCommand)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = strings.t("log.command.default_template.parameters"),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                CommandExplanationRow(
+                    parameter = DEFAULT_LOG_COMMAND_TEMPLATE_PREFIX,
+                    explanation = strings.t(template.prefixExplanationKey),
+                )
+                template.preset.parts.forEachIndexed { index, part ->
+                    CommandExplanationRow(
+                        parameter = logCommandPartSummary(part),
+                        explanation = strings.t(template.parameterExplanationKeys[index]),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommandExplanationRow(
+    parameter: String,
+    explanation: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = parameter,
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = explanation,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

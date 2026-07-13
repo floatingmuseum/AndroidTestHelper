@@ -84,6 +84,19 @@ class JvmSettingsRepositoryTest {
         }
     }
 
+    @Test
+    fun savingLogCommandTemplateExpansionStatePersists() {
+        withTemporarySettingsFile { settingsFile ->
+            JvmSettingsRepository { settingsFile }.saveSettings(
+                AppSettings(defaultLogCommandTemplatesExpanded = false),
+            )
+
+            val settings = JvmSettingsRepository { settingsFile }.loadSettings()
+
+            assertFalse(settings.defaultLogCommandTemplatesExpanded)
+        }
+    }
+
     private fun withTemporarySettingsFile(block: (java.io.File) -> Unit) {
         val tempRoot = Files.createTempDirectory("ath_settings_").toFile()
         try {

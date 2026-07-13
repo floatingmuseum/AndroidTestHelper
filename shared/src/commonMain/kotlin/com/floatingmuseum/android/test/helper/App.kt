@@ -1721,6 +1721,7 @@ fun App() {
                                     lastResult = deviceLogModule.lastResult,
                                     currentCommandPreset = deviceLogModule.currentCommandPreset,
                                     savedCommandPresets = deviceLogModule.savedCommandPresets,
+                                    defaultLogCommandTemplatesExpanded = appSettings.defaultLogCommandTemplatesExpanded,
                                     isCommandEditorOpen = deviceLogModule.isCommandEditorOpen,
                                     editorCommandName = deviceLogModule.editorCommandName,
                                     editorCommandNameHasError = deviceLogModule.editorCommandNameHasError,
@@ -1753,6 +1754,7 @@ fun App() {
                                     onSaveEditorCommandPreset = deviceLogModule::saveEditorCommandPreset,
                                     onApplyCommandPreset = deviceLogModule::applyCommandPreset,
                                     onDeleteCommandPreset = deviceLogModule::deleteCommandPreset,
+                                    onDefaultLogCommandTemplatesExpandedChange = deviceLogModule::setDefaultLogCommandTemplatesExpanded,
                                     onRestoreDefaultCommandPreset = deviceLogModule::restoreDefaultCommandPreset,
                                     modifier = Modifier.fillMaxSize(),
                                 )
