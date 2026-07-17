@@ -70,6 +70,8 @@ import com.floatingmuseum.android.test.helper.localization.commandError
 import com.floatingmuseum.android.test.helper.localization.commandStatus
 import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.localization.unknownError
+import com.floatingmuseum.android.test.helper.monkey.MonkeyModuleContent
+import com.floatingmuseum.android.test.helper.monkey.rememberMonkeyModuleController
 import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
 import com.floatingmuseum.android.test.helper.settings.SettingsModuleContent
 import com.floatingmuseum.android.test.helper.settings.SettingsModuleState
@@ -406,11 +408,25 @@ fun App() {
             setStatusText = { statusText = it },
             appendCommand = ::appendCommand,
         )
+        val monkeyModule = rememberMonkeyModuleController(
+            scope = scope,
+            getSelectedReadyDevice = {
+                devices.firstOrNull { it.transportId == selectedDeviceTransportId }?.takeIf { it.isReady }
+            },
+            isGlobalRunning = { isRunning },
+            setGlobalRunning = { isRunning = it },
+            setStatusText = { statusText = it },
+            appendCommand = ::appendCommand,
+        )
         val isCapturingLogcat = deviceLogModule.isCapturing
         clearModuleDeviceState = {
             dataFillModule.clearDeviceState()
             fileManagerModule.clearDeviceState()
             deviceLogModule.clearIfIdle()
+        }
+
+        DisposableEffect(monkeyModule) {
+            onDispose { monkeyModule.dispose() }
         }
 
         fun refreshDevices() {
@@ -1370,7 +1386,11 @@ fun App() {
                     if (devicePropertiesLoadedSerial != deviceTransportId) {
                         loadDeviceSystemProperties(deviceTransportId)
                     }
-                } else if (selectedTestModule == TestModule.App || selectedTestModule == TestModule.Intent) {
+                } else if (
+                    selectedTestModule == TestModule.App ||
+                    selectedTestModule == TestModule.Intent ||
+                    selectedTestModule == TestModule.Monkey
+                ) {
                     if (systemLoadedSerial != deviceSerial) {
                         val cached = appAdb.loadCachedSystemApps(deviceSerial)
                         if (cached != null) {
@@ -1406,7 +1426,9 @@ fun App() {
         ) {
             val deviceSerial = selectedReadyDevice?.serialNumber
             val deviceTransportId = selectedReadyDevice?.transportId
-            if ((selectedTestModule == TestModule.App || selectedTestModule == TestModule.Intent) &&
+            if ((selectedTestModule == TestModule.App ||
+                    selectedTestModule == TestModule.Intent ||
+                    selectedTestModule == TestModule.Monkey) &&
                 deviceSerial != null &&
                 deviceTransportId != null &&
                 !isRunning &&
@@ -1427,7 +1449,9 @@ fun App() {
         ) {
             val deviceSerial = selectedReadyDevice?.serialNumber
             val deviceTransportId = selectedReadyDevice?.transportId
-            if ((selectedTestModule == TestModule.App || selectedTestModule == TestModule.Intent) &&
+            if ((selectedTestModule == TestModule.App ||
+                    selectedTestModule == TestModule.Intent ||
+                    selectedTestModule == TestModule.Monkey) &&
                 deviceSerial != null &&
                 deviceTransportId != null &&
                 !isRunning &&
@@ -1700,6 +1724,16 @@ fun App() {
                                     lastResult = lastIntentResult,
                                     isRunning = isRunning,
                                     onExecute = ::runIntentCommand,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+
+                            TestModule.Monkey -> {
+                                MonkeyModuleContent(
+                                    controller = monkeyModule,
+                                    selectedDevice = selectedDevice,
+                                    appCandidates = intentAppCandidates,
+                                    isGlobalRunning = isRunning,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
