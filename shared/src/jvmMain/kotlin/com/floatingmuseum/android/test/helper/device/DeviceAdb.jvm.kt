@@ -1761,7 +1761,7 @@ internal fun buildQuickActionCommand(
 }
 
 internal fun parseCurrentActivity(output: String): Pair<String, String>? {
-    val regex = """([a-zA-Z0-9._]+)/([a-zA-Z0-9._]+)""".toRegex()
+    val regex = """([a-zA-Z0-9._]+)/([a-zA-Z0-9._$]+)""".toRegex()
     val matchResult = regex.find(output) ?: return null
     val packageName = matchResult.groupValues[1]
     val rawActivityName = matchResult.groupValues[2]

@@ -743,7 +743,21 @@ class DeviceAdbTest {
         assertEquals("com.floatingmuseum.android.test.helper", res5.first)
         assertEquals("com.floatingmuseum.android.test.helper.MainActivity", res5.second)
 
-        // Test format 6: null or invalid inputs
+        // Test format 6: inner class activity with dollar sign
+        val output6 = "  mCurrentFocus=Window{8f2d5a3 u0 com.android.settings/com.android.settings.Settings\$UsageAccessSettingsActivity}"
+        val res6 = parseCurrentActivity(output6)
+        kotlin.test.assertNotNull(res6)
+        assertEquals("com.android.settings", res6.first)
+        assertEquals("com.android.settings.Settings\$UsageAccessSettingsActivity", res6.second)
+
+        // Test format 7: inner class activity with relative name
+        val output7 = "    mResumedActivity: ActivityRecord{8b671cc u0 com.android.settings/.Settings\$UsageAccessSettingsActivity t12}"
+        val res7 = parseCurrentActivity(output7)
+        kotlin.test.assertNotNull(res7)
+        assertEquals("com.android.settings", res7.first)
+        assertEquals("com.android.settings.Settings\$UsageAccessSettingsActivity", res7.second)
+
+        // Test format 8: null or invalid inputs
         assertNull(parseCurrentActivity("mCurrentFocus=null"))
         assertNull(parseCurrentActivity("something completely random"))
     }
