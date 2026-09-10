@@ -110,6 +110,8 @@ fun DeviceLogPanel(
                 onStopCapture = onStopCapture,
             )
 
+            LatestLogResult(lastResult, onRevealLogFile)
+
             CurrentCommandCard(
                 command = currentCommand.displayCommand,
                 isRunning = isRunning,
@@ -134,7 +136,6 @@ fun DeviceLogPanel(
             )
 
             CaptureProgress(progress)
-            LatestLogResult(lastResult, onRevealLogFile)
         }
 
         if (isCommandEditorOpen) {
