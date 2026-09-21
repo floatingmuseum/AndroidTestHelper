@@ -20,12 +20,14 @@ import kotlinx.coroutines.launch
 internal class DeviceLogModuleController(
     private val deviceLogAdb: DeviceLogAdb,
     private val historyRepository: LogFilterHistoryRepository,
+    commandRepository: LogCommandRepository,
     private val scope: CoroutineScope,
     private val getSelectedReadyDevice: () -> AndroidDevice?,
     private val setStatusText: (String) -> Unit,
     private val appendCommand: (String) -> Unit,
 ) {
     val fileViewer = LogFileViewerController(scope)
+    val commands = LogCommandController(commandRepository, { isCapturing }, appendCommand)
 
     var progress by mutableStateOf<DeviceLogCaptureProgress?>(null)
         private set
@@ -65,6 +67,7 @@ internal class DeviceLogModuleController(
         }
 
         val filter = LogKeywordFilter(filterQuery, matchCase).normalized()
+        val customCommand = commands.configuration.selectedCommand
         filterQuery = filter.query
         saveFilterToHistory()
         val job = scope.launch(start = CoroutineStart.LAZY) {
@@ -78,6 +81,7 @@ internal class DeviceLogModuleController(
                     deviceSerial = device.transportId,
                     deviceModel = device.model,
                     filter = filter,
+                    customCommand = customCommand,
                     logCommand = appendCommand,
                     onProgress = { nextProgress ->
                         progress = nextProgress
@@ -186,10 +190,12 @@ internal fun rememberDeviceLogModuleController(
 ): DeviceLogModuleController {
     val deviceLogAdb = remember { createDeviceLogAdb() }
     val historyRepository = remember { createLogFilterHistoryRepository() }
+    val commandRepository = remember { createLogCommandRepository() }
     return remember {
         DeviceLogModuleController(
             deviceLogAdb = deviceLogAdb,
             historyRepository = historyRepository,
+            commandRepository = commandRepository,
             scope = scope,
             getSelectedReadyDevice = getSelectedReadyDevice,
             setStatusText = setStatusText,

@@ -27,6 +27,50 @@ class DeviceLogCaptureTest {
     """.trimIndent() + "\n"
 
     @Test
+    fun customDumpUsesSelectedCommandAndKeepsOriginalTextWithFiltering() = runBlocking {
+        withDirectory { directory ->
+            val process = FakeProcess(logs, 0)
+            var receivedArgs = emptyList<String>()
+            val adb = JvmDeviceLogAdb(
+                logsDirectory = { directory },
+                startLogcat = { args -> receivedArgs = args; process },
+                readProcessNames = { _, _ -> error("Custom output must not request process names") },
+            )
+            val custom = CustomLogCommand("snapshot", "adb -s old shell logcat -d -v raw")
+            val result = adb.captureFullLogs("selected", "tablet", LogKeywordFilter("csdk"), {}, {}, custom)
+            assertEquals(buildLogcatAdbCommand("selected", custom).args, receivedArgs)
+            assertEquals(DeviceLogCaptureEndState.COMPLETED, result.endState)
+            assertEquals(1L, result.matchedLines)
+            val full = File(result.filePath).readText()
+            assertTrue(full.contains(logs))
+            assertFalse(full.contains("Columns: Date Time"))
+            assertTrue(File(assertNotNull(result.filteredFilePath)).readText().contains("1105 1131 E UsbDeviceManager"))
+            assertTrue(process.destroyed)
+        }
+    }
+
+    @Test
+    fun stoppingCustomCaptureRetainsBothPathsAndDestroysProcess() = runBlocking {
+        withDirectory { directory ->
+            val process = FakeProcess(logs, 0, staysAlive = true)
+            val adb = capture(directory, process)
+            val ready = CompletableDeferred<Unit>()
+            val job = async {
+                adb.captureFullLogs("serial", "tablet", LogKeywordFilter("csdk"), {}, {
+                    if (it.capturedLines == 3L) ready.complete(Unit)
+                }, CustomLogCommand("custom", "logcat -v threadtime"))
+            }
+            withTimeout(5_000) { ready.await() }
+            adb.stopCurrentCapture()
+            val result = withTimeout(5_000) { job.await() }
+            assertEquals(DeviceLogCaptureEndState.STOPPED, result.endState)
+            assertTrue(File(result.filePath).readText().contains(logs))
+            assertTrue(File(assertNotNull(result.filteredFilePath)).exists())
+            assertTrue(process.destroyed)
+        }
+    }
+
+    @Test
     fun interruptionKeepsFullAndFilteredFiles() = runBlocking {
         withDirectory { directory ->
             val process = FakeProcess(logs, 1)

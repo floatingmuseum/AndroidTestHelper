@@ -46,6 +46,7 @@ import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 @Composable
 internal fun DeviceLogPanel(
     fileViewer: LogFileViewerController,
+    commands: LogCommandController,
     selectedDevice: AndroidDevice?,
     isRunning: Boolean,
     progress: DeviceLogCaptureProgress?,
@@ -96,6 +97,8 @@ internal fun DeviceLogPanel(
 
             LatestLogResult(lastResult, onRevealLogFile, fileViewer::openFile)
 
+            LogCommandSelector(commands, enabled = !isRunning)
+
             KeywordFilterBar(
                 query = filterQuery,
                 matchCase = matchCase,
@@ -120,6 +123,7 @@ internal fun DeviceLogPanel(
             }
         }
     }
+    if (commands.managerOpen) LogCommandManager(commands)
 }
 
 @Composable

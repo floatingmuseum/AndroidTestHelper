@@ -1752,6 +1752,7 @@ fun App() {
                             TestModule.Log -> {
                                 DeviceLogPanel(
                                     fileViewer = deviceLogModule.fileViewer,
+                                    commands = deviceLogModule.commands,
                                     selectedDevice = selectedDevice,
                                     isRunning = isCapturingLogcat,
                                     progress = deviceLogModule.progress,

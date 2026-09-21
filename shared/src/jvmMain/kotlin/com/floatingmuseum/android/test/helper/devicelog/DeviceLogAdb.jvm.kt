@@ -52,11 +52,12 @@ internal class JvmDeviceLogAdb(
         filter: LogKeywordFilter,
         logCommand: (String) -> Unit,
         onProgress: (DeviceLogCaptureProgress) -> Unit,
+        customCommand: CustomLogCommand?,
     ): DeviceLogCaptureResult {
         stopRequested = false
         val normalizedFilter = filter.normalized()
         val matcher = LogKeywordMatcher(normalizedFilter)
-        val command = buildLogcatAdbCommand(deviceSerial)
+        val command = buildLogcatAdbCommand(deviceSerial, customCommand)
         val capturedAt = LocalDateTime.now()
         val capturedLines = AtomicLong()
         val matchedLines = AtomicLong()
@@ -75,7 +76,7 @@ internal class JvmDeviceLogAdb(
             val filteredFile = if (matcher.isEmpty) null else directory.resolve(outputFile.nameWithoutExtension + "_filtered.log")
             var endState = DeviceLogCaptureEndState.STOPPED
             var endMessage: String? = null
-            val names = AtomicReference(processNames())
+            val names = AtomicReference(if (command.studioFormat) processNames() else emptyMap())
             outputFile.bufferedWriter(Charsets.UTF_8).use { fullWriter ->
                 filteredFile?.bufferedWriter(Charsets.UTF_8).use { filteredWriter ->
                     writeHeader(fullWriter, deviceSerial, deviceModel, capturedAt, command, null)
@@ -93,7 +94,7 @@ internal class JvmDeviceLogAdb(
                                     var lastFlush = System.nanoTime()
                                     lines.forEach { raw ->
                                         currentCoroutineContext().ensureActive()
-                                        val entry = parseThreadtimeLogLine(raw)
+                                        val entry = if (command.studioFormat) parseThreadtimeLogLine(raw) else null
                                         val line = entry?.format(names.get()[entry.pid]) ?: raw
                                         fullWriter.appendLine(line)
                                         if (!raw.startsWith("---------") && raw.isNotBlank()) {
@@ -131,9 +132,16 @@ internal class JvmDeviceLogAdb(
                             }
                             val readResult = outputReader.await()
                             if (!stopRequested) readResult.getOrThrow()
-                            endState = if (stopRequested) DeviceLogCaptureEndState.STOPPED else DeviceLogCaptureEndState.INTERRUPTED
-                            endMessage = if (stopRequested) localized("log.user_stopped_capture") else
-                                localized("log.capture.interrupted_exit_code", process.exitValue())
+                            endState = when {
+                                stopRequested -> DeviceLogCaptureEndState.STOPPED
+                                command.completesOnExit && process.exitValue() == 0 -> DeviceLogCaptureEndState.COMPLETED
+                                else -> DeviceLogCaptureEndState.INTERRUPTED
+                            }
+                            endMessage = when (endState) {
+                                DeviceLogCaptureEndState.STOPPED -> localized("log.user_stopped_capture")
+                                DeviceLogCaptureEndState.COMPLETED -> localized("log.logcat_capture_completed")
+                                DeviceLogCaptureEndState.INTERRUPTED -> localized("log.capture.interrupted_exit_code", process.exitValue())
+                            }
                         } catch (error: CancellationException) {
                             throw error
                         } catch (error: Exception) {
@@ -207,8 +215,12 @@ private fun writeHeader(
         writer.appendLine("Keywords (OR, literal): ${filter.query}")
         writer.appendLine("MatchCase: ${filter.matchCase}")
     }
-    writer.appendLine("Columns: Date Time PID-TID Tag Process Priority Message")
-    writer.appendLine("Process names: current device snapshot, refreshed every 5 seconds; '-' when unavailable. Historical PID names may differ.")
+    if (command.studioFormat) {
+        writer.appendLine("Columns: Date Time PID-TID Tag Process Priority Message")
+        writer.appendLine("Process names: current device snapshot, refreshed every 5 seconds; '-' when unavailable. Historical PID names may differ.")
+    } else {
+        writer.appendLine("Format: original logcat text output from the custom command")
+    }
     writer.appendLine()
     writer.flush()
 }

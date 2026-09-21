@@ -126,7 +126,10 @@ When adding new test features, add or extend a test module instead of hard-codin
 - JVM implementation:
   - `shared/src/jvmMain/kotlin/com/floatingmuseum/android/test/helper/devicelog/DeviceLogAdb.jvm.kt`
 - Current behavior:
-  - Continuously captures `logcat -b all -v threadtime -v year *:V` with year and millisecond precision; no command templates or parameter editor.
+  - The immutable built-in command continuously captures `logcat -b all -v threadtime -v year *:V` with year and millisecond precision. It is always first in the capture command dropdown and cannot be edited or deleted.
+  - Custom command management shows only the default-command label and selectable command text on two lines, without copy/paste buttons or explanatory text. New commands start with editable `adb -s <serialNumber> shell logcat`; use single-line name and command fields of matching height. Persist custom commands and the selection in `AppRuntimePaths.cacheDirectory()/log_commands.json`. Keep empty/duplicate-name and command validation inline; deleting the selected command restores the built-in default. Freeze command selection and editing during capture.
+  - Accept a full `adb [-s <serialNumber>] [shell] logcat ...` command or `logcat ...`; always replace any supplied serial with the selected device. Parse quoted arguments and quote them for the remote shell; do not execute host shell syntax, pipes, redirection, log clearing, binary output or device-file output.
+  - Custom captures preserve original logcat text and apply the same local keyword filtering. Only the built-in command adds Studio-style columns and process names. Explicit dump/count-limited custom captures may finish as `COMPLETED`; a continuous capture exiting on its own remains `INTERRUPTED`.
   - Formats text as date/time, PID-TID, tag, process, priority, message. Process names come from a best-effort current `ps -A -o PID,NAME` snapshot refreshed every 5 seconds; missing names are `-`, and historical PID names may differ.
   - Keyword filters are literal OR terms separated by `|`, with optional case sensitivity; filtering happens locally against formatted lines, never via shell interpolation.
   - Always saves the full log; a non-empty filter additionally saves `_filtered.log`. Capture settings are fixed for the active capture and both paths remain available on stop/interruption.

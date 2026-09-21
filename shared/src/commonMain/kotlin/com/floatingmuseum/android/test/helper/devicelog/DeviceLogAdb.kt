@@ -22,9 +22,26 @@ data class DeviceLogCaptureResult(
 
 enum class DeviceLogCaptureEndState { COMPLETED, STOPPED, INTERRUPTED }
 
-data class LogcatAdbCommand(val args: List<String>, val displayCommand: String)
+data class LogcatAdbCommand(
+    val args: List<String>,
+    val displayCommand: String,
+    val studioFormat: Boolean = true,
+    val completesOnExit: Boolean = false,
+)
 
-fun buildLogcatAdbCommand(deviceSerial: String): LogcatAdbCommand {
+fun buildLogcatAdbCommand(deviceSerial: String, customCommand: CustomLogCommand? = null): LogcatAdbCommand {
+    if (customCommand != null) {
+        val arguments = parseCustomLogcatArguments(customCommand.command)
+        val args = listOf("-s", deviceSerial, "shell", "logcat") + arguments.map(::quoteLogcatArgument)
+        return LogcatAdbCommand(
+            args, "adb -s ${quoteLogcatArgument(deviceSerial)} shell logcat " + arguments.joinToString(" ", transform = ::quoteLogcatArgument),
+            studioFormat = false,
+            completesOnExit = arguments.any {
+                it in listOf("-d", "--dump", "-t", "-m", "--max-count") ||
+                    it.startsWith("--max-count=") || it.matches(Regex("-[tm]\\d+"))
+            },
+        )
+    }
     val args = listOf("-s", deviceSerial, "shell", "logcat", "-b", "all", "-v", "threadtime", "-v", "year", "*:V")
     return LogcatAdbCommand(args, "adb " + args.joinToString(" "))
 }
@@ -90,6 +107,7 @@ interface DeviceLogAdb {
         filter: LogKeywordFilter,
         logCommand: (String) -> Unit,
         onProgress: (DeviceLogCaptureProgress) -> Unit,
+        customCommand: CustomLogCommand? = null,
     ): DeviceLogCaptureResult
 
     fun stopCurrentCapture()
