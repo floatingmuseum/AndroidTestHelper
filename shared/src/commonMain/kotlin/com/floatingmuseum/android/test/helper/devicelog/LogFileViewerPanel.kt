@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -322,6 +323,13 @@ private fun LogFileCell(
     style: TextStyle,
     modifier: Modifier,
 ) {
+    val colors = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) darkLogPriorityColors else lightLogPriorityColors
+    val priorityColors = colors[priority]
+    val textColor = when (column) {
+        LogFileColumn.Priority -> priorityColors?.indicatorText
+        LogFileColumn.Message -> priorityColors?.messageText
+        else -> null
+    } ?: MaterialTheme.colorScheme.onSurface
     val marked = remember(text, filter) {
         buildAnnotatedString {
             append(text)
@@ -334,9 +342,42 @@ private fun LogFileCell(
             }
         }
     }
-    Text(
-        marked, modifier = modifier, style = style,
-        color = if (column == LogFileColumn.Priority && priority in listOf("E", "F", "A")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-        softWrap = true,
-    )
+    Box(modifier) {
+        Text(
+            marked,
+            modifier = if (column == LogFileColumn.Priority && priorityColors != null) {
+                Modifier.background(priorityColors.indicatorBackground).padding(horizontal = 5.dp)
+            } else Modifier,
+            style = style,
+            color = textColor,
+            softWrap = true,
+        )
+    }
 }
+
+private data class LogPriorityColors(
+    val messageText: Color,
+    val indicatorText: Color,
+    val indicatorBackground: Color,
+)
+
+// Android Studio-style message colors and compact level indicators. Row backgrounds
+// remain available for notes, hover and navigation; search spans override text colors.
+private val darkLogPriorityColors = mapOf(
+    "V" to LogPriorityColors(Color(0xFFBBBBBB), Color(0xFF000000), Color(0xFFBBBBBB)),
+    "D" to LogPriorityColors(Color(0xFF299999), Color(0xFFA0C7E4), Color(0xFF365C6B)),
+    "I" to LogPriorityColors(Color(0xFFA8C023), Color(0xFFE3F0D7), Color(0xFF6B8659)),
+    "W" to LogPriorityColors(Color(0xFFBBBB23), Color(0xFF000000), Color(0xFFBBBB23)),
+    "E" to LogPriorityColors(Color(0xFFFF6B68), Color(0xFF000000), Color(0xFFCF5B56)),
+    "A" to LogPriorityColors(Color(0xFFFF6B68), Color(0xFFFFFFFF), Color(0xFF8F3939)),
+).let { it + ("F" to it.getValue("A")) }
+
+// Deeper message hues keep the same level associations readable on light surfaces.
+private val lightLogPriorityColors = mapOf(
+    "V" to LogPriorityColors(Color(0xFF5F6368), Color(0xFF333333), Color(0xFFD7D7D7)),
+    "D" to LogPriorityColors(Color(0xFF006B73), Color(0xFF244D61), Color(0xFFD2EAF1)),
+    "I" to LogPriorityColors(Color(0xFF3E6B18), Color(0xFF35571D), Color(0xFFDBEACC)),
+    "W" to LogPriorityColors(Color(0xFF755C00), Color(0xFF3B3000), Color(0xFFF1D766)),
+    "E" to LogPriorityColors(Color(0xFFC62828), Color(0xFF631414), Color(0xFFF3B3AE)),
+    "A" to LogPriorityColors(Color(0xFFC62828), Color(0xFFFFFFFF), Color(0xFF8F3939)),
+).let { it + ("F" to it.getValue("A")) }
