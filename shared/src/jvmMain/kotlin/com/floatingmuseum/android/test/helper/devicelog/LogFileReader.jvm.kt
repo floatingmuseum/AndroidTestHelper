@@ -111,6 +111,21 @@ private class IndexedLogFileContent(
     override val filePath: String = file.path
     override val rowCount: Int get() = index.size
 
+    override suspend fun findRowIndex(lineNumber: Long): Int {
+        var low = 0
+        var high = rowCount - 1
+        while (low <= high) {
+            val middle = low + (high - low) / 2
+            val number = index.number(middle).toLong()
+            when {
+                number < lineNumber -> low = middle + 1
+                number > lineNumber -> high = middle - 1
+                else -> return middle
+            }
+        }
+        return -1
+    }
+
     override suspend fun readRows(start: Int, count: Int): List<LogFileRow> = withContext(Dispatchers.IO) {
         require(start in 0..rowCount && count >= 0)
         val end = minOf(start.toLong() + count, rowCount.toLong()).toInt()

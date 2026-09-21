@@ -67,6 +67,20 @@ internal interface LogFileContent {
     val rowCount: Int
     val totalLines: Int
     suspend fun readRows(start: Int, count: Int): List<LogFileRow>
+    suspend fun findRowIndex(lineNumber: Long): Int {
+        var low = 0
+        var high = rowCount - 1
+        while (low <= high) {
+            val middle = low + (high - low) / 2
+            val number = readRows(middle, 1).single().lineNumber
+            when {
+                number < lineNumber -> low = middle + 1
+                number > lineNumber -> high = middle - 1
+                else -> return middle
+            }
+        }
+        return -1
+    }
 }
 
 internal interface LogFileReader {

@@ -16,11 +16,25 @@ import kotlinx.coroutines.sync.withPermit
 internal const val LOG_VIEWER_BLOCK_ROWS = 128
 internal const val LOG_VIEWER_CACHED_BLOCKS = 8
 
+internal data class LogFileJumpRequest(val rowIndex: Int, val requestId: Int)
+
 internal class LogFileViewerController(
     private val scope: CoroutineScope,
     private val reader: LogFileReader = createLogFileReader(),
     private val picker: suspend () -> String? = ::selectLogFile,
+    notesRepository: LogFileNotesRepository = createLogFileNotesRepository(),
 ) {
+    val notes = LogFileNotesController(scope, notesRepository)
+    var notesExpanded by mutableStateOf(true)
+        private set
+    var selectedLine by mutableStateOf<Long?>(null)
+        private set
+    var jumpRequest by mutableStateOf<LogFileJumpRequest?>(null)
+        private set
+    var navigationMessage by mutableStateOf<String?>(null)
+        private set
+    private var jumpJob: Job? = null
+    private var jumpRequestId = 0
     var isWindowOpen by mutableStateOf(false)
         private set
     var windowRequestId by mutableStateOf(0)
@@ -52,9 +66,9 @@ internal class LogFileViewerController(
         windowRequestId++
     }
 
-    fun closeWindow() {
+    fun closeWindow() = notes.afterDiscard {
         isWindowOpen = false
-        closeFile()
+        clearFile()
     }
 
     fun selectFile() {
@@ -73,17 +87,22 @@ internal class LogFileViewerController(
         }
     }
 
-    fun openFile(path: String) {
+    fun openFile(path: String) = notes.afterDiscard {
         openWindow()
         filePath = path
         query = ""
         matchCase = false
         hiddenColumns = emptySet()
+        notesExpanded = true
+        notes.open(path)
         reload()
     }
 
-    fun closeFile() {
+    fun closeFile() = notes.afterDiscard { clearFile() }
+
+    private fun clearFile() {
         cancelReads()
+        notes.close()
         filePath = null
         content = null
         error = null
@@ -99,6 +118,52 @@ internal class LogFileViewerController(
 
     fun showAllColumns() { hiddenColumns = emptySet() }
 
+    fun toggleNotesExpansion() { notesExpanded = !notesExpanded }
+
+    fun editNote(row: LogFileRow) {
+        notes.edit(row)
+    }
+
+    fun jumpToNote(note: LogFileNote) {
+        val source = content ?: return
+        if (isLoading) return
+        navigationMessage = null
+        navigateToNote(note, source)
+    }
+
+    private fun navigateToNote(note: LogFileNote, source: LogFileContent) {
+        jumpJob?.cancel()
+        val currentRevision = revision
+        jumpJob = scope.launch {
+            try {
+                val index = source.findRowIndex(note.lineNumber)
+                if (revision != currentRevision) return@launch
+                if (index < 0 && LogKeywordFilter(query, matchCase).keywords.isNotEmpty()) {
+                    query = ""
+                    reload(jumpTo = note)
+                    navigationMessage = localized("log.notes.search_cleared")
+                    return@launch
+                }
+                val row = if (index >= 0) reads.withPermit { source.readRows(index, 1).singleOrNull() } else null
+                if (revision != currentRevision) return@launch
+                if (row == null || row.raw != note.raw) {
+                    selectedLine = null
+                    jumpRequest = null
+                    navigationMessage = localized("log.notes.source_changed", note.lineNumber)
+                    return@launch
+                }
+                if (hiddenColumns.size == LogFileColumn.entries.size) showAllColumns()
+                selectedLine = note.lineNumber
+                jumpRequest = LogFileJumpRequest(index, ++jumpRequestId)
+                ensureRows(index)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (revision == currentRevision) navigationMessage = localized("log.notes.jump_failed", failure.message ?: localized("common.error.unknown"))
+            }
+        }
+    }
+
     fun updateQuery(value: String) {
         query = value
         reload(debounce = true)
@@ -109,7 +174,7 @@ internal class LogFileViewerController(
         reload()
     }
 
-    fun reload(debounce: Boolean = false) {
+    fun reload(debounce: Boolean = false, jumpTo: LogFileNote? = null) {
         val path = filePath ?: return
         cancelReads()
         val currentRevision = revision
@@ -121,7 +186,10 @@ internal class LogFileViewerController(
             try {
                 if (debounce) delay(250)
                 val result = reader.read(path, filter)
-                if (revision == currentRevision) content = result
+                if (revision == currentRevision) {
+                    content = result
+                    if (jumpTo != null) navigateToNote(jumpTo, result)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -164,6 +232,10 @@ internal class LogFileViewerController(
 
     private fun cancelReads() {
         revision++
+        jumpJob?.cancel()
+        jumpRequest = null
+        selectedLine = null
+        navigationMessage = null
         loadJob?.cancel()
         blockJobs.values.toList().forEach { it.cancel() }
         blockJobs.clear()
