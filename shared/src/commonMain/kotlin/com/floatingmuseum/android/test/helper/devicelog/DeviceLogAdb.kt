@@ -1,319 +1,93 @@
 package com.floatingmuseum.android.test.helper.devicelog
 
-import com.floatingmuseum.android.test.helper.localization.localized
 import kotlinx.serialization.Serializable
 
-const val DEFAULT_LOG_COMMAND_PRESET_ID = "default-logcat"
-const val LOG_COMMAND_SERIAL_PLACEHOLDER = "<serialNumber>"
-const val DEFAULT_LOG_COMMAND_TEMPLATE_PREFIX = "adb -s $LOG_COMMAND_SERIAL_PLACEHOLDER shell logcat"
-
 data class DeviceLogCaptureProgress(
-    val currentSection: String,
-    val completedSections: Int,
-    val totalSections: Int,
+    val capturedLines: Long,
+    val matchedLines: Long,
+    val hasFilter: Boolean,
 )
 
 data class DeviceLogCaptureResult(
     val fileName: String,
     val filePath: String,
     val directoryPath: String,
-    val completedSections: Int,
-    val totalSections: Int,
+    val capturedLines: Long,
+    val matchedLines: Long,
+    val filteredFilePath: String? = null,
+    val filter: LogKeywordFilter = LogKeywordFilter(),
     val endState: DeviceLogCaptureEndState = DeviceLogCaptureEndState.COMPLETED,
     val message: String? = null,
 )
 
-enum class DeviceLogCaptureEndState {
-    COMPLETED,
-    STOPPED,
-    INTERRUPTED,
+enum class DeviceLogCaptureEndState { COMPLETED, STOPPED, INTERRUPTED }
+
+data class LogcatAdbCommand(val args: List<String>, val displayCommand: String)
+
+fun buildLogcatAdbCommand(deviceSerial: String): LogcatAdbCommand {
+    val args = listOf("-s", deviceSerial, "shell", "logcat", "-b", "all", "-v", "threadtime", "-v", "year", "*:V")
+    return LogcatAdbCommand(args, "adb " + args.joinToString(" "))
 }
 
+/** Literal keywords, separated by |. Whitespace inside a keyword is significant. */
 @Serializable
-data class LogCommandPreset(
-    val id: String,
-    val name: String,
-    val parts: List<LogCommandPart>,
+data class LogKeywordFilter(val query: String = "", val matchCase: Boolean = false) {
+    val keywords: List<String>
+        get() = query.split('|').map { it.trim() }.filter { it.isNotEmpty() }
+            .distinctBy { if (matchCase) it else it.lowercase() }
+
+    fun normalized(): LogKeywordFilter = copy(query = keywords.joinToString(" | "))
+}
+
+class LogKeywordMatcher(filter: LogKeywordFilter) {
+    private val keywords = filter.keywords
+    private val ignoreCase = !filter.matchCase
+    val isEmpty: Boolean get() = keywords.isEmpty()
+
+    fun matches(line: String): Boolean = isEmpty || keywords.any { line.contains(it, ignoreCase) }
+}
+
+const val LOG_FILTER_HISTORY_LIMIT = 50
+
+fun normalizeLogFilterHistory(history: List<LogKeywordFilter>): List<LogKeywordFilter> = history
+    .map { it.normalized() }
+    .filter { it.query.isNotEmpty() }
+    .distinctBy { (if (it.matchCase) it.query else it.query.lowercase()) to it.matchCase }
+    .take(LOG_FILTER_HISTORY_LIMIT)
+
+fun rememberLogFilter(history: List<LogKeywordFilter>, filter: LogKeywordFilter): List<LogKeywordFilter> =
+    normalizeLogFilterHistory(listOf(filter) + history)
+
+internal data class LogcatEntry(
+    val timestamp: String,
+    val pid: String,
+    val tid: String,
+    val priority: String,
+    val tag: String,
+    val message: String,
 ) {
-    fun normalized(): LogCommandPreset {
-        return copy(
-            name = name.trim(),
-            parts = parts.mapNotNull { it.normalizedOrNull() },
-        )
-    }
+    fun format(processName: String?): String =
+        "$timestamp ${(pid + "-" + tid).padEnd(11)} ${tag.padEnd(24)} ${(processName ?: "-").padEnd(32)} $priority  $message"
 }
 
-@Serializable
-data class LogCommandPart(
-    val type: LogCommandPartType,
-    val value: String,
-    val description: String = "",
-) {
-    fun normalizedOrNull(): LogCommandPart? {
-        val normalizedValue = value.trim()
-        if (normalizedValue.isBlank()) return null
-        return copy(
-            value = normalizedValue,
-            description = description.trim(),
-        )
-    }
+private val threadtimePattern = Regex("""^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEFA])\s(.*?): (.*)$""")
+
+internal fun parseThreadtimeLogLine(line: String): LogcatEntry? {
+    val match = threadtimePattern.matchEntire(line) ?: return null
+    val (timestamp, pid, tid, priority, tag, message) = match.destructured
+    return LogcatEntry(timestamp, pid, tid, priority, tag.trim(), message)
 }
 
-@Serializable
-enum class LogCommandPartType {
-    Buffer,
-    Format,
-    Filter,
-    Regex,
-    Pid,
-    MaxCount,
-    Recent,
-    Silent,
-    Dividers,
-}
-
-data class LogcatAdbCommand(
-    val args: List<String>,
-    val displayCommand: String,
-)
-
-data class DefaultLogCommandTemplate(
-    val preset: LogCommandPreset,
-    val titleKey: String,
-    val scenarioKey: String,
-    val prefixExplanationKey: String,
-    val parameterExplanationKeys: List<String>,
-)
-
-private const val TEMPLATE_PREFIX_EXPLANATION_KEY = "log.command.template.prefix_explanation"
-
-fun defaultLogCommandTemplates(): List<DefaultLogCommandTemplate> {
-    return listOf(
-        DefaultLogCommandTemplate(
-            preset = LogCommandPreset(
-                id = "default-template-full",
-                name = "Full continuous capture",
-                parts = listOf(
-                    LogCommandPart(LogCommandPartType.Buffer, "all"),
-                    LogCommandPart(LogCommandPartType.Format, "threadtime"),
-                    LogCommandPart(LogCommandPartType.Format, "year"),
-                    LogCommandPart(LogCommandPartType.Format, "zone"),
-                    LogCommandPart(LogCommandPartType.Format, "usec"),
-                    LogCommandPart(LogCommandPartType.Format, "uid"),
-                ),
-            ),
-            titleKey = "log.command.template.full.title",
-            scenarioKey = "log.command.template.full.scenario",
-            prefixExplanationKey = TEMPLATE_PREFIX_EXPLANATION_KEY,
-            parameterExplanationKeys = listOf(
-                "log.command.template.full.buffer",
-                "log.command.template.full.threadtime",
-                "log.command.template.full.year",
-                "log.command.template.full.zone",
-                "log.command.template.full.usec",
-                "log.command.template.full.uid",
-            ),
-        ),
-        DefaultLogCommandTemplate(
-            preset = LogCommandPreset(
-                id = "default-template-activity",
-                name = "ActivityManager and system behavior",
-                parts = listOf(
-                    LogCommandPart(LogCommandPartType.Buffer, "main"),
-                    LogCommandPart(LogCommandPartType.Buffer, "system"),
-                    LogCommandPart(LogCommandPartType.Format, "threadtime"),
-                    LogCommandPart(LogCommandPartType.Format, "year"),
-                    LogCommandPart(LogCommandPartType.Filter, "ActivityManager:I"),
-                    LogCommandPart(LogCommandPartType.Filter, "*:S"),
-                ),
-            ),
-            titleKey = "log.command.template.activity.title",
-            scenarioKey = "log.command.template.activity.scenario",
-            prefixExplanationKey = TEMPLATE_PREFIX_EXPLANATION_KEY,
-            parameterExplanationKeys = listOf(
-                "log.command.template.activity.main",
-                "log.command.template.activity.system",
-                "log.command.template.activity.threadtime",
-                "log.command.template.activity.year",
-                "log.command.template.activity.activity_manager",
-                "log.command.template.activity.silent_default",
-            ),
-        ),
-        DefaultLogCommandTemplate(
-            preset = LogCommandPreset(
-                id = "default-template-crash",
-                name = "Crash buffer diagnosis",
-                parts = listOf(
-                    LogCommandPart(LogCommandPartType.Buffer, "crash"),
-                    LogCommandPart(LogCommandPartType.Format, "threadtime"),
-                    LogCommandPart(LogCommandPartType.Format, "year"),
-                    LogCommandPart(LogCommandPartType.Format, "zone"),
-                    LogCommandPart(LogCommandPartType.Format, "usec"),
-                ),
-            ),
-            titleKey = "log.command.template.crash.title",
-            scenarioKey = "log.command.template.crash.scenario",
-            prefixExplanationKey = TEMPLATE_PREFIX_EXPLANATION_KEY,
-            parameterExplanationKeys = listOf(
-                "log.command.template.crash.buffer",
-                "log.command.template.crash.threadtime",
-                "log.command.template.crash.year",
-                "log.command.template.crash.zone",
-                "log.command.template.crash.usec",
-            ),
-        ),
-        DefaultLogCommandTemplate(
-            preset = LogCommandPreset(
-                id = "default-template-recent",
-                name = "Recent logs with continuous capture",
-                parts = listOf(
-                    LogCommandPart(LogCommandPartType.Recent, "500"),
-                    LogCommandPart(LogCommandPartType.Format, "threadtime"),
-                    LogCommandPart(LogCommandPartType.Format, "year"),
-                    LogCommandPart(LogCommandPartType.Format, "zone"),
-                    LogCommandPart(LogCommandPartType.Format, "usec"),
-                ),
-            ),
-            titleKey = "log.command.template.recent.title",
-            scenarioKey = "log.command.template.recent.scenario",
-            prefixExplanationKey = TEMPLATE_PREFIX_EXPLANATION_KEY,
-            parameterExplanationKeys = listOf(
-                "log.command.template.recent.start",
-                "log.command.template.recent.threadtime",
-                "log.command.template.recent.year",
-                "log.command.template.recent.zone",
-                "log.command.template.recent.usec",
-            ),
-        ),
-        DefaultLogCommandTemplate(
-            preset = LogCommandPreset(
-                id = "default-template-anr",
-                name = "Exception and ANR keywords",
-                parts = listOf(
-                    LogCommandPart(LogCommandPartType.Regex, "FATAL EXCEPTION|ANR in|am_anr"),
-                    LogCommandPart(LogCommandPartType.Format, "threadtime"),
-                    LogCommandPart(LogCommandPartType.Format, "year"),
-                    LogCommandPart(LogCommandPartType.Format, "zone"),
-                    LogCommandPart(LogCommandPartType.Format, "usec"),
-                ),
-            ),
-            titleKey = "log.command.template.anr.title",
-            scenarioKey = "log.command.template.anr.scenario",
-            prefixExplanationKey = TEMPLATE_PREFIX_EXPLANATION_KEY,
-            parameterExplanationKeys = listOf(
-                "log.command.template.anr.regex",
-                "log.command.template.anr.threadtime",
-                "log.command.template.anr.year",
-                "log.command.template.anr.zone",
-                "log.command.template.anr.usec",
-            ),
-        ),
-    )
-}
-
-fun displayLogCommandPresetName(preset: LogCommandPreset): String {
-    val template = defaultLogCommandTemplates().firstOrNull { it.preset.id == preset.id }
-    return template?.let { localized(it.titleKey) } ?: preset.name
-}
-
-fun defaultLogCommandPreset(): LogCommandPreset {
-    return LogCommandPreset(
-        id = DEFAULT_LOG_COMMAND_PRESET_ID,
-        name = "Default logcat",
-        parts = listOf(
-            LogCommandPart(LogCommandPartType.Buffer, "all"),
-            LogCommandPart(LogCommandPartType.Format, "threadtime"),
-            LogCommandPart(LogCommandPartType.Format, "year"),
-            LogCommandPart(LogCommandPartType.Format, "zone"),
-            LogCommandPart(LogCommandPartType.Format, "usec"),
-            LogCommandPart(LogCommandPartType.Format, "uid"),
-        ),
-    )
-}
-
-fun buildLogcatAdbCommand(
-    deviceSerial: String,
-    preset: LogCommandPreset,
-): LogcatAdbCommand {
-    val normalized = preset.normalized()
-    val shellArgs = listOf("shell", "logcat") + normalized.parts.flatMap { it.toLogcatArgs() }
-    val args = listOf("-s", deviceSerial) + shellArgs
-    return LogcatAdbCommand(
-        args = args,
-        displayCommand = displayCommand(listOf("adb", "-s", deviceSerial) + shellArgs),
-    )
-}
-
-fun createSavedLogCommandPreset(
-    id: String,
-    name: String,
-    sourcePreset: LogCommandPreset,
-): LogCommandPreset? {
-    val normalizedName = name.trim()
-    if (normalizedName.isBlank()) return null
-    val normalizedSource = sourcePreset.normalized()
-    return normalizedSource.copy(
-        id = id,
-        name = normalizedName,
-    )
-}
-
-fun addLogCommandPart(
-    parts: List<LogCommandPart>,
-    part: LogCommandPart,
-): List<LogCommandPart> {
-    val normalizedPart = part.normalizedOrNull() ?: return parts
-    if (normalizedPart.type != LogCommandPartType.Buffer) {
-        return parts + normalizedPart
-    }
-
-    val bufferValue = normalizedPart.value
-    val partsWithoutConflictingBuffers = if (bufferValue.equals("all", ignoreCase = true)) {
-        parts.filterNot { it.type == LogCommandPartType.Buffer }
-    } else {
-        parts.filterNot {
-            it.type == LogCommandPartType.Buffer &&
-                (it.value.equals("all", ignoreCase = true) || it.value.equals(bufferValue, ignoreCase = true))
-        }
-    }
-    return partsWithoutConflictingBuffers + normalizedPart
-}
-
-fun logCommandPartSummary(part: LogCommandPart): String {
-    return part.toLogcatArgs().joinToString(" ")
-}
-
-private fun LogCommandPart.toLogcatArgs(): List<String> {
-    val normalized = normalizedOrNull() ?: return emptyList()
-    return when (normalized.type) {
-        LogCommandPartType.Buffer -> listOf("-b", normalized.value)
-        LogCommandPartType.Format -> listOf("-v", normalized.value)
-        LogCommandPartType.Filter -> listOf(normalized.value)
-        LogCommandPartType.Regex -> listOf("-e", normalized.value)
-        LogCommandPartType.Pid -> listOf("--pid=${normalized.value}")
-        LogCommandPartType.MaxCount -> listOf("-m", normalized.value)
-        LogCommandPartType.Recent -> listOf("-T", normalized.value)
-        LogCommandPartType.Silent -> listOf("-s")
-        LogCommandPartType.Dividers -> listOf("-D")
-    }
-}
-
-private fun displayCommand(parts: List<String>): String {
-    return parts.joinToString(" ") { it.displayQuoted() }
-}
-
-private fun String.displayQuoted(): String {
-    if (isEmpty()) return "\"\""
-    val needsQuoting = any { it.isWhitespace() || it == '"' || it == '\'' || it == '&' || it == '|' || it == ';' }
-    if (!needsQuoting) return this
-    return "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-}
+internal fun parseLogProcessNames(output: String): Map<String, String> = output.lineSequence()
+    .map { it.trim().split(Regex("\\s+"), limit = 2) }
+    .filter { it.size == 2 && it[0].toLongOrNull() != null && it[1].isNotBlank() }
+    .associate { it[0] to it[1] }
 
 interface DeviceLogAdb {
     suspend fun captureFullLogs(
         deviceSerial: String,
         deviceModel: String,
-        commandPreset: LogCommandPreset,
+        filter: LogKeywordFilter,
         logCommand: (String) -> Unit,
         onProgress: (DeviceLogCaptureProgress) -> Unit,
     ): DeviceLogCaptureResult
@@ -321,12 +95,10 @@ interface DeviceLogAdb {
     fun stopCurrentCapture()
 }
 
-interface LogCommandPresetRepository {
-    fun loadPresets(): List<LogCommandPreset>
-
-    fun savePresets(presets: List<LogCommandPreset>)
+interface LogFilterHistoryRepository {
+    fun loadHistory(): List<LogKeywordFilter>
+    fun saveHistory(history: List<LogKeywordFilter>)
 }
 
 expect fun createDeviceLogAdb(): DeviceLogAdb
-
-expect fun createLogCommandPresetRepository(): LogCommandPresetRepository
+expect fun createLogFilterHistoryRepository(): LogFilterHistoryRepository

@@ -11,15 +11,15 @@ import com.floatingmuseum.android.test.helper.localization.commandStatus
 import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.localization.unknownError
 import com.floatingmuseum.android.test.helper.revealFileInDirectory
-import com.floatingmuseum.android.test.helper.settings.AppSettingsShared
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 internal class DeviceLogModuleController(
     private val deviceLogAdb: DeviceLogAdb,
-    private val presetRepository: LogCommandPresetRepository,
+    private val historyRepository: LogFilterHistoryRepository,
     private val scope: CoroutineScope,
     private val getSelectedReadyDevice: () -> AndroidDevice?,
     private val setStatusText: (String) -> Unit,
@@ -32,29 +32,11 @@ internal class DeviceLogModuleController(
     var capturingDeviceLabel by mutableStateOf<String?>(null)
         private set
 
-    var currentCommandPreset by mutableStateOf(defaultLogCommandPreset())
+    var filterQuery by mutableStateOf("")
         private set
-    var savedCommandPresets by mutableStateOf(presetRepository.loadPresets())
+    var matchCase by mutableStateOf(false)
         private set
-    var isCommandEditorOpen by mutableStateOf(false)
-        private set
-    var editorCommandName by mutableStateOf("")
-        private set
-    var editorCommandNameHasError by mutableStateOf(false)
-        private set
-    var editorCommandParts by mutableStateOf(defaultLogCommandPreset().parts)
-        private set
-    var editorFilterTag by mutableStateOf("")
-        private set
-    var editorFilterPriority by mutableStateOf("D")
-        private set
-    var editorRegex by mutableStateOf("")
-        private set
-    var editorPid by mutableStateOf("")
-        private set
-    var editorMaxCount by mutableStateOf("")
-        private set
-    var editorRecentValue by mutableStateOf("")
+    var filterHistory by mutableStateOf(historyRepository.loadHistory())
         private set
 
     private var deviceLogJob by mutableStateOf<Job?>(null)
@@ -80,7 +62,10 @@ internal class DeviceLogModuleController(
             return
         }
 
-        val job = scope.launch {
+        val filter = LogKeywordFilter(filterQuery, matchCase).normalized()
+        filterQuery = filter.query
+        saveFilterToHistory()
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             progress = null
             lastResult = null
             capturingDeviceLabel = "${device.model} · ${device.serialNumber}"
@@ -90,17 +75,21 @@ internal class DeviceLogModuleController(
                 val result = deviceLogAdb.captureFullLogs(
                     deviceSerial = device.transportId,
                     deviceModel = device.model,
-                    commandPreset = currentCommandPreset,
+                    filter = filter,
                     logCommand = appendCommand,
                     onProgress = { nextProgress ->
                         progress = nextProgress
                         setStatusText(
-                            localized("log.capturing_logcat_arg0_arg1_arg2", nextProgress.currentSection, nextProgress.completedSections, nextProgress.totalSections)
+                            if (nextProgress.hasFilter) localized("log.filter.progress", nextProgress.capturedLines, nextProgress.matchedLines)
+                            else localized("log.capture.lines", nextProgress.capturedLines)
                         )
                     },
                 )
                 progress = null
                 lastResult = result
+                result.filteredFilePath?.let {
+                    appendCommand(commandStatus(localized("log.filter.saved_path", it)))
+                }
                 when (result.endState) {
                     DeviceLogCaptureEndState.COMPLETED -> {
                         setStatusText(localized("log.logcat_capture_completed_arg0", result.filePath))
@@ -132,176 +121,44 @@ internal class DeviceLogModuleController(
             }
         }
         deviceLogJob = job
+        job.start()
     }
 
     fun stopCapture() {
         deviceLogAdb.stopCurrentCapture()
     }
 
-    fun openCommandEditor() {
-        editorCommandName = ""
-        editorCommandNameHasError = false
-        editorCommandParts = emptyList()
-        editorFilterTag = ""
-        editorFilterPriority = "D"
-        editorRegex = ""
-        editorPid = ""
-        editorMaxCount = ""
-        editorRecentValue = ""
-        isCommandEditorOpen = true
+    fun updateFilterQuery(value: String) {
+        if (!isCapturing) filterQuery = value
     }
 
-    fun closeCommandEditor() {
-        isCommandEditorOpen = false
+    fun updateMatchCase(value: Boolean) {
+        if (!isCapturing) matchCase = value
     }
 
-    fun updateEditorCommandName(value: String) {
-        editorCommandName = value
-        if (value.isNotBlank()) {
-            editorCommandNameHasError = false
+    fun applyFilterHistory(filter: LogKeywordFilter) {
+        if (isCapturing) return
+        filterQuery = filter.query
+        matchCase = filter.matchCase
+    }
+
+    fun saveFilterToHistory() {
+        val filter = LogKeywordFilter(filterQuery, matchCase).normalized()
+        if (filter.query.isEmpty()) return
+        persistHistory(rememberLogFilter(filterHistory, filter))
+    }
+
+    fun deleteFilterHistory(filter: LogKeywordFilter) {
+        persistHistory(filterHistory.filterNot { it == filter })
+    }
+
+    private fun persistHistory(history: List<LogKeywordFilter>) {
+        try {
+            historyRepository.saveHistory(history)
+            filterHistory = history
+        } catch (error: Exception) {
+            appendCommand(commandError(localized("log.filter.history_save_failed") + ": " + error.message))
         }
-    }
-
-    fun updateEditorFilterTag(value: String) {
-        editorFilterTag = value
-    }
-
-    fun updateEditorFilterPriority(value: String) {
-        editorFilterPriority = value
-    }
-
-    fun updateEditorRegex(value: String) {
-        editorRegex = value
-    }
-
-    fun updateEditorPid(value: String) {
-        editorPid = value
-    }
-
-    fun updateEditorMaxCount(value: String) {
-        editorMaxCount = value
-    }
-
-    fun updateEditorRecentValue(value: String) {
-        editorRecentValue = value
-    }
-
-    fun addEditorCommandPart(part: LogCommandPart) {
-        val normalizedPart = part.normalizedOrNull()
-        if (normalizedPart == null) {
-            val message = localized("log.command.part_empty_error")
-            setStatusText(message)
-            appendCommand(commandError(message))
-            return
-        }
-        editorCommandParts = addLogCommandPart(editorCommandParts, normalizedPart)
-    }
-
-    fun removeEditorCommandPart(index: Int) {
-        editorCommandParts = editorCommandParts.filterIndexed { partIndex, _ -> partIndex != index }
-    }
-
-    fun addEditorFilterPart() {
-        val tag = editorFilterTag.trim()
-        if (tag.isBlank()) {
-            val message = localized("log.command.filter_empty_error")
-            setStatusText(message)
-            appendCommand(commandError(message))
-            return
-        }
-        val priority = editorFilterPriority.trim().uppercase().takeIf { it.isNotBlank() } ?: "D"
-        addEditorCommandPart(LogCommandPart(LogCommandPartType.Filter, "$tag:$priority"))
-        editorFilterTag = ""
-    }
-
-    fun addEditorRegexPart() {
-        addTextPart(LogCommandPartType.Regex, editorRegex, "log.command.regex_empty_error") {
-            editorRegex = ""
-        }
-    }
-
-    fun addEditorPidPart() {
-        addTextPart(LogCommandPartType.Pid, editorPid, "log.command.pid_empty_error") {
-            editorPid = ""
-        }
-    }
-
-    fun addEditorMaxCountPart() {
-        addTextPart(LogCommandPartType.MaxCount, editorMaxCount, "log.command.max_count_empty_error") {
-            editorMaxCount = ""
-        }
-    }
-
-    fun addEditorRecentPart() {
-        addTextPart(LogCommandPartType.Recent, editorRecentValue, "log.command.recent_empty_error") {
-            editorRecentValue = ""
-        }
-    }
-
-    fun saveEditorCommandPreset(applyAfterSave: Boolean) {
-        if (editorCommandName.isBlank()) {
-            editorCommandNameHasError = true
-            val message = localized("log.command.name_required")
-            setStatusText(message)
-            appendCommand(commandError(message))
-            return
-        }
-        val preset = createSavedLogCommandPreset(
-            id = nextPresetId(),
-            name = editorCommandName,
-            sourcePreset = LogCommandPreset(
-                id = "editor-logcat",
-                name = editorCommandName,
-                parts = editorCommandParts,
-            ),
-        )
-        if (preset == null) {
-            editorCommandNameHasError = true
-            val message = localized("log.command.save_validation")
-            setStatusText(message)
-            appendCommand(commandError(message))
-            return
-        }
-        savedCommandPresets = listOf(preset) + savedCommandPresets
-        presetRepository.savePresets(savedCommandPresets)
-        if (applyAfterSave) {
-            currentCommandPreset = preset
-        }
-        isCommandEditorOpen = false
-        val message = localized("log.command.saved_arg0", preset.name)
-        setStatusText(message)
-        appendCommand(commandStatus(message))
-    }
-
-    fun applyCommandPreset(preset: LogCommandPreset) {
-        currentCommandPreset = preset.normalized()
-        val message = localized("log.command.applied_arg0", displayLogCommandPresetName(preset))
-        setStatusText(message)
-        appendCommand(commandStatus(message))
-    }
-
-    fun setDefaultLogCommandTemplatesExpanded(expanded: Boolean) {
-        if (AppSettingsShared.currentSettings.defaultLogCommandTemplatesExpanded == expanded) return
-        AppSettingsShared.updateSettings(
-            AppSettingsShared.currentSettings.copy(
-                defaultLogCommandTemplatesExpanded = expanded,
-            ),
-        )
-    }
-
-    fun deleteCommandPreset(preset: LogCommandPreset) {
-        savedCommandPresets = savedCommandPresets.filterNot { it.id == preset.id }
-        presetRepository.savePresets(savedCommandPresets)
-        val message = localized("log.command.deleted_arg0", preset.name)
-        setStatusText(message)
-        appendCommand(commandStatus(message))
-    }
-
-    fun restoreDefaultCommandPreset() {
-        currentCommandPreset = defaultLogCommandPreset()
-        val message = localized("log.command.restored_default")
-        setStatusText(message)
-        appendCommand(commandStatus(message))
     }
 
     fun revealLogFile(filePath: String) {
@@ -316,28 +173,6 @@ internal class DeviceLogModuleController(
             appendCommand(commandError("$message - $filePath"))
         }
     }
-
-    private fun nextPresetId(): String {
-        val token = kotlin.random.Random.nextInt(0, Int.MAX_VALUE)
-        return "log-command-$token"
-    }
-
-    private fun addTextPart(
-        type: LogCommandPartType,
-        value: String,
-        errorKey: String,
-        onAdded: () -> Unit,
-    ) {
-        val normalizedValue = value.trim()
-        if (normalizedValue.isBlank()) {
-            val message = localized(errorKey)
-            setStatusText(message)
-            appendCommand(commandError(message))
-            return
-        }
-        addEditorCommandPart(LogCommandPart(type, normalizedValue))
-        onAdded()
-    }
 }
 
 @Composable
@@ -348,11 +183,11 @@ internal fun rememberDeviceLogModuleController(
     appendCommand: (String) -> Unit,
 ): DeviceLogModuleController {
     val deviceLogAdb = remember { createDeviceLogAdb() }
-    val presetRepository = remember { createLogCommandPresetRepository() }
+    val historyRepository = remember { createLogFilterHistoryRepository() }
     return remember {
         DeviceLogModuleController(
             deviceLogAdb = deviceLogAdb,
-            presetRepository = presetRepository,
+            historyRepository = historyRepository,
             scope = scope,
             getSelectedReadyDevice = getSelectedReadyDevice,
             setStatusText = setStatusText,

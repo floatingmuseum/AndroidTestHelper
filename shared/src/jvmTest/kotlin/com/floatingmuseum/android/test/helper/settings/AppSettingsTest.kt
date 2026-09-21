@@ -22,11 +22,6 @@ class AppSettingsTest {
     }
 
     @Test
-    fun defaultLogCommandTemplatesStartExpanded() {
-        assertEquals(true, AppSettings().defaultLogCommandTemplatesExpanded)
-    }
-
-    @Test
     fun languageDefaultsToSystemLanguageMode() {
         assertEquals(null, AppSettings().language)
     }

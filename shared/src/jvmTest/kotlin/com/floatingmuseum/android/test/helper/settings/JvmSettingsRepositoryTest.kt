@@ -85,15 +85,13 @@ class JvmSettingsRepositoryTest {
     }
 
     @Test
-    fun savingLogCommandTemplateExpansionStatePersists() {
+    fun obsoleteLogTemplateSettingDoesNotBreakSettingsLoad() {
         withTemporarySettingsFile { settingsFile ->
-            JvmSettingsRepository { settingsFile }.saveSettings(
-                AppSettings(defaultLogCommandTemplatesExpanded = false),
-            )
+            settingsFile.writeText("""{"defaultLogCommandTemplatesExpanded":false,"showCommandTime":false}""")
 
             val settings = JvmSettingsRepository { settingsFile }.loadSettings()
 
-            assertFalse(settings.defaultLogCommandTemplatesExpanded)
+            assertFalse(settings.showCommandTime)
         }
     }
 

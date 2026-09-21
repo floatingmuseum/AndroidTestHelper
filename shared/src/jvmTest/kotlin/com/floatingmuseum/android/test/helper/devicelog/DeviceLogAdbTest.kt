@@ -1,7 +1,5 @@
 package com.floatingmuseum.android.test.helper.devicelog
 
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -11,247 +9,84 @@ import kotlin.test.assertTrue
 
 class DeviceLogAdbTest {
     @Test
-    fun testBuildDeviceLogFileNameUsesModelSerialAndTimestamp() {
-        val capturedAt = LocalDateTime.of(2026, 6, 17, 15, 4, 9)
-
-        val fileName = buildDeviceLogFileName(
-            deviceModel = "SM-X700",
-            deviceSerial = "R58M123ABC",
-            capturedAt = capturedAt,
-        )
-
-        assertEquals("SM-X700_R58M123ABC_20260617_150409.log", fileName)
-    }
-
-    @Test
-    fun testBuildDeviceLogFileNameSanitizesPathTokens() {
-        val capturedAt = LocalDateTime.of(2026, 6, 17, 15, 4, 9)
-
-        val fileName = buildDeviceLogFileName(
-            deviceModel = "Pixel Tablet/Debug",
-            deviceSerial = "192.168.1.5:5555",
-            capturedAt = capturedAt,
-        )
-
-        assertEquals("Pixel_Tablet_Debug_192.168.1.5_5555_20260617_150409.log", fileName)
-    }
-
-    @Test
-    fun defaultLogCommandMatchesExistingLogcatCommand() {
-        val command = buildLogcatAdbCommand(
-            deviceSerial = "R58M123ABC",
-            preset = defaultLogCommandPreset(),
-        )
-
+    fun continuousCommandUsesStudioTimePrecisionAndAllPriorities() {
+        val command = buildLogcatAdbCommand("HA22CER8")
         assertEquals(
-            listOf(
-                "-s",
-                "R58M123ABC",
-                "shell",
-                "logcat",
-                "-b",
-                "all",
-                "-v",
-                "threadtime",
-                "-v",
-                "year",
-                "-v",
-                "zone",
-                "-v",
-                "usec",
-                "-v",
-                "uid",
-            ),
+            listOf("-s", "HA22CER8", "shell", "logcat", "-b", "all", "-v", "threadtime", "-v", "year", "*:V"),
             command.args,
         )
+        assertEquals("adb -s HA22CER8 shell logcat -b all -v threadtime -v year *:V", command.displayCommand)
+    }
+
+    @Test
+    fun keywordsAreLiteralOrTermsAndIgnoreCaseByDefault() {
+        val filter = LogKeywordFilter(" JPush | system.err | | JPush | CSDK ")
+        assertEquals("JPush | system.err | CSDK", filter.normalized().query)
+        val matcher = LogKeywordMatcher(filter)
+        assertTrue(matcher.matches("tag=jpush message=hello"))
+        assertTrue(matcher.matches("system.err: failure"))
+        assertTrue(matcher.matches("CSDK: stop"))
+        assertFalse(matcher.matches("systemXerr"))
+        assertFalse(matcher.matches("unrelated"))
+        assertTrue(LogKeywordMatcher(LogKeywordFilter(" | ")).matches("anything"))
+    }
+
+    @Test
+    fun caseSensitiveKeywordsAndEmbeddedSpacesArePreserved() {
+        val matcher = LogKeywordMatcher(LogKeywordFilter("ANR in | [error] | a.*", matchCase = true))
+        assertTrue(matcher.matches("ANR in com.example"))
+        assertFalse(matcher.matches("anr in com.example"))
+        assertTrue(matcher.matches("[error]"))
+        assertFalse(matcher.matches("error"))
+        assertFalse(matcher.matches("abc"))
+    }
+
+    @Test
+    fun studioFormattingRetainsMessageWhitespaceAndLongTags() {
+        val raw = "2026-09-21 05:49:07.121  1105  1131 E UsbDeviceManager:   csdk updateState(): true"
+        val entry = parseThreadtimeLogLine(raw)!!
+        val formatted = entry.format("system_server")
+        assertEquals("2026-09-21 05:49:07.121", entry.timestamp)
+        assertEquals("  csdk updateState(): true", entry.message)
+        assertTrue(formatted.contains("1105-1131"))
+        assertTrue(formatted.indexOf("UsbDeviceManager") < formatted.indexOf("system_server"))
+        assertTrue(formatted.endsWith("E    csdk updateState(): true"))
+        val longTag = "vendor.lenovo.hardware.battery-service"
+        assertTrue(parseThreadtimeLogLine(raw.replace("UsbDeviceManager", longTag))!!.format(null).contains(longTag))
+        assertNull(parseThreadtimeLogLine("--------- beginning of main"))
+        assertNull(parseThreadtimeLogLine("adb: device offline"))
+    }
+
+    @Test
+    fun processNamesCanBeUsedAsKeywordsAndMissingNamesStayExplicit() {
+        val entry = parseThreadtimeLogLine("2026-09-21 05:49:07.121 1105 1131 I Tag     : hello")!!
+        assertTrue(LogKeywordMatcher(LogKeywordFilter("system_server")).matches(entry.format("system_server")))
+        assertEquals("Tag", entry.tag)
+        assertTrue(entry.format(null).contains("-                                I"))
         assertEquals(
-            "adb -s R58M123ABC shell logcat -b all -v threadtime -v year -v zone -v usec -v uid",
-            command.displayCommand,
+            mapOf("1" to "init", "1105" to "system_server"),
+            parseLogProcessNames(" PID NAME\n 1 init\n1105 system_server\nps: bad -o\n"),
         )
     }
 
     @Test
-    fun defaultTemplatesCoverFiveCommonLogcatScenarios() {
-        val templates = defaultLogCommandTemplates()
-
-        assertEquals(5, templates.size)
-        assertTrue(templates.all { it.preset.parts.size == it.parameterExplanationKeys.size })
-        assertTrue(templates.all { it.prefixExplanationKey.isNotBlank() })
-
-        val commands = templates.map {
-            buildLogcatAdbCommand("R58M123ABC", it.preset).displayCommand
-        }
-        assertTrue(commands.any { it.contains("-b all") })
-        assertTrue(commands.any { it.contains("ActivityManager:I") })
-        assertTrue(commands.any { it.contains("-b crash") })
-        assertTrue(commands.any { it.contains("-T 500") })
-        assertTrue(commands.any { it.contains("FATAL EXCEPTION") })
-    }
-
-    @Test
-    fun logCommandPartsAllowRepeatedTypesAndPreserveOrder() {
-        val preset = LogCommandPreset(
-            id = "custom",
-            name = "Repeated parts",
-            parts = listOf(
-                LogCommandPart(LogCommandPartType.Buffer, "main"),
-                LogCommandPart(LogCommandPartType.Buffer, "system"),
-                LogCommandPart(LogCommandPartType.Format, "threadtime"),
-                LogCommandPart(LogCommandPartType.Format, "uid"),
-                LogCommandPart(LogCommandPartType.Filter, "ActivityManager:I"),
-                LogCommandPart(LogCommandPartType.Filter, "*:S"),
-            ),
-        )
-
-        val command = buildLogcatAdbCommand("R58M123ABC", preset)
-
+    fun historyMovesReusedQueriesToFrontAndCapsSize() {
+        val old = (1..60).map { LogKeywordFilter("key$it") }
+        val history = rememberLogFilter(old, LogKeywordFilter(" key4 "))
+        assertEquals(LOG_FILTER_HISTORY_LIMIT, history.size)
+        assertEquals("key4", history.first().query)
+        assertEquals(1, history.count { it.query == "key4" })
         assertEquals(
-            listOf(
-                "-s",
-                "R58M123ABC",
-                "shell",
-                "logcat",
-                "-b",
-                "main",
-                "-b",
-                "system",
-                "-v",
-                "threadtime",
-                "-v",
-                "uid",
-                "ActivityManager:I",
-                "*:S",
-            ),
-            command.args,
+            listOf(LogKeywordFilter("JPush"), LogKeywordFilter("jpush", true)),
+            normalizeLogFilterHistory(listOf(LogKeywordFilter(" JPush "), LogKeywordFilter("jpush"), LogKeywordFilter("jpush", true), LogKeywordFilter(" | "))),
         )
     }
 
     @Test
-    fun addingAllBufferReplacesOtherBuffers() {
-        val parts = listOf(
-            LogCommandPart(LogCommandPartType.Buffer, "main"),
-            LogCommandPart(LogCommandPartType.Format, "threadtime"),
-            LogCommandPart(LogCommandPartType.Buffer, "system"),
-        )
-
-        val updated = addLogCommandPart(parts, LogCommandPart(LogCommandPartType.Buffer, "all"))
-
+    fun fileNamesAreSafeAndHaveMillisecondPrecision() {
         assertEquals(
-            listOf(
-                LogCommandPart(LogCommandPartType.Format, "threadtime"),
-                LogCommandPart(LogCommandPartType.Buffer, "all"),
-            ),
-            updated,
-        )
-    }
-
-    @Test
-    fun addingSpecificBufferRemovesAllAndDuplicateBuffer() {
-        val parts = listOf(
-            LogCommandPart(LogCommandPartType.Buffer, "all"),
-            LogCommandPart(LogCommandPartType.Format, "threadtime"),
-            LogCommandPart(LogCommandPartType.Buffer, "main"),
-        )
-
-        val updated = addLogCommandPart(parts, LogCommandPart(LogCommandPartType.Buffer, "main"))
-
-        assertEquals(
-            listOf(
-                LogCommandPart(LogCommandPartType.Format, "threadtime"),
-                LogCommandPart(LogCommandPartType.Buffer, "main"),
-            ),
-            updated,
-        )
-    }
-
-    @Test
-    fun buildsAdvancedLogcatOptionsFromStructuredParts() {
-        val preset = LogCommandPreset(
-            id = "custom",
-            name = "Advanced",
-            parts = listOf(
-                LogCommandPart(LogCommandPartType.Dividers, "enabled"),
-                LogCommandPart(LogCommandPartType.Silent, "enabled"),
-                LogCommandPart(LogCommandPartType.Regex, "Exception|ANR"),
-                LogCommandPart(LogCommandPartType.Pid, "1234"),
-                LogCommandPart(LogCommandPartType.MaxCount, "20"),
-                LogCommandPart(LogCommandPartType.Recent, "100"),
-            ),
-        )
-
-        val command = buildLogcatAdbCommand("R58M123ABC", preset)
-
-        assertEquals(
-            listOf(
-                "-s",
-                "R58M123ABC",
-                "shell",
-                "logcat",
-                "-D",
-                "-s",
-                "-e",
-                "Exception|ANR",
-                "--pid=1234",
-                "-m",
-                "20",
-                "-T",
-                "100",
-            ),
-            command.args,
-        )
-    }
-
-    @Test
-    fun savedLogCommandPresetDoesNotPersistDeviceSerial() {
-        val preset = createSavedLogCommandPreset(
-            id = "preset-1",
-            name = "Activity only",
-            sourcePreset = LogCommandPreset(
-                id = "current",
-                name = "",
-                parts = listOf(LogCommandPart(LogCommandPartType.Filter, "ActivityManager:I")),
-            ),
-        )
-        val json = Json {
-            prettyPrint = true
-            ignoreUnknownKeys = true
-        }
-
-        val encoded = json.encodeToString(preset)
-        val command = buildLogcatAdbCommand("R58M123ABC", preset!!)
-
-        assertFalse(encoded.contains("R58M123ABC"))
-        assertTrue(command.displayCommand.contains("adb -s R58M123ABC shell logcat"))
-    }
-
-    @Test
-    fun savedLogCommandPresetAllowsCommandWithoutParts() {
-        val preset = createSavedLogCommandPreset(
-            id = "preset-raw",
-            name = "Raw logcat",
-            sourcePreset = LogCommandPreset(
-                id = "current",
-                name = "",
-                parts = emptyList(),
-            ),
-        )
-        val command = buildLogcatAdbCommand(LOG_COMMAND_SERIAL_PLACEHOLDER, preset!!)
-
-        assertEquals(emptyList(), preset.parts)
-        assertEquals(
-            "adb -s <serialNumber> shell logcat",
-            command.displayCommand,
-        )
-    }
-
-    @Test
-    fun savedLogCommandPresetRejectsBlankName() {
-        assertNull(
-            createSavedLogCommandPreset(
-                id = "preset-1",
-                name = "   ",
-                sourcePreset = defaultLogCommandPreset(),
-            ),
+            "LENOVO_TB373FU_HA22_CER8_20260921_054907_121.log",
+            buildDeviceLogFileName("LENOVO TB373FU", "HA22:CER8", LocalDateTime.of(2026, 9, 21, 5, 49, 7, 121_000_000)),
         )
     }
 }

@@ -126,7 +126,11 @@ When adding new test features, add or extend a test module instead of hard-codin
 - JVM implementation:
   - `shared/src/jvmMain/kotlin/com/floatingmuseum/android/test/helper/devicelog/DeviceLogAdb.jvm.kt`
 - Current behavior:
-  - Captures `logcat -b all` with rich time/thread metadata.
+  - Continuously captures `logcat -b all -v threadtime -v year *:V` with year and millisecond precision; no command templates or parameter editor.
+  - Formats text as date/time, PID-TID, tag, process, priority, message. Process names come from a best-effort current `ps -A -o PID,NAME` snapshot refreshed every 5 seconds; missing names are `-`, and historical PID names may differ.
+  - Keyword filters are literal OR terms separated by `|`, with optional case sensitivity; filtering happens locally against formatted lines, never via shell interpolation.
+  - Always saves the full log; a non-empty filter additionally saves `_filtered.log`. Capture settings are fixed for the active capture and both paths remain available on stop/interruption.
+  - Filter history persists in `AppRuntimePaths.cacheDirectory()/log_filter_history.json`, newest first, deduplicated, capped at 50 entries; save/reuse/delete must retain the case option.
   - Writes logs under `AppRuntimePaths.logsDirectory()`.
   - Uses a floating stop button while capture is active.
   - Stop is observable and should produce `STOPPED`; USB/device interruption should produce `INTERRUPTED`.

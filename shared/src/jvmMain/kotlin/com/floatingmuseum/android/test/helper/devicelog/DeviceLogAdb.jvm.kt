@@ -4,298 +4,228 @@ import com.floatingmuseum.android.test.helper.AppRuntimePaths
 import com.floatingmuseum.android.test.helper.adb.AdbShell
 import com.floatingmuseum.android.test.helper.localization.commandStatus
 import com.floatingmuseum.android.test.helper.localization.localized
-import com.floatingmuseum.android.test.helper.localization.unknownError
 import java.io.BufferedWriter
 import java.io.File
-import java.io.FileOutputStream
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.coroutines.withTimeoutOrNull
 
 actual fun createDeviceLogAdb(): DeviceLogAdb = JvmDeviceLogAdb()
 
-actual fun createLogCommandPresetRepository(): LogCommandPresetRepository = JvmLogCommandPresetRepository()
+private val DeviceLogTimestampFormatter = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS")
 
-private val DeviceLogTimestampFormatter = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
-
-private class JvmDeviceLogAdb : DeviceLogAdb {
-    @Volatile
-    private var activeProcess: Process? = null
-
-    @Volatile
-    private var stopRequested: Boolean = false
+internal class JvmDeviceLogAdb(
+    private val logsDirectory: () -> File = { AppRuntimePaths.logsDirectory() },
+    private val startLogcat: (List<String>) -> Process = { args ->
+        ProcessBuilder(listOf(AdbShell.adbPath) + args).redirectErrorStream(true).start()
+    },
+    private val readProcessNames: suspend (String, (String) -> Unit) -> Map<String, String> = { serial, log ->
+        parseLogProcessNames(
+            AdbShell.executeAdb(
+                listOf("-s", serial, "shell", "ps", "-A", "-o", "PID,NAME"),
+                "adb -s $serial shell ps -A -o PID,NAME",
+                log,
+            ),
+        )
+    },
+) : DeviceLogAdb {
+    @Volatile private var activeProcess: Process? = null
+    @Volatile private var stopRequested = false
 
     override suspend fun captureFullLogs(
         deviceSerial: String,
         deviceModel: String,
-        commandPreset: LogCommandPreset,
+        filter: LogKeywordFilter,
         logCommand: (String) -> Unit,
         onProgress: (DeviceLogCaptureProgress) -> Unit,
     ): DeviceLogCaptureResult {
         stopRequested = false
+        val normalizedFilter = filter.normalized()
+        val matcher = LogKeywordMatcher(normalizedFilter)
+        val command = buildLogcatAdbCommand(deviceSerial)
         val capturedAt = LocalDateTime.now()
-        val directory = AppRuntimePaths.logsDirectory().absoluteFile
-        if (!directory.exists() && !directory.mkdirs()) {
-            throw IllegalStateException(localized("log.unable_to_create_log_output_directory_arg0", directory.absolutePath))
-        }
-        if (!directory.isDirectory) {
-            throw IllegalStateException(localized("log.output_path_is_not_a_directory_arg0", directory.absolutePath))
-        }
+        val capturedLines = AtomicLong()
+        val matchedLines = AtomicLong()
+        val callbackContext = currentCoroutineContext().minusKey(Job)
+        fun progress() = DeviceLogCaptureProgress(capturedLines.get(), matchedLines.get(), !matcher.isEmpty)
+        suspend fun reportProgress() = withContext(callbackContext) { onProgress(progress()) }
+        suspend fun processNames() = withContext(callbackContext) { loadProcessNames(deviceSerial, logCommand) }
+        onProgress(progress())
 
-        val fileName = buildDeviceLogFileName(deviceModel, deviceSerial, capturedAt)
-        val outputFile = directory.resolve(fileName)
-        val sections = buildLogSections(deviceSerial, commandPreset)
-        var completed = 0
-        var endState = DeviceLogCaptureEndState.COMPLETED
-        var endMessage: String? = null
-
-        withContext(Dispatchers.IO) {
-            outputFile.logWriter(append = false).use { writer ->
-                writeHeader(writer, deviceSerial, deviceModel, capturedAt, sections.size)
+        return withContext(Dispatchers.IO) {
+            val directory = logsDirectory().absoluteFile
+            check(directory.isDirectory || directory.mkdirs()) {
+                localized("log.unable_to_create_log_output_directory_arg0", directory.absolutePath)
             }
-        }
-
-        sections.forEach { section ->
-            onProgress(DeviceLogCaptureProgress(section.title, completed, sections.size))
-            val outcome = runSectionToFile(
-                section = section,
-                outputFile = outputFile,
-                logCommand = logCommand,
+            val outputFile = uniqueLogFile(directory, buildDeviceLogFileName(deviceModel, deviceSerial, capturedAt))
+            val filteredFile = if (matcher.isEmpty) null else directory.resolve(outputFile.nameWithoutExtension + "_filtered.log")
+            var endState = DeviceLogCaptureEndState.STOPPED
+            var endMessage: String? = null
+            val names = AtomicReference(processNames())
+            outputFile.bufferedWriter(Charsets.UTF_8).use { fullWriter ->
+                filteredFile?.bufferedWriter(Charsets.UTF_8).use { filteredWriter ->
+                    writeHeader(fullWriter, deviceSerial, deviceModel, capturedAt, command, null)
+                    filteredWriter?.let { writeHeader(it, deviceSerial, deviceModel, capturedAt, command, normalizedFilter) }
+                    if (!stopRequested) {
+                        withContext(callbackContext) { logCommand(command.displayCommand) }
+                        val process = startLogcat(command.args)
+                        activeProcess = process
+                        // Stop may have arrived while the process was being created.
+                        if (stopRequested) process.destroyForcibly()
+                        val outputReader = async(Dispatchers.IO) {
+                            // Keep stream-close errors local so an explicit stop still returns both file paths.
+                            runCatching {
+                                process.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+                                    var lastFlush = System.nanoTime()
+                                    lines.forEach { raw ->
+                                        currentCoroutineContext().ensureActive()
+                                        val entry = parseThreadtimeLogLine(raw)
+                                        val line = entry?.format(names.get()[entry.pid]) ?: raw
+                                        fullWriter.appendLine(line)
+                                        if (!raw.startsWith("---------") && raw.isNotBlank()) {
+                                            capturedLines.incrementAndGet()
+                                            if (filteredWriter != null && matcher.matches(line)) {
+                                                filteredWriter.appendLine(line)
+                                                matchedLines.incrementAndGet()
+                                            }
+                                        } else {
+                                            filteredWriter?.appendLine(raw)
+                                        }
+                                        if (System.nanoTime() - lastFlush >= TimeUnit.SECONDS.toNanos(1)) {
+                                            fullWriter.flush()
+                                            filteredWriter?.flush()
+                                            lastFlush = System.nanoTime()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        val nameUpdater = launch {
+                            // Unsupported ps must not stop logcat or cause repeated failed commands.
+                            if (names.get().isNotEmpty()) {
+                                while (true) {
+                                    delay(5_000)
+                                    names.set(processNames())
+                                }
+                            }
+                        }
+                        try {
+                            while (!process.waitFor(100, TimeUnit.MILLISECONDS)) {
+                                currentCoroutineContext().ensureActive()
+                                if (outputReader.isCompleted && !stopRequested) outputReader.await().getOrThrow()
+                                reportProgress()
+                            }
+                            val readResult = outputReader.await()
+                            if (!stopRequested) readResult.getOrThrow()
+                            endState = if (stopRequested) DeviceLogCaptureEndState.STOPPED else DeviceLogCaptureEndState.INTERRUPTED
+                            endMessage = if (stopRequested) localized("log.user_stopped_capture") else
+                                localized("log.capture.interrupted_exit_code", process.exitValue())
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            endState = if (stopRequested) DeviceLogCaptureEndState.STOPPED else DeviceLogCaptureEndState.INTERRUPTED
+                            endMessage = if (stopRequested) localized("log.user_stopped_capture") else
+                                localized("log.logcat_stopped_unexpectedly") + ": " + error.message
+                        } finally {
+                            process.destroyForcibly()
+                            withContext(NonCancellable) {
+                                outputReader.cancelAndJoin()
+                                nameUpdater.cancelAndJoin()
+                            }
+                            if (activeProcess === process) activeProcess = null
+                        }
+                    }
+                    val footer = "===== CAPTURE ${endState.name} ${LocalDateTime.now()} ====="
+                    fullWriter.appendLine(footer)
+                    filteredWriter?.appendLine(footer)
+                    endMessage?.let {
+                        fullWriter.appendLine(it)
+                        filteredWriter?.appendLine(it)
+                    }
+                }
+            }
+            reportProgress()
+            withContext(callbackContext) { endMessage?.let { logCommand(commandStatus(it)) } }
+            DeviceLogCaptureResult(
+                fileName = outputFile.name,
+                filePath = outputFile.absolutePath,
+                directoryPath = directory.absolutePath,
+                capturedLines = capturedLines.get(),
+                matchedLines = matchedLines.get(),
+                filteredFilePath = filteredFile?.absolutePath,
+                filter = normalizedFilter,
+                endState = endState,
+                message = endMessage,
             )
-            if (outcome.endState == DeviceLogCaptureEndState.COMPLETED) {
-                completed += 1
-            } else {
-                endState = outcome.endState
-                endMessage = outcome.message
-            }
-            onProgress(DeviceLogCaptureProgress(section.title, completed, sections.size))
-            if (outcome.endState != DeviceLogCaptureEndState.COMPLETED) {
-                return@forEach
-            }
         }
-
-        withContext(Dispatchers.IO) {
-            outputFile.logWriter(append = true).use { writer ->
-                writer.appendLine()
-                writer.appendLine("===== CAPTURE ${endState.name} ${LocalDateTime.now()} =====")
-                endMessage?.let { writer.appendLine(it) }
-            }
-        }
-
-        return DeviceLogCaptureResult(
-            fileName = fileName,
-            filePath = outputFile.absolutePath,
-            directoryPath = directory.absolutePath,
-            completedSections = completed,
-            totalSections = sections.size,
-            endState = endState,
-            message = endMessage,
-        )
     }
 
     override fun stopCurrentCapture() {
         stopRequested = true
-        activeProcess?.destroy()
+        activeProcess?.destroyForcibly()
     }
 
-    private suspend fun runSectionToFile(
-        section: LogSection,
-        outputFile: File,
-        logCommand: (String) -> Unit,
-    ): LogSectionOutcome {
-        logCommand(section.displayCommand)
-        var sectionFailureMessage: String? = null
-        var outcome = LogSectionOutcome(DeviceLogCaptureEndState.COMPLETED)
-
-        withContext(Dispatchers.IO) {
-            outputFile.logWriter(append = true).use { writer ->
-                writer.appendLine()
-                writer.appendLine("===== ${section.title} =====")
-                writer.appendLine("\$ ${section.displayCommand}")
-                writer.flush()
-
-                val process = ProcessBuilder(listOf(AdbShell.adbPath) + section.args)
-                    .redirectErrorStream(true)
-                    .start()
-                activeProcess = process
-                val outputReader = async(Dispatchers.IO) {
-                    process.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
-                        lines.forEach { line ->
-                            writer.appendLine(line)
-                        }
-                    }
-                }
-                try {
-                    while (!process.waitFor(100L, TimeUnit.MILLISECONDS)) {
-                        currentCoroutineContext().ensureActive()
-                    }
-                    outputReader.await()
-                    val exitCode = process.exitValue()
-                    if (exitCode != 0) {
-                        writer.appendLine()
-                        if (stopRequested) {
-                            val message = localized("log.user_stopped_capture_logcat_exited_with_code_arg0", exitCode)
-                            writer.appendLine("[$message]")
-                            outcome = LogSectionOutcome(
-                                endState = DeviceLogCaptureEndState.STOPPED,
-                                message = message,
-                            )
-                        } else {
-                            val message = localized("log.capture.interrupted_exit_code", exitCode)
-                            writer.appendLine("[$message]")
-                            sectionFailureMessage = commandStatus(message)
-                            outcome = LogSectionOutcome(
-                                endState = DeviceLogCaptureEndState.INTERRUPTED,
-                                message = message,
-                            )
-                        }
-                    }
-                } catch (error: CancellationException) {
-                    process.destroyForcibly()
-                    outputReader.cancel()
-                    writer.appendLine()
-                    writer.appendLine("[${localized("log.capture_stopped")}]")
-                    throw error
-                } catch (error: Throwable) {
-                    process.destroyForcibly()
-                    outputReader.cancel()
-                    writer.appendLine()
-                    if (stopRequested) {
-                        val message = localized("log.user_stopped_capture")
-                        writer.appendLine("[$message]")
-                        outcome = LogSectionOutcome(
-                            endState = DeviceLogCaptureEndState.STOPPED,
-                            message = message,
-                        )
-                    } else {
-                        val message = localized("log.logcat_stopped_unexpectedly") + ": ${error.message ?: unknownError()}"
-                        writer.appendLine("[$message]")
-                        sectionFailureMessage = commandStatus(message)
-                        outcome = LogSectionOutcome(
-                            endState = DeviceLogCaptureEndState.INTERRUPTED,
-                            message = message,
-                        )
-                    }
-                } finally {
-                    if (activeProcess === process) {
-                        activeProcess = null
-                    }
-                    writer.flush()
-                }
-            }
-        }
-
-        sectionFailureMessage?.let(logCommand)
-        return outcome
-    }
-}
-
-private data class LogSectionOutcome(
-    val endState: DeviceLogCaptureEndState,
-    val message: String? = null,
-)
-
-private data class LogSection(
-    val title: String,
-    val args: List<String>,
-    val displayCommand: String,
-)
-
-private fun buildLogSections(
-    deviceSerial: String,
-    commandPreset: LogCommandPreset,
-): List<LogSection> {
-    val command = buildLogcatAdbCommand(deviceSerial, commandPreset)
-    val normalizedPreset = commandPreset.normalized()
-    val title = if (normalizedPreset.id == DEFAULT_LOG_COMMAND_PRESET_ID) {
-        localized("log.logcat_all_buffers")
-    } else {
-        normalizedPreset.name.ifBlank { localized("log.custom_logcat_command") }
-    }
-    return listOf(
-        LogSection(
-            title = title,
-            args = command.args,
-            displayCommand = command.displayCommand,
-        ),
-    )
-}
-
-private class JvmLogCommandPresetRepository : LogCommandPresetRepository {
-    private val presetsFile: File
-        get() = AppRuntimePaths.cacheDirectory().resolve("log_command_presets.json")
-
-    private val json = Json {
-        prettyPrint = true
-        ignoreUnknownKeys = true
-    }
-
-    override fun loadPresets(): List<LogCommandPreset> {
-        if (!presetsFile.exists()) return emptyList()
+    private suspend fun loadProcessNames(serial: String, logCommand: (String) -> Unit): Map<String, String> {
         return try {
-            json.decodeFromString<LogCommandPresetFile>(presetsFile.readText())
-                .presets
-                .map { it.normalized() }
-                .filter { it.id != DEFAULT_LOG_COMMAND_PRESET_ID && it.name.isNotBlank() }
-        } catch (error: Exception) {
-            emptyList()
+            withTimeoutOrNull(2_000) { readProcessNames(serial, logCommand) } ?: emptyMap()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            emptyMap()
         }
     }
-
-    override fun savePresets(presets: List<LogCommandPreset>) {
-        val normalizedPresets = presets
-            .map { it.normalized() }
-            .filter { it.id != DEFAULT_LOG_COMMAND_PRESET_ID && it.name.isNotBlank() }
-        presetsFile.parentFile?.mkdirs()
-        presetsFile.writeText(json.encodeToString(LogCommandPresetFile(normalizedPresets)))
-    }
 }
-
-@Serializable
-private data class LogCommandPresetFile(
-    val presets: List<LogCommandPreset> = emptyList(),
-)
 
 private fun writeHeader(
     writer: BufferedWriter,
-    deviceSerial: String,
-    deviceModel: String,
+    serial: String,
+    model: String,
     capturedAt: LocalDateTime,
-    totalSections: Int,
+    command: LogcatAdbCommand,
+    filter: LogKeywordFilter?,
 ) {
     writer.appendLine("AndroidTestHelper device log")
     writer.appendLine("CapturedAt: $capturedAt")
-    writer.appendLine("DeviceModel: $deviceModel")
-    writer.appendLine("DeviceSerial: $deviceSerial")
-    writer.appendLine("SectionCount: $totalSections")
+    writer.appendLine("DeviceModel: $model")
+    writer.appendLine("DeviceSerial: $serial")
+    writer.appendLine("Command: ${command.displayCommand}")
+    if (filter != null) {
+        writer.appendLine("Keywords (OR, literal): ${filter.query}")
+        writer.appendLine("MatchCase: ${filter.matchCase}")
+    }
+    writer.appendLine("Columns: Date Time PID-TID Tag Process Priority Message")
+    writer.appendLine("Process names: current device snapshot, refreshed every 5 seconds; '-' when unavailable. Historical PID names may differ.")
+    writer.appendLine()
+    writer.flush()
 }
 
-internal fun buildDeviceLogFileName(
-    deviceModel: String,
-    deviceSerial: String,
-    capturedAt: LocalDateTime,
-): String {
-    val modelToken = deviceModel.toDeviceLogFileToken().ifBlank { "unknown_model" }
-    val serialToken = deviceSerial.toDeviceLogFileToken().ifBlank { "unknown_serial" }
-    val timestamp = capturedAt.format(DeviceLogTimestampFormatter)
-    return "${modelToken}_${serialToken}_$timestamp.log"
+internal fun buildDeviceLogFileName(deviceModel: String, deviceSerial: String, capturedAt: LocalDateTime): String {
+    val model = deviceModel.toDeviceLogFileToken().ifBlank { "unknown_model" }
+    val serial = deviceSerial.toDeviceLogFileToken().ifBlank { "unknown_serial" }
+    return "${model}_${serial}_${capturedAt.format(DeviceLogTimestampFormatter)}.log"
 }
 
-private fun String.toDeviceLogFileToken(): String {
-    return trim()
-        .replace(Regex("[\\\\/:*?\"<>|\\s]+"), "_")
-        .trim('_')
+private fun uniqueLogFile(directory: File, name: String): File {
+    var candidate = directory.resolve(name)
+    var suffix = 1
+    while (candidate.exists() || directory.resolve(candidate.nameWithoutExtension + "_filtered.log").exists()) {
+        candidate = directory.resolve(name.removeSuffix(".log") + "_${suffix++}.log")
+    }
+    return candidate
 }
 
-private fun File.logWriter(append: Boolean): BufferedWriter {
-    return FileOutputStream(this, append).bufferedWriter(Charsets.UTF_8)
-}
+private fun String.toDeviceLogFileToken(): String = trim().replace(Regex("[\\\\/:*?\"<>|\\s]+"), "_").trim('_')
