@@ -24,6 +24,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -34,10 +35,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -148,6 +153,16 @@ private fun LogFileTable(
 ) {
     val strings = rememberAppStrings()
     val columns = LogFileColumn.entries.filterNot { it in hidden }
+    val textMeasurer = rememberTextMeasurer()
+    val rowTextStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 18.sp)
+    val lineNumberLabel = strings.t("log.viewer.column.line_number")
+    val lineNumberHeaderStyle = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+    val lineNumberWidth = with(LocalDensity.current) {
+        maxOf(
+            textMeasurer.measure(content.totalLines.toString(), rowTextStyle).size.width,
+            textMeasurer.measure(lineNumberLabel, lineNumberHeaderStyle).size.width,
+        ).toDp() + 12.dp
+    }
     val scroll = rememberScrollState()
     val list = rememberLazyListState()
     LaunchedEffect(content) { list.scrollToItem(0) }
@@ -159,9 +174,15 @@ private fun LogFileTable(
         return
     }
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val tableWidth = maxOf(maxWidth - 12.dp, columns.sumOf { it.width().value.toDouble() }.toFloat().dp)
+        val tableWidth = maxOf(maxWidth - 12.dp, lineNumberWidth + columns.sumOf { it.width().value.toDouble() }.toFloat().dp)
         Column(Modifier.padding(end = 12.dp, bottom = 12.dp).horizontalScroll(scroll).width(tableWidth)) {
             Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant)) {
+                Text(
+                    lineNumberLabel,
+                    modifier = Modifier.width(lineNumberWidth).padding(6.dp),
+                    style = lineNumberHeaderStyle,
+                    textAlign = TextAlign.Left,
+                )
                 columns.forEach { column ->
                     val cell = if (column == LogFileColumn.Message) Modifier.weight(1f) else Modifier.width(column.width())
                     Text(
@@ -191,9 +212,17 @@ private fun LogFileTable(
                                 Row(Modifier.fillMaxWidth().background(
                                     if (row.lineNumber % 2L == 0L) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f) else Color.Transparent
                                 )) {
+                                    Text(
+                                        row.lineNumber.toString(),
+                                        modifier = Modifier.width(lineNumberWidth).padding(6.dp),
+                                        style = rowTextStyle,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Left,
+                                        softWrap = false,
+                                    )
                                     columns.forEach { column ->
                                         val cell = if (column == LogFileColumn.Message) Modifier.weight(1f) else Modifier.width(column.width())
-                                        LogFileCell(row.value(column), filter, row.priority, column, cell.padding(6.dp))
+                                        LogFileCell(row.value(column), filter, row.priority, column, rowTextStyle, cell.padding(6.dp))
                                     }
                                 }
                             }
@@ -209,7 +238,14 @@ private fun LogFileTable(
 }
 
 @Composable
-private fun LogFileCell(text: String, filter: LogKeywordFilter, priority: String, column: LogFileColumn, modifier: Modifier) {
+private fun LogFileCell(
+    text: String,
+    filter: LogKeywordFilter,
+    priority: String,
+    column: LogFileColumn,
+    style: TextStyle,
+    modifier: Modifier,
+) {
     val marked = remember(text, filter) {
         buildAnnotatedString {
             append(text)
@@ -223,7 +259,7 @@ private fun LogFileCell(text: String, filter: LogKeywordFilter, priority: String
         }
     }
     Text(
-        marked, modifier = modifier, fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 18.sp,
+        marked, modifier = modifier, style = style,
         color = if (column == LogFileColumn.Priority && priority in listOf("E", "F", "A")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
         softWrap = true,
     )
