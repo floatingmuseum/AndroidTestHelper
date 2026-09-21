@@ -111,6 +111,9 @@ AndroidTestHelper/
 │   └── athplugin/                       # 内置 ATHPlugin*.apk
 ├── ATHPLUGIN_API.md                    # ATHPlugin ContentProvider 合同
 ├── AGENTS.md                           # 仓库开发规约
+├── LICENSE                             # Apache License 2.0 完整正文
+├── NOTICE                              # 项目版权声明
+├── THIRD_PARTY_NOTICES.md               # 第三方组件来源与许可边界
 └── build.gradle.kts                    # 根项目构建脚本
 ```
 
@@ -197,3 +200,11 @@ Windows PowerShell：
 - 长任务必须可停止，并清理正在运行的 ADB 子进程。
 - `plugins/android/platform-tools/`、`plugins/athplugin/`、Gradle Wrapper 是运行所需资产，不要随意删除。
 - 不要提交 `.gradle/`、`.kotlin/`、`build/`、`.idea/`、`*.iml`、`AndroidTestHelperData/`。
+
+## 许可证
+
+Copyright 2026 floatingmuseum。
+
+AndroidTestHelper 的原创源代码和文档采用 [Apache License 2.0](LICENSE)，版权声明见 [NOTICE](NOTICE)。使用、修改和分发时，请遵守许可证中的条款。
+
+项目内包含的第三方工具、图标、运行库及独立维护的 ATHPlugin APK 保留各自的许可和版权声明，不因本项目采用 Apache 2.0 而改变。详见 [第三方组件与许可说明](THIRD_PARTY_NOTICES.md)。
