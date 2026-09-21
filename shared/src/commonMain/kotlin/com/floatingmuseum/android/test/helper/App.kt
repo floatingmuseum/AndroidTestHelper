@@ -53,6 +53,7 @@ import com.floatingmuseum.android.test.helper.device.DeviceTestPanel
 import com.floatingmuseum.android.test.helper.device.DeviceTestPanelState
 import com.floatingmuseum.android.test.helper.device.displayLabel
 import com.floatingmuseum.android.test.helper.devicelog.DeviceLogPanel
+import com.floatingmuseum.android.test.helper.devicelog.LogFileViewerWindow
 import com.floatingmuseum.android.test.helper.devicelog.LogCaptureFloatingButton
 import com.floatingmuseum.android.test.helper.devicelog.rememberDeviceLogModuleController
 import com.floatingmuseum.android.test.helper.filemanager.FileManagerModuleContent
@@ -408,6 +409,7 @@ fun App() {
             setStatusText = { statusText = it },
             appendCommand = ::appendCommand,
         )
+        LogFileViewerWindow(deviceLogModule.fileViewer)
         val monkeyModule = rememberMonkeyModuleController(
             scope = scope,
             getSelectedReadyDevice = {
@@ -1749,6 +1751,7 @@ fun App() {
 
                             TestModule.Log -> {
                                 DeviceLogPanel(
+                                    fileViewer = deviceLogModule.fileViewer,
                                     selectedDevice = selectedDevice,
                                     isRunning = isCapturingLogcat,
                                     progress = deviceLogModule.progress,

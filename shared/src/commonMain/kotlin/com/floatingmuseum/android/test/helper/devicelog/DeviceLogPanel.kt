@@ -44,7 +44,8 @@ import com.floatingmuseum.android.test.helper.localization.localized
 import com.floatingmuseum.android.test.helper.localization.rememberAppStrings
 
 @Composable
-fun DeviceLogPanel(
+internal fun DeviceLogPanel(
+    fileViewer: LogFileViewerController,
     selectedDevice: AndroidDevice?,
     isRunning: Boolean,
     progress: DeviceLogCaptureProgress?,
@@ -82,6 +83,9 @@ fun DeviceLogPanel(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                TextButton(onClick = fileViewer::openWindow) {
+                    Text(strings.t("log.viewer.open_window"))
+                }
                 Button(onClick = onCaptureLogs, enabled = !isRunning && selectedDevice?.isReady == true) {
                     Text(strings.t("log.capture.start"))
                 }
@@ -90,7 +94,7 @@ fun DeviceLogPanel(
                 }
             }
 
-            LatestLogResult(lastResult, onRevealLogFile)
+            LatestLogResult(lastResult, onRevealLogFile, fileViewer::openFile)
 
             KeywordFilterBar(
                 query = filterQuery,
@@ -207,7 +211,7 @@ private fun KeywordFilterBar(
 }
 
 @Composable
-private fun LatestLogResult(lastResult: DeviceLogCaptureResult?, onRevealLogFile: (String) -> Unit) {
+private fun LatestLogResult(lastResult: DeviceLogCaptureResult?, onRevealLogFile: (String) -> Unit, onViewLogFile: (String) -> Unit) {
     val strings = rememberAppStrings()
     if (lastResult == null) {
         Text(
@@ -229,9 +233,9 @@ private fun LatestLogResult(lastResult: DeviceLogCaptureResult?, onRevealLogFile
                 DeviceLogCaptureEndState.INTERRUPTED -> localized("log.interrupted")
             }
             Text(state, style = MaterialTheme.typography.bodySmall)
-            LogFileLink(strings.t("log.filter.full_file", lastResult.capturedLines), lastResult.filePath, onRevealLogFile)
+            LogFileLink(strings.t("log.filter.full_file", lastResult.capturedLines), lastResult.filePath, onRevealLogFile, onViewLogFile)
             lastResult.filteredFilePath?.let {
-                LogFileLink(strings.t("log.filter.filtered_file", lastResult.matchedLines), it, onRevealLogFile)
+                LogFileLink(strings.t("log.filter.filtered_file", lastResult.matchedLines), it, onRevealLogFile, onViewLogFile)
                 Text(lastResult.filter.query, style = MaterialTheme.typography.bodySmall)
             }
             lastResult.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -240,9 +244,12 @@ private fun LatestLogResult(lastResult: DeviceLogCaptureResult?, onRevealLogFile
 }
 
 @Composable
-private fun LogFileLink(label: String, path: String, onReveal: (String) -> Unit) {
+private fun LogFileLink(label: String, path: String, onReveal: (String) -> Unit, onView: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { onView(path) }) { Text(rememberAppStrings().t("log.viewer.view")) }
+        }
         SelectionContainer {
             Text(
                 text = path,

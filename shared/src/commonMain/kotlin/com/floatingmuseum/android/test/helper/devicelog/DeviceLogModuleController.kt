@@ -25,6 +25,8 @@ internal class DeviceLogModuleController(
     private val setStatusText: (String) -> Unit,
     private val appendCommand: (String) -> Unit,
 ) {
+    val fileViewer = LogFileViewerController(scope)
+
     var progress by mutableStateOf<DeviceLogCaptureProgress?>(null)
         private set
     var lastResult by mutableStateOf<DeviceLogCaptureResult?>(null)
