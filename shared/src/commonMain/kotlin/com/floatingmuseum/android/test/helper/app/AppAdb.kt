@@ -60,7 +60,13 @@ data class CachedSystemApps(
     val apps: List<InstalledAppInfo>,
     val cacheTimeMillis: Long,
     val cacheTimeFormatted: String,
+    // Unversioned caches may contain preinstalled versions instead of the active package versions.
+    val schemaVersion: Int = 1,
 )
+
+internal const val CurrentSystemAppsCacheVersion = 2
+
+internal fun CachedSystemApps.isCompatible(): Boolean = schemaVersion == CurrentSystemAppsCacheVersion
 
 @Serializable
 data class PluginVersionInfo(

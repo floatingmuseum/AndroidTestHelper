@@ -297,6 +297,7 @@ private class JvmAppAdb : AppAdb {
         return try {
             val jsonText = file.readText()
             val cachedData = Json.decodeFromString<CachedSystemApps>(jsonText)
+            if (!cachedData.isCompatible()) return null
             
             val restoredApps = cachedData.apps.map { app ->
                 val restoredBytes = readCachedApplicationIcon(
@@ -342,7 +343,8 @@ private class JvmAppAdb : AppAdb {
             val cachedData = CachedSystemApps(
                 apps = appsWithoutIcons,
                 cacheTimeMillis = now,
-                cacheTimeFormatted = formattedTime
+                cacheTimeFormatted = formattedTime,
+                schemaVersion = CurrentSystemAppsCacheVersion,
             )
             val jsonText = Json.encodeToString(cachedData)
             file.parentFile?.mkdirs()
@@ -367,6 +369,10 @@ private class JvmAppAdb : AppAdb {
         section: ApplicationDetailSection,
         logCommand: (String) -> Unit,
     ): ApplicationDetailContent = withContext(Dispatchers.IO) {
+        // PackageManager-based plugin details cannot distinguish the retained system APK.
+        if (app.isSystem && section == ApplicationDetailSection.BASIC) {
+            return@withContext loadApplicationDetailWithAdb(deviceSerial, app, section, logCommand)
+        }
         if (section == ApplicationDetailSection.MANIFEST) {
             val canUsePluginProvider = isPluginProviderAvailable(deviceSerial, logCommand)
             if (canUsePluginProvider) {
@@ -475,7 +481,10 @@ private class JvmAppAdb : AppAdb {
             ApplicationDetailSection.ACTIVITIES,
             ApplicationDetailSection.SERVICES,
             ApplicationDetailSection.BROADCAST_RECEIVERS,
-            ApplicationDetailSection.CONTENT_PROVIDERS -> loadApplicationManifestDetails(
+            ApplicationDetailSection.CONTENT_PROVIDERS -> if (app.isSystem && section == ApplicationDetailSection.BASIC) {
+                // Live package metadata is enough for system basic details; avoid pulling the entire APK.
+                null
+            } else loadApplicationManifestDetails(
                 deviceSerial = deviceSerial,
                 packageName = app.packageName,
                 logCommand = logCommand,
@@ -1183,6 +1192,8 @@ internal data class PackageDumpsysInfo(
     val compileSdkVersion: Int?,
     val minSdkVersion: Int?,
     val targetSdkVersion: Int?,
+    val codePath: String? = null,
+    val isUpdatedSystemApp: Boolean = false,
 )
 
 private data class ApkMetadata(
@@ -1289,6 +1300,25 @@ internal fun parsePmPathOutput(output: String): List<String> {
 }
 
 internal fun parsePackageDumpsys(output: String): Map<String, PackageDumpsysInfo> {
+    return parsePackageDumpsysSection(output, preinstalled = false)
+}
+
+private fun packageDumpsysSectionLines(output: String, preinstalled: Boolean = false): Sequence<String> = sequence {
+    // Also accept headerless package snippets used by older ROMs and focused parsers.
+    var selectedSection = !preinstalled
+    for (rawLine in output.lineSequence()) {
+        val line = rawLine.trim()
+        when {
+            line == "Packages:" -> selectedSection = !preinstalled
+            line == "Hidden system packages:" || line == "Disabled system packages:" -> selectedSection = preinstalled
+            rawLine.firstOrNull()?.isWhitespace() == false && line.endsWith(':') &&
+                !line.startsWith("Package [") -> selectedSection = false
+            selectedSection -> yield(rawLine)
+        }
+    }
+}
+
+private fun parsePackageDumpsysSection(output: String, preinstalled: Boolean): Map<String, PackageDumpsysInfo> {
     val result = mutableMapOf<String, PackageDumpsysInfo>()
     var currentPackage: String? = null
     var versionName: String? = null
@@ -1296,6 +1326,8 @@ internal fun parsePackageDumpsys(output: String): Map<String, PackageDumpsysInfo
     var compileSdkVersion: Int? = null
     var minSdkVersion: Int? = null
     var targetSdkVersion: Int? = null
+    var codePath: String? = null
+    var isUpdatedSystemApp = false
 
     fun flush() {
         val packageName = currentPackage ?: return
@@ -1305,12 +1337,14 @@ internal fun parsePackageDumpsys(output: String): Map<String, PackageDumpsysInfo
             compileSdkVersion = compileSdkVersion,
             minSdkVersion = minSdkVersion,
             targetSdkVersion = targetSdkVersion,
+            codePath = codePath,
+            isUpdatedSystemApp = isUpdatedSystemApp,
         )
     }
 
-    output.lineSequence().forEach { rawLine ->
+    packageDumpsysSectionLines(output, preinstalled).forEach { rawLine ->
         val line = rawLine.trim()
-        val packageMatch = Regex("""Package \[([^]]+)]""").find(line)
+        val packageMatch = Regex("""^Package \[([^]]+)]""").find(line)
         if (packageMatch != null) {
             flush()
             currentPackage = packageMatch.groupValues[1]
@@ -1319,14 +1353,22 @@ internal fun parsePackageDumpsys(output: String): Map<String, PackageDumpsysInfo
             compileSdkVersion = null
             minSdkVersion = null
             targetSdkVersion = null
+            codePath = null
+            isUpdatedSystemApp = false
             return@forEach
         }
 
         if (currentPackage != null) {
+            if (line.startsWith("codePath=")) {
+                codePath = line.substringAfter('=').takeIf { it.isNotBlank() }
+            }
+            if (line.startsWith("flags=") || line.startsWith("pkgFlags=")) {
+                isUpdatedSystemApp = isUpdatedSystemApp || Regex("""\bUPDATED_SYSTEM_APP\b""").containsMatchIn(line)
+            }
             if (line.startsWith("versionName=")) {
                 versionName = line.substringAfter("versionName=").takeIf { it.isNotBlank() }
             }
-            Regex("""versionCode=(\d+)""").find(line)?.let { match ->
+            Regex("""^versionCode=(\d+)""").find(line)?.let { match ->
                 versionCode = match.groupValues[1].toLongOrNull()
             }
             Regex("""compileSdkVersion=(\d+)""").find(line)?.let { match ->
@@ -1370,19 +1412,45 @@ private fun buildApplicationBasicDetailItems(
     dumpsysOutput: String,
     manifestDetails: ManifestDetails?,
 ): List<ApplicationDetailItem> {
+    val currentPackage = parsePackageDumpsys(dumpsysOutput)[app.packageName]
     return listOf(
         ApplicationDetailItem(localized("app.name"), app.appName),
         ApplicationDetailItem(localized("app.package_name"), app.packageName),
-        ApplicationDetailItem(localized("app.version_name"), app.versionName),
-        ApplicationDetailItem(localized("app.version_code"), app.versionCode?.toString() ?: "-"),
-        ApplicationDetailItem("compileSdkVersion", formatDetailSdkVersion(app.compileSdkVersion)),
-        ApplicationDetailItem("minSdkVersion", formatDetailSdkVersion(app.minSdkVersion)),
-        ApplicationDetailItem("targetSdkVersion", formatDetailSdkVersion(app.targetSdkVersion)),
+    ) + buildApplicationVersionDetailItems(app, dumpsysOutput) + listOf(
+        ApplicationDetailItem("compileSdkVersion", formatDetailSdkVersion(currentPackage?.compileSdkVersion ?: app.compileSdkVersion)),
+        ApplicationDetailItem("minSdkVersion", formatDetailSdkVersion(currentPackage?.minSdkVersion ?: app.minSdkVersion)),
+        ApplicationDetailItem("targetSdkVersion", formatDetailSdkVersion(currentPackage?.targetSdkVersion ?: app.targetSdkVersion)),
         ApplicationDetailItem(localized("app.type"), if (app.isSystem) localized("app.system_app") else localized("app.third_party_app")),
         ApplicationDetailItem(localized("app.enabled_state"), if (app.isEnabled) localized("app.enabled") else localized("app.disabled")),
     ) + listOfNotNull(
         manifestDetails?.packageName?.takeIf { it.isNotBlank() }?.let { ApplicationDetailItem("Manifest package", it) },
     ) + parsePackageDumpsysBasicItems(dumpsysOutput)
+}
+
+internal fun buildApplicationVersionDetailItems(
+    app: InstalledAppInfo,
+    dumpsysOutput: String,
+): List<ApplicationDetailItem> {
+    val currentPackage = parsePackageDumpsys(dumpsysOutput)[app.packageName]
+    if (!app.isSystem) {
+        return listOf(
+            ApplicationDetailItem(localized("app.version_name"), currentPackage?.versionName ?: app.versionName),
+            ApplicationDetailItem(localized("app.version_code"), (currentPackage?.versionCode ?: app.versionCode)?.toString() ?: "-"),
+        )
+    }
+
+    val preinstalledPackage = parsePackageDumpsysSection(dumpsysOutput, preinstalled = true)[app.packageName]
+        ?: currentPackage?.takeIf { info ->
+            !info.isUpdatedSystemApp && listOf("/system/", "/product/", "/vendor/", "/system_ext/", "/odm/", "/oem/", "/apex/")
+                .any { info.codePath?.startsWith(it) == true }
+        }
+    val unavailable = localized("app.version_unavailable")
+    return listOf(
+        ApplicationDetailItem(localized("app.current_version_name"), currentPackage?.versionName ?: unavailable),
+        ApplicationDetailItem(localized("app.current_version_code"), currentPackage?.versionCode?.toString() ?: unavailable),
+        ApplicationDetailItem(localized("app.preinstalled_version_name"), preinstalledPackage?.versionName ?: unavailable),
+        ApplicationDetailItem(localized("app.preinstalled_version_code"), preinstalledPackage?.versionCode?.toString() ?: unavailable),
+    )
 }
 
 internal fun parsePackageDumpsysBasicItems(output: String): List<ApplicationDetailItem> {
@@ -1396,7 +1464,7 @@ internal fun parsePackageDumpsysBasicItems(output: String): List<ApplicationDeta
         "dataDir",
     )
     val result = mutableListOf<ApplicationDetailItem>()
-    output.lineSequence()
+    packageDumpsysSectionLines(output)
         .map { it.trim() }
         .forEach { line ->
             keys.firstOrNull { line.startsWith("$it=") }?.let { key ->

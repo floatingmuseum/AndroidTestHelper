@@ -1332,6 +1332,10 @@ private fun String.normalizedKnownDetailValue(labelKey: String?): String {
     val valueKey = when (labelKey) {
         "app.type" -> knownAppTypeValueKey()
         "app.enabled_state" -> knownEnabledStateValueKey()
+        "app.current_version_name",
+        "app.current_version_code",
+        "app.preinstalled_version_name",
+        "app.preinstalled_version_code" -> "app.version_unavailable".takeIf { matchesKnownDetailLabel(it) }
         else -> null
     } ?: return this
     return localized(valueKey)
@@ -1356,6 +1360,10 @@ private val KnownDisplayLabelKeys = listOf(
     "app.package_name",
     "app.version_name",
     "app.version_code",
+    "app.current_version_name",
+    "app.current_version_code",
+    "app.preinstalled_version_name",
+    "app.preinstalled_version_code",
     "app.type",
     "app.enabled_state",
     "app.status",

@@ -16,6 +16,8 @@ adb -s <serial> shell pm list packages -d com.floatingmuseum.android.test.helper
 
 当 `pm path` 输出以 `package:` 开头时，桌面端认为 ATHPlugin 已安装；当 `pm list packages -d` 未返回该包名时，桌面端认为 ATHPlugin 已启用且 Provider 可用。若插件未安装、插件处于禁用状态，或任一插件接口调用失败，桌面端会回退到标准 ADB 解析路径。
 
+系统应用的 `basic` 详情是例外：桌面端始终直接使用标准 ADB 路径，分别读取当前生效安装版本与系统预装版本。其余详情分类和应用列表继续优先使用插件。
+
 ## Content Query 返回格式
 
 桌面端通过 `adb shell content query` 读取 JSON，当前解析逻辑会寻找第一行包含 `json_data=` 的内容，并取 `json_data=` 后面的字符串作为完整 JSON。
@@ -93,8 +95,8 @@ adb -s <serial> shell content query --uri "content://com.floatingmuseum.android.
 | --- | --- | --- | --- |
 | `packageName` | String | 是 | 应用包名。 |
 | `appName` | String | 是 | 应用展示名。取不到标签时建议返回包名。 |
-| `versionName` | String | 是 | 版本名。取不到时返回 `"-"`，不要返回 `null`。 |
-| `versionCode` | Long 或 null | 是 | 版本号。取不到时可返回 `null`。 |
+| `versionName` | String | 是 | 当前生效安装包的版本名。系统应用已更新时应返回更新包版本，不是系统分区中的预装版本。取不到时返回 `"-"`，不要返回 `null`。 |
+| `versionCode` | Long 或 null | 是 | 当前生效安装包的版本号。系统应用已更新时应返回更新包版本。取不到时可返回 `null`。 |
 | `compileSdkVersion` | Int 或 null | 否 | compile SDK 版本。取不到时可省略或返回 `null`。 |
 | `minSdkVersion` | Int 或 null | 否 | min SDK 版本。取不到时可省略或返回 `null`。 |
 | `targetSdkVersion` | Int 或 null | 否 | target SDK 版本。取不到时可省略或返回 `null`。 |
@@ -193,6 +195,8 @@ adb -s <serial> shell content query --uri "content://com.floatingmuseum.android.
 - 权限和组件分类支持搜索。
 - 组件分类会尝试从 `value` 中解析 `name=<value>`；若没有该属性，则使用 `label` 作为组件名。
 - `items` 为空时显示“该分类无可显示信息。”
+- 系统应用的 `basic` 分类不调用此接口，直接执行 `adb -s <serial> shell dumpsys package <packageName>`，无需拉取整个 APK。桌面端分别展示“当前安装版本名/版本号”和“系统预装版本名/版本号”；当前版本来自 `Packages:`，被更新替代的预装版本来自 `Hidden system packages:`。未更新的系统应用两组版本相同；无法可靠取得预装信息时显示“无法获取”，不能用当前更新包版本冒充预装版本。当前安装路径等基础属性也只取当前生效包记录。
+- 这里的“当前安装版本”指设备当前生效的版本，不代表线上可下载的最新版本。这个区分由桌面端完成，不要求 ATHPlugin 新增 URI 或响应字段。
 - 若 ATHPlugin 已安装但处于禁用状态，桌面端不会调用该接口，会直接走 `dumpsys package` 加 APK Manifest 解析。
 - 若插件调用失败，桌面端回退到 `dumpsys package` 加 APK Manifest 解析。
 

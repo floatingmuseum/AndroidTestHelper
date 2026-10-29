@@ -66,6 +66,42 @@ class ApplicationDetailDisplayTest {
     }
 
     @Test
+    fun normalizesSystemVersionLabelsAndUnavailableValuesForCurrentLanguage() = withLanguage(AppLanguage.English) {
+        val content = ApplicationDetailContent(
+            section = ApplicationDetailSection.BASIC,
+            source = ApplicationDetailSource.ADB,
+            items = listOf(
+                ApplicationDetailItem("当前安装版本名", "1.0.5017"),
+                ApplicationDetailItem("当前安装版本号", "5017"),
+                ApplicationDetailItem("系统预装版本名", "无法获取"),
+                ApplicationDetailItem("系统预装版本号", "无法获取"),
+            ),
+        )
+
+        val items = content.toDisplayDetailItems()
+
+        assertEquals(
+            listOf(
+                "Current installed version name",
+                "Current installed version code",
+                "System preinstalled version name",
+                "System preinstalled version code",
+            ),
+            items.map { it.title },
+        )
+        assertEquals(listOf("1.0.5017", "5017", "Unavailable", "Unavailable"), items.map { it.body })
+    }
+
+    @Test
+    fun normalizesEnglishSystemVersionDetailsToChinese() = withLanguage(AppLanguage.SimplifiedChinese) {
+        val item = ApplicationDetailItem("System preinstalled version name", "Unavailable")
+            .toDisplayDetailItem(ApplicationDetailSection.BASIC)
+
+        assertEquals("系统预装版本名", item.title)
+        assertEquals("无法获取", item.body)
+    }
+
+    @Test
     fun exposesComponentClassNameForIntentTesting() = withLanguage(AppLanguage.English) {
         val item = ApplicationDetailItem(
             label = "com.example.app.MainActivity",
